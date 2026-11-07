@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.99 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.00 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -16460,8 +16460,9 @@ function _absPrevKmTxt(tag, consTxt) { const mod = _modeloDe(tag), p = +(mod && 
 const CAT_EQ = ['Linha amarela', 'Veículos pesados', 'Veículos leves', 'Outros'];
 function _famCat(f) { if (!f) return 'Outros'; if (f.categoria && CAT_EQ.includes(f.categoria)) return f.categoria;
   const t = String(f.desc || f.cod || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  if (/veiculo leve|carro|picape|pick.?up|\bvan\b|utilitario|automovel|sedan|hatch|moto/.test(t)) return 'Veículos leves';
-  if (/caminhao|onibus|carreta|cavalo|bitrem|truck|toco|micro.?onibus/.test(t)) return 'Veículos pesados';
+  if (/veiculo leve/.test(t)) return 'Veículos leves';
+  if (/caminhao|onibus|carreta|cavalo|bitrem|truck|toco|micro.?onibus/.test(t)) return 'Veículos pesados';   // v4.00: antes de "carro" (carroceria)
+  if (/\bcarro\b|picape|pick.?up|\bvan\b|utilitario|automovel|sedan|hatch|\bmoto\b|caminhonete/.test(t)) return 'Veículos leves';
   if (/escavadeira|retro|pa carregadeira|carregadeira|motoniveladora|rolo|trator|manipulador|minicarregadeira|bobcat|perfuratriz|guindaste|empilhadeira|compactador|vibro|fresadora|vibroacabadora|dragline|bulldozer/.test(t)) return 'Linha amarela';
   return 'Outros'; }
 window._catAba = window._catAba || '';
