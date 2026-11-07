@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.01 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.02 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17268,6 +17268,49 @@ function _famGrid(eqs) {
     .fg-t{font:600 10.5px var(--mono,monospace);padding:2px 6px;border-radius:6px;background:rgba(34,197,94,.15);color:#22C55E}.fg-t.des{background:rgba(156,163,175,.15);color:#9CA3AF}.fg-t.man{background:rgba(245,158,11,.15);color:#F59E0B}
     .fg-card[open]{grid-column:span 2}`;
   document.head.appendChild(css);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.02: APROVAÇÕES — pendente aprovado/unificado não volta mais ao recarregar
+//  • ao apagar/aprovar, remove no servidor TODAS as cópias pendentes do mesmo código e obra
+//    (algumas importações deixaram o mesmo cadastro gravado em dois documentos)
+//  • botão "Remover duplicados sem uso": pendentes iguais (100%) a um do banco e que ninguém usa
+// ═══════════════════════════════════════════════════════════════
+async function _mmLimparServidor(col, x, exceto) {
+  if (!db || !_firebaseReady || !x || !x.cod) return 0; let n = 0;
+  try { const sn = await db.collection(col).where('cod', '==', x.cod).get();
+    for (const d of sn.docs) { const v = d.data(); if (d.id === exceto) continue;
+      if ((v.obra || '') === (x.obra || '') && v.status !== 'aprovado' && (v.obra || v.status === 'pendente') && String(v.nome || v.desc || '') === String(x.nome || x.desc || '')) { try { await d.ref.delete(); n++; } catch (e) {} } } } catch (e) {}
+  return n;
+}
+(function () {
+  const oA = _mmApaga; _mmApaga = function (col, x) { const r = oA.apply(this, arguments); _mmLimparServidor(col, { ...x }); return r; };
+  const oP = window.mmAprovar || mmAprovar;
+  mmAprovar = window.mmAprovar = function (col, i) { const g = window._mmG && window._mmG[col] && window._mmG[col][i]; const antes = g ? g.itens.map(x => ({ ...x })) : [];
+    const r = oP.apply(this, arguments);
+    const alvo = g && g.itens[0];
+    if (alvo && alvo.status === 'aprovado') antes.forEach(x => _mmLimparServidor(col, x, alvo.id));
+    return r; };
+})();
+function mmLimparDup() {
+  const N = t => _mmNorm(String(t || ''));
+  const banco = c => (dados[c] || []).filter(_mmBanco);
+  const dup = [];
+  [['familias', 'desc', _mmUsoFam], ['modelos', 'nome', _mmUsoMod]].forEach(([c, k, uso]) => (dados[c] || []).filter(_mmPend).forEach(x => {
+    if (uso(x)) return; if (banco(c).some(b => N(b[k]) === N(x[k]))) dup.push([c, x]); }));
+  if (!dup.length) { toast('Nenhum duplicado sem uso.'); return; }
+  if (!confirm('Remover ' + dup.length + ' pendente(s) que já existem iguais no banco e que nenhum equipamento usa?')) return;
+  dup.forEach(([c, x]) => _mmApaga(c, x));
+  toast('✓ ' + dup.length + ' duplicado(s) removido(s).'); _mmDepois();
+}
+(function () {
+  const oR = window.renderMmAprov || renderMmAprov;
+  renderMmAprov = window.renderMmAprov = function () { const r = oR.apply(this, arguments);
+    try { const pg = document.getElementById('page-mm-aprov'), hd = pg && pg.querySelector('.page-header'); if (!hd) return r;
+      const N = t => _mmNorm(String(t || '')); let n = 0;
+      [['familias', 'desc', _mmUsoFam], ['modelos', 'nome', _mmUsoMod]].forEach(([c, k, uso]) => (dados[c] || []).filter(_mmPend).forEach(x => { if (!uso(x) && (dados[c] || []).some(b => _mmBanco(b) && N(b[k]) === N(x[k]))) n++; }));
+      let b = document.getElementById('btn-mm-dup'); if (!b) { hd.insertAdjacentHTML('beforeend', '<div class="btn-group"><button class="btn btn-primary btn-sm" id="btn-mm-dup" onclick="mmLimparDup()"></button></div>'); b = document.getElementById('btn-mm-dup'); }
+      b.textContent = '🧹 Remover duplicados sem uso (' + n + ')'; b.style.display = n ? '' : 'none'; } catch (e) {}
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
