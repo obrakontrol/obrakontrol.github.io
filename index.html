@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.93 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.94 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17027,6 +17027,149 @@ function frCatSel(c) { _frCat = c; try { localStorage.setItem('ok_fr_cat', c); }
     _frLista = function () { return base().filter(v => _frCatDe(v) === _frCat); };
     try { return oR.apply(this, arguments); } finally { _frLista = base; }
   };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v3.94: TAG PADRÃO OBRA-FAMÍLIA-NN (ex.: AVBN-CB-01, LT15-RET-03)
+//  • obra ganha "Sigla (4 caracteres)" — vai na frente da TAG
+//  • Equipamentos → "Padronizar TAGs": prévia de/para, aplica nos equipamentos e no histórico
+//    (apontamentos, diesel, fotos, mobilizações, partes diárias, paradas) e guarda a TAG anterior
+//  • "Voltar às TAGs anteriores" desfaz
+//  • novo equipamento: a TAG é sugerida no padrão quando a obra tem sigla
+// ═══════════════════════════════════════════════════════════════
+const _TAG_COLS = ['aponEQ', 'diesel', 'fotos', 'mobilizacoes', 'partesDiarias', 'perdas'];
+function _obraSigla(obraId) { const o = (dados.obras || []).find(x => x.id === obraId); return o && o.sigla ? String(o.sigla).toUpperCase() : ''; }
+function _tagNum(t) { const m = /-(\d+)$/.exec(String(t || '')); return m ? +m[1] : 0; }
+function _tagProx(sig, fam, excetoId) {
+  const pre = (sig + '-' + fam).toUpperCase(), re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$', 'i');
+  let mx = 0; (dados.equipamentos || []).forEach(e => { if (e.id === excetoId) return; const m = re.exec(String(e.tag || '').trim()); if (m) mx = Math.max(mx, +m[1]); });
+  return pre + '-' + String(mx + 1).padStart(2, '0');
+}
+function _tagPlano(obraId) {
+  const sig = _obraSigla(obraId); if (!sig) return { erro: 'A obra ainda não tem sigla. Preencha "Sigla (4 caracteres)" no cadastro da obra.' };
+  const eqs = (dados.equipamentos || []).filter(e => e.obra === obraId);
+  const usados = new Set((dados.equipamentos || []).map(e => String(e.tag || '').toUpperCase()));
+  const plano = [], porFam = {};
+  eqs.forEach(e => { const f = String(e.familia || '').toUpperCase() || 'EQ'; (porFam[f] = porFam[f] || []).push(e); });
+  Object.entries(porFam).forEach(([f, l]) => {
+    const pre = sig + '-' + f, re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$', 'i');
+    const ja = new Set(l.filter(e => re.test(String(e.tag || ''))).map(e => _tagNum(e.tag)));
+    let n = 0; const prox = () => { do { n++; } while (ja.has(n) || usados.has((pre + '-' + String(n).padStart(2, '0')).toUpperCase())); return pre + '-' + String(n).padStart(2, '0'); };
+    l.slice().sort((a, b) => String(a.tag || '').localeCompare(String(b.tag || ''), 'pt-BR', { numeric: true })).forEach(e => {
+      if (re.test(String(e.tag || ''))) return;
+      const nova = prox(); usados.add(nova.toUpperCase()); plano.push({ e, de: e.tag || '', para: nova });
+    });
+  });
+  return { sig, plano, total: eqs.length };
+}
+async function _tagTrocar(pares, onProg) {
+  // pares: [{e, de, para}] — troca no equipamento e no histórico
+  let feitos = 0, hist = 0;
+  for (const { e, de, para } of pares) {
+    for (const col of _TAG_COLS) {
+      (dados[col] || []).forEach(d => { let m = false; if (d.equip === de && (!d.equipId || d.equipId === e.id)) { d.equip = para; m = true; } if (d.tag === de && (!d.equipId || d.equipId === e.id)) { d.tag = para; m = true; } });
+      if (db && _firebaseReady && de) {
+        const docs = new Map();
+        for (const [campo, val] of [['equipId', e.id], ['equip', de], ['tag', de]]) {
+          try { const s = await db.collection(col).where(campo, '==', val).get(); s.docs.forEach(d => docs.set(d.id, d)); } catch (x) {}
+        }
+        for (const d of docs.values()) { const x = d.data(), mud = {};
+          if (x.equipId && x.equipId !== e.id) continue;
+          if (x.equip === de) mud.equip = para; if (x.tag === de) mud.tag = para;
+          if (Object.keys(mud).length) { try { await db.collection(col).doc(d.id).set(mud, { merge: true }); hist++; } catch (y) {} } }
+      }
+    }
+    feitos++; if (onProg) onProg(feitos, pares.length);
+  }
+  return hist;
+}
+function tagPadronizarAbrir() {
+  const o = _okObraAtual && _okObraAtual(); const obras = (dados.obras || []);
+  let m = document.getElementById('modal-tagpad');
+  if (!m) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-tagpad"><div class="modal" style="max-width:720px">
+    <div class="modal-header"><span class="modal-title">Padronizar TAGs · OBRA-FAMÍLIA-NN</span><button class="modal-close" onclick="closeModal('modal-tagpad')">×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group"><label class="form-label" for="tp-obra">Obra</label><select class="form-control" id="tp-obra" onchange="tagPadronizarPrev()"></select></div>
+      <div class="form-group"><label class="form-label" for="tp-sig">Sigla da obra (4 caracteres)</label><input class="form-control" id="tp-sig" maxlength="4" style="text-transform:uppercase;font-family:var(--mono)" placeholder="Ex.: LT15" onchange="tagSiglaSalvar()"/></div></div>
+      <div id="tp-prev" style="margin-top:10px"></div></div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap"><button class="btn btn-outline" id="tp-desf" onclick="tagDesfazer()">↺ Voltar às TAGs anteriores</button>
+      <div style="display:flex;gap:8px"><button class="btn btn-outline" onclick="closeModal('modal-tagpad')">Fechar</button><button class="btn btn-primary" id="tp-ok" onclick="tagPadronizarAplicar()">Aplicar</button></div></div></div></div>`); m = document.getElementById('modal-tagpad'); }
+  const sel = document.getElementById('tp-obra'); sel.innerHTML = obras.map(x => `<option value="${x.id}">${_e(x.cod || '')} · ${_e(x.nome || '')}</option>`).join('');
+  if (o && o !== 'todas') sel.value = o;
+  openModal('modal-tagpad'); tagPadronizarPrev();
+}
+function tagSiglaSalvar() {
+  const id = document.getElementById('tp-obra').value, i = document.getElementById('tp-sig'), v = String(i.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  i.value = v; if (v.length !== 4) { toast('A sigla tem 4 letras ou números (ex.: LT15, AVBN, LIGG).', 'error'); return; }
+  const dup = (dados.obras || []).find(x => x.id !== id && String(x.sigla || '').toUpperCase() === v); if (dup) { toast('A sigla ' + v + ' já é da obra ' + (dup.nome || dup.cod) + '.', 'error'); return; }
+  const o = (dados.obras || []).find(x => x.id === id); if (!o) return; o.sigla = v; if (db && _firebaseReady) fbSave('obras', o.id, o).catch(() => {});
+  toast('Sigla ' + v + ' salva na obra.'); tagPadronizarPrev();
+}
+function tagPadronizarPrev() {
+  const id = document.getElementById('tp-obra').value, box = document.getElementById('tp-prev');
+  document.getElementById('tp-sig').value = _obraSigla(id);
+  const r = _tagPlano(id), desf = (dados.equipamentos || []).filter(e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm);
+  document.getElementById('tp-desf').style.display = desf.length ? '' : 'none';
+  if (r.erro) { box.innerHTML = `<div class="alert alert-warning" style="font-size:13px">${r.erro}</div>`; document.getElementById('tp-ok').disabled = true; return; }
+  document.getElementById('tp-ok').disabled = !r.plano.length;
+  box.innerHTML = !r.plano.length ? `<div style="padding:14px;color:var(--text-3)">Todos os ${r.total} equipamentos desta obra já estão no padrão ${_e(r.sig)}-FAMÍLIA-NN.</div>`
+    : `<div style="font-size:12.5px;color:var(--text-2);margin-bottom:8px"><b>${r.plano.length}</b> de ${r.total} equipamentos vão mudar. O histórico (apontamentos, diesel, fotos, mobilizações, partes diárias e paradas) acompanha, e a TAG anterior fica guardada.</div>
+      <div class="table-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>TAG atual</th><th></th><th>TAG nova</th><th>Família</th><th>Placa / série</th></tr></thead><tbody>
+      ${r.plano.map(p => `<tr><td class="td-mono">${_e(p.de || '—')}</td><td>→</td><td class="td-mono" style="font-weight:800;color:var(--red)">${_e(p.para)}</td><td style="font-size:12px">${_e(p.e.familia || '')}</td><td class="td-mono" style="font-size:12px">${_e(p.e.placa || p.e.serie || '')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function tagPadronizarAplicar() {
+  const id = document.getElementById('tp-obra').value, r = _tagPlano(id); if (r.erro || !r.plano.length) return;
+  const b = document.getElementById('tp-ok'); b.disabled = true;
+  const agora = new Date().toISOString();
+  const hist = await _tagTrocar(r.plano, (n, t) => { b.textContent = 'Aplicando ' + n + '/' + t + '…'; });
+  r.plano.forEach(({ e, de, para }) => { e.tagAnterior = de; e.tagPadronizadaEm = agora; e.tag = para; _fbGravar('equipamentos', e); });
+  b.textContent = 'Aplicar';
+  toast('✓ ' + r.plano.length + ' TAGs padronizadas' + (hist ? ' · ' + hist + ' registro(s) do histórico atualizados' : '') + '.');
+  try { renderEquipamentos(); } catch (x) {} tagPadronizarPrev();
+}
+async function tagDesfazer() {
+  const id = document.getElementById('tp-obra').value;
+  const l = (dados.equipamentos || []).filter(e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm);
+  if (!l.length || !confirm('Voltar ' + l.length + ' equipamento(s) para a TAG anterior? O histórico volta junto.')) return;
+  const pares = l.map(e => ({ e, de: e.tag, para: e.tagAnterior }));
+  const b = document.getElementById('tp-desf'); b.disabled = true;
+  await _tagTrocar(pares, (n, t) => { b.textContent = 'Voltando ' + n + '/' + t + '…'; });
+  pares.forEach(({ e, de, para }) => { e.tag = para; e.tagAnterior = de; delete e.tagPadronizadaEm; e.tagPadronizadaEm = null; _fbGravar('equipamentos', e); });
+  b.disabled = false; b.textContent = '↺ Voltar às TAGs anteriores';
+  toast('TAGs anteriores restauradas.'); try { renderEquipamentos(); } catch (x) {} tagPadronizarPrev();
+}
+(function () {
+  const $ = id => document.getElementById(id);
+  // botão na página de equipamentos
+  const bg = document.querySelector('#page-equipamentos .page-header .btn-group');
+  if (bg && !$('btn-tagpad')) bg.insertAdjacentHTML('afterbegin', `<button class="btn btn-outline btn-sm" id="btn-tagpad" onclick="tagPadronizarAbrir()">🏷 Padronizar TAGs</button>`);
+  // sigla no cadastro da obra
+  const np = $('obra-nomeproj') && $('obra-nomeproj').closest('.form-group');
+  if (np && !$('obra-sigla')) np.insertAdjacentHTML('afterend', `<div class="form-group"><label class="form-label" for="obra-sigla">Sigla (4 caracteres)</label>
+    <input class="form-control" id="obra-sigla" maxlength="4" placeholder="Ex.: LT15" style="text-transform:uppercase;font-family:var(--mono)"/>
+    <div style="font-size:11px;color:var(--text-3);margin-top:3px">Vai na frente da TAG dos equipamentos: LT15-RET-01.</div></div>`);
+  const oN = window.novaObra; window.novaObra = novaObra = function () { const r = oN.apply(this, arguments); if ($('obra-sigla')) $('obra-sigla').value = ''; return r; };
+  const oE = window.editarObra; window.editarObra = function (id) { const r = oE.apply(this, arguments); const o = (dados.obras || []).find(x => x.id === id) || {}; if ($('obra-sigla')) $('obra-sigla').value = o.sigla || ''; return r; };
+  const oS = window.salvarObra;
+  window.salvarObra = function () {
+    const sg = String($('obra-sigla')?.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (sg && sg.length !== 4) { toast('A sigla da obra tem 4 letras ou números (ex.: LT15, AVBN, LIGG).', 'error'); $('obra-sigla')?.focus(); return; }
+    const idEd = $('obra-edit-id')?.value || '';
+    if (sg) { const dup = (dados.obras || []).find(x => x.id !== idEd && String(x.sigla || '').toUpperCase() === sg); if (dup) { toast('A sigla ' + sg + ' já é da obra ' + (dup.nome || dup.cod) + '.', 'error'); return; } }
+    const cod = ($('obra-cod')?.value || '').trim(), antes = new Set((dados.obras || []).map(x => x.id));
+    if (idEd) { const o = (dados.obras || []).find(x => x.id === idEd); if (o) o.sigla = sg; return oS.apply(this, arguments); }
+    const r = oS.apply(this, arguments);
+    const nova = (dados.obras || []).find(x => !antes.has(x.id) && (x.cod || '') === cod);
+    if (nova && sg) { nova.sigla = sg; if (db && _firebaseReady) fbSave('obras', nova.id, nova).catch(() => {}); }
+    return r;
+  };
+  // novo equipamento: sugere a TAG no padrão ao escolher a família
+  const fam = $('equip-familia');
+  if (fam) fam.addEventListener('change', () => {
+    const t = $('equip-tag'), ob = $('equip-obra'); if (!t || (t.value.trim() && !t.dataset.sug)) return;
+    const sig = _obraSigla(ob ? ob.value : (_okObraAtual && _okObraAtual())); if (!sig || !fam.value) return;
+    t.value = _tagProx(sig, fam.value); t.dataset.sug = '1';
+  });
+  const tg = $('equip-tag'); if (tg) tg.addEventListener('input', () => { delete tg.dataset.sug; });
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);

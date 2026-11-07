@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.91</div>
+  <div class="login-versao">ObraKontrol Campo · v2.92</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6175,6 +6175,25 @@ function propNovoOk() {
   };
 })();
 
+// ══════════════════════════════════════════════════════════════
+// v2.92: TAG de equipamento novo no padrão OBRA-FAMÍLIA-NN quando a obra tem sigla (ex.: AVBN-CB-15)
+// ══════════════════════════════════════════════════════════════
+(function () {
+  const oT = mobTag;
+  mobTag = function (obra, famCod, eqs) {
+    const o = (dadosCampo.obras || []).concat(window._mobObras || []).find(x => x.id === (obra || (usuarioCampo && usuarioCampo.obra)));
+    const sg = o && o.sigla ? String(o.sigla).toUpperCase() : '';
+    if (!sg || !famCod) return oT.apply(this, arguments);
+    const fam = (dadosCampo.familias || []).find(f => f.cod === famCod); if (!fam) return '';
+    const pre = (sg + '-' + fam.cod).toUpperCase(), re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$', 'i');
+    let mx = 0; (eqs || dadosCampo.equipamentos || []).forEach(e => { const m = re.exec(String(e.tag || '').trim()); if (m) mx = Math.max(mx, +m[1]); });
+    return pre + '-' + String(mx + 1).padStart(2, '0');
+  };
+  // garante a lista de obras (com a sigla) mesmo para quem tem obra fixa
+  let n = 0; const t = setInterval(() => { if (++n > 20) return clearInterval(t);
+    if (typeof usuarioCampo !== 'undefined' && usuarioCampo && typeof fbCarregar === 'function' && (!window._mobObras || !window._mobObras.length)) {
+      clearInterval(t); fbCarregar('obras').then(l => { if (l && l.length) window._mobObras = l; }).catch(() => {}); } }, 3000);
+})();
 </script>
 </body>
 </html>
