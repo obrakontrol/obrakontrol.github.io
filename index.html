@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.94 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.95 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17083,6 +17083,7 @@ async function _tagTrocar(pares, onProg) {
   return hist;
 }
 function tagPadronizarAbrir() {
+  if (!_ehMaster()) { toast('Só o Master pode padronizar as TAGs.', 'error'); return; }
   const o = _okObraAtual && _okObraAtual(); const obras = (dados.obras || []);
   let m = document.getElementById('modal-tagpad');
   if (!m) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-tagpad"><div class="modal" style="max-width:720px">
@@ -17117,6 +17118,7 @@ function tagPadronizarPrev() {
       ${r.plano.map(p => `<tr><td class="td-mono">${_e(p.de || '—')}</td><td>→</td><td class="td-mono" style="font-weight:800;color:var(--red)">${_e(p.para)}</td><td style="font-size:12px">${_e(p.e.familia || '')}</td><td class="td-mono" style="font-size:12px">${_e(p.e.placa || p.e.serie || '')}</td></tr>`).join('')}</tbody></table></div>`;
 }
 async function tagPadronizarAplicar() {
+  if (!_ehMaster()) return;
   const id = document.getElementById('tp-obra').value, r = _tagPlano(id); if (r.erro || !r.plano.length) return;
   const b = document.getElementById('tp-ok'); b.disabled = true;
   const agora = new Date().toISOString();
@@ -17127,6 +17129,7 @@ async function tagPadronizarAplicar() {
   try { renderEquipamentos(); } catch (x) {} tagPadronizarPrev();
 }
 async function tagDesfazer() {
+  if (!_ehMaster()) return;
   const id = document.getElementById('tp-obra').value;
   const l = (dados.equipamentos || []).filter(e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm);
   if (!l.length || !confirm('Voltar ' + l.length + ' equipamento(s) para a TAG anterior? O histórico volta junto.')) return;
@@ -17141,7 +17144,10 @@ async function tagDesfazer() {
   const $ = id => document.getElementById(id);
   // botão na página de equipamentos
   const bg = document.querySelector('#page-equipamentos .page-header .btn-group');
-  if (bg && !$('btn-tagpad')) bg.insertAdjacentHTML('afterbegin', `<button class="btn btn-outline btn-sm" id="btn-tagpad" onclick="tagPadronizarAbrir()">🏷 Padronizar TAGs</button>`);
+  if (bg && !$('btn-tagpad')) bg.insertAdjacentHTML('afterbegin', `<button class="btn btn-outline btn-sm" id="btn-tagpad" style="display:none" onclick="tagPadronizarAbrir()">🏷 Padronizar TAGs</button>`);
+  // v3.95: só o Master vê e usa
+  const vis = () => { const b = $('btn-tagpad'); if (b) b.style.display = _ehMaster() ? '' : 'none'; };
+  setInterval(vis, 2000); vis();
   // sigla no cadastro da obra
   const np = $('obra-nomeproj') && $('obra-nomeproj').closest('.form-group');
   if (np && !$('obra-sigla')) np.insertAdjacentHTML('afterend', `<div class="form-group"><label class="form-label" for="obra-sigla">Sigla (4 caracteres)</label>
