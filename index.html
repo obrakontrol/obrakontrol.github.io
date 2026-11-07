@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.02 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.03 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -8821,7 +8821,7 @@ window.confirmarImportacao = async function () {
     try {
       const wb = XLSX.read(e.target.result, { type:'binary', cellDates:true });
       const abas = {};
-      if (tipo === 'pacote' || tipo === 'historico') { const vale = tipo === 'pacote' ? IMPORT_PACOTE : IMPORT_HISTORICO; wb.SheetNames.forEach(n => { const t = _ABA_TIPO[_normAba(n)]; if (t && vale.includes(t) && !abas[t]) abas[t] = n; }); }
+      if (tipo === 'pacote' || tipo === 'historico') { const vale = tipo === 'pacote' ? IMPORT_PACOTE : IMPORT_HISTORICO; wb.SheetNames.forEach(n => { const t = _normAba(n); if (vale.includes(t) && !abas[t]) abas[t] = n; }); wb.SheetNames.forEach(n => { const t = _ABA_TIPO[_normAba(n)]; if (t && vale.includes(t) && !abas[t]) abas[t] = n; }); }
       else abas[tipo] = wb.SheetNames[0];
       window.__impAtualizados = []; window.__impCriados = []; window.__obraPacote = '';
       // v2.67: sem coluna "Obra", vale a obra da aba Obras (se for uma só)
@@ -17311,6 +17311,21 @@ function mmLimparDup() {
       let b = document.getElementById('btn-mm-dup'); if (!b) { hd.insertAdjacentHTML('beforeend', '<div class="btn-group"><button class="btn btn-primary btn-sm" id="btn-mm-dup" onclick="mmLimparDup()"></button></div>'); b = document.getElementById('btn-mm-dup'); }
       b.textContent = '🧹 Remover duplicados sem uso (' + n + ')'; b.style.display = n ? '' : 'none'; } catch (e) {}
     return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.03: botão "Baixar planilha com os problemas marcados" fica na tela
+//  • a importação termina depois (arquivo grande); o botão era posto antes e o resumo apagava ele
+//  • aba com o nome exato do tipo (ex.: "Empresas") ganha de sinônimo ("Fornecedores")
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  let obs = null;
+  const garantir = () => { const pv = document.getElementById('import-preview'); if (!pv) return;
+    if (!pv.querySelector('.imp-conf') && /Importação concluída/.test(pv.textContent || '')) try { _impBotaoConferencia(); } catch (e) {} };
+  const ligar = () => { const pv = document.getElementById('import-preview'); if (!pv || obs) return;
+    obs = new MutationObserver(() => garantir()); obs.observe(pv, { childList: true }); };
+  ligar(); setTimeout(ligar, 1500);
+  const oC = window.confirmarImportacao;
+  window.confirmarImportacao = async function () { ligar(); const r = await oC.apply(this, arguments); [300, 1500, 4000].forEach(t => setTimeout(garantir, t)); return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
