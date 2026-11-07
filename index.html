@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.10 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.11 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17543,6 +17543,34 @@ async function rdoBaixar(ids) {
   dados.rdos = dados.rdos || [];
   const oInit = window.pageInit; window.pageInit = function (id) { const r = oInit.apply(this, arguments); if (id === 'rdos') { renderRdos(); if (db && _firebaseReady) fbLoadAll('rdos').then(l => { if (l) { dados.rdos = l; const m = $('rdo-mes'); if (m) m.dataset.ok = ''; renderRdos(); } }).catch(() => {}); } return r; };
   const oSel = window.selecionarObra; window.selecionarObra = function () { const r = oSel.apply(this, arguments); try { if ($('page-rdos')?.classList.contains('active')) { const m = $('rdo-mes'); if (m) m.dataset.ok = ''; renderRdos(); } } catch (e) {} return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.11: VISTORIAS DAS CASAS (feitas no app de campo) — botão em Repúblicas e alojamentos
+// ═══════════════════════════════════════════════════════════════
+const _VR_ST = { ok: ['OK', 'green'], pb: ['Problema', 'red'], na: ['N/A', 'gray'] };
+async function vrAbrir(repId) {
+  window._vrRep = repId || '';
+  if (!document.getElementById('modal-vist')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-vist"><div class="modal" style="max-width:920px;width:96vw"><div class="modal-header"><div class="modal-title" id="vr-tit">Vistorias das casas</div><button class="modal-close" onclick="closeModal('modal-vist')">×</button></div>
+    <div class="modal-body"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><select class="form-control" id="vr-rep" style="max-width:300px" onchange="window._vrRep=this.value;vrRender()"></select></div><div id="vr-lista"></div></div></div></div>`);
+  openModal('modal-vist'); document.getElementById('vr-lista').innerHTML = '<div style="color:var(--text-3)">Carregando…</div>';
+  if (db && _firebaseReady) { const l = await fbLoadAll('vistoriasRep'); if (l) dados.vistoriasRep = l; }
+  vrRender();
+}
+function vrRender() {
+  const o = _okObraAtual(), reps = (dados.republicas || []).filter(r => o === 'todas' || r.obra === o), ids = new Set(reps.map(r => r.id));
+  const s = document.getElementById('vr-rep'); if (s) { s.innerHTML = '<option value="">Todas as casas</option>' + reps.map(r => `<option value="${r.id}">${_e(r.nome)}</option>`).join(''); s.value = window._vrRep || ''; }
+  const l = (dados.vistoriasRep || []).filter(v => ids.has(v.repId) && (!window._vrRep || v.repId === window._vrRep)).sort((a, b) => String(b.em || b.data).localeCompare(String(a.em || a.data)));
+  document.getElementById('vr-lista').innerHTML = l.length ? l.map(v => `<div class="card" style="margin-bottom:10px"><div class="card-body">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${_e(v.repNome || '')}</b><span class="td-mono">${fmtData(v.data)}</span><span style="color:var(--text-3)">por ${_e(v.por || '')}</span>
+        ${v.problemas ? `<span class="tag tag-red">${v.problemas} problema(s)</span>` : '<span class="tag tag-green">Tudo OK</span>'}<span style="color:var(--text-3);font-size:12px">${v.moradores ?? '—'} de ${v.vagas ?? '—'} vagas na hora</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 14px;margin-top:8px;font-size:12.5px">${(v.itens || []).map(i => `<div>${tag(_VR_ST[i.st]?.[0] || i.st, _VR_ST[i.st]?.[1] || 'gray')} ${_e(i.item)}${i.obs ? `<div style="color:#DC2626;font-size:11.5px;margin-left:4px">↳ ${_e(i.obs)}</div>` : ''}</div>`).join('')}</div>
+      ${v.obs ? `<div style="margin-top:8px;font-size:12.5px"><b>Observações:</b> ${_e(v.obs)}</div>` : ''}
+      ${(v.fotos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${v.fotos.map(f => `<img src="${f.th || ''}" alt="" style="width:86px;height:86px;object-fit:cover;border-radius:8px;cursor:pointer;background:#222" onclick="pdVerFoto('${f.id}')" title="Abrir a foto">`).join('')}</div>` : ''}</div></div>`).join('')
+    : '<div style="color:var(--text-3);padding:12px 0">Nenhuma vistoria ainda. Elas são feitas no app de campo (card Alojamentos → casa → Fazer vistoria).</div>';
+}
+(function () {
+  const hd = document.querySelector('#page-republicas .page-header .btn-group');
+  if (hd && !document.getElementById('btn-vist')) hd.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline" id="btn-vist" onclick="vrAbrir()">📋 Vistorias</button>');
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
