@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.00 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.01 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17223,7 +17223,7 @@ function _eqCards() {
     tr.classList.toggle('eq-esc', (!!window._eqCat && _eqCatDe(e) !== window._eqCat) || (!!window._eqSt && _eqStDe(e) !== window._eqSt)); });
 }
 (function () {
-  const css = document.createElement('style'); css.textContent = 'tr.eq-esc{display:none!important}'; document.head.appendChild(css);
+  const css = document.createElement('style'); css.textContent = 'tr.eq-esc{display:none!important}#tbody-equip td:nth-child(3),#tbody-equip td:nth-child(3) strong{white-space:nowrap}'; document.head.appendChild(css);   // v4.01: TAG inteira
   const oR = window.renderEquipamentos || renderEquipamentos;
   renderEquipamentos = window.renderEquipamentos = function () { const r = oR.apply(this, arguments); try { _eqCards(); } catch (e) {} return r; };
 })();
