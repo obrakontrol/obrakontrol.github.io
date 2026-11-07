@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.96 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.97 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -8490,7 +8490,7 @@ const IMPORT_DEF = {
                             direto, admissao:excelDataParaISO(g(['admissão','admissao'])), demissao:excelDataParaISO(g(['demissão','demissao']))||'', lider:g(['matr. líder','matr. lider','matrícula do líder','matricula do lider','matrícula líder','matricula lider']), equipe:g(['cód. equipe','cod. equipe','equipe']),
                             _ga: ga,
                             apropriador: /^s/i.test(String(g(['apropriador']) || '')) ? 'Sim' : 'Não', tel:String(g(['telefone','whatsapp','celular']) || '') }; }, ok:x=>x.mat&&x.nome },
-  equipamentos: { rotulo:'Equipamentos', porObra:true, chave:'tag', col:['TAG','Placa/Série','Família','Modelo','Empresa proprietária (código)','Status (Mobilizado / Em manutenção / Desmobilizado)','Data Mobilização (DD/MM/AAAA)','Data Desmobilização (DD/MM/AAAA)','Custo/hora sem diesel (R$)','Tipo de cobrança (Hora/Mês)','Valor da locação (R$)','Franquia ou hora mínima (h/mês)'],
+  equipamentos: { rotulo:'Equipamentos', porObra:true, chave:'tag', col:['TAG','Placa/Série','Família','Modelo','Empresa proprietária (código ou CNPJ)','Status (Mobilizado / Em manutenção / Desmobilizado)','Data Mobilização (DD/MM/AAAA)','Data Desmobilização (DD/MM/AAAA)','Custo/hora sem diesel (R$)','Tipo de cobrança (Hora/Mês)','Valor da locação (R$)','Franquia ou hora mínima (h/mês)'],
                   map:g=>({ tag:g(['tag']), placa:g(['placa','série','serie']), codModelo:g(['cód. modelo','cod. modelo','modelo']), familia:g(['família','familia']), prop:g(['propriet','empresa']),
                             _st:g(['status']), dataMob:excelDataParaISO(g(['data mobiliza','dt. mobiliza','dt mobiliza','mobilização (','mobilizacao (','mobiliza'])), dataDesmob:excelDataParaISO(g(['data desmobiliza','dt. desmobiliza','dt desmobiliza','desmobilização (','desmobilizacao ('])), custoHora:_numImport(g(['custo'])),
                             _cob:g(['cobran']), valorLoc:_numImport(g(['valor da loca','valor loca','valor'])), franquiaH:_numImport(g(['franquia'])) }), ok:x=>x.tag },
@@ -8619,7 +8619,8 @@ function _importarLinhas(tipo, rows, resumo) {
     if (tipo === 'equipamentos') {
       // v2.67: empresa proprietária é obrigatória e precisa estar cadastrada
       const daObra = x => x.obra === obraId || !x.obra, t = String(item.prop || '').trim().toLowerCase();
-      const emp = t && (dados.empresas||[]).find(x => daObra(x) && ((x.cod||'').toLowerCase() === t || (x.nome||'').toLowerCase() === t));
+      const tD = t.replace(/\D/g, '');   // v3.97: aceita também o CNPJ/CPF do fornecedor
+      const emp = t && (dados.empresas||[]).find(x => daObra(x) && ((x.cod||'').toLowerCase() === t || (x.nome||'').toLowerCase() === t || (tD.length >= 11 && String(x.cnpj||'').replace(/\D/g, '') === tD)));
       if (!emp) { r.erro++; if (r.avisos.length < 3) r.avisos.push('linha ' + (i+2) + ': ' + (t ? 'empresa "' + item.prop + '" não cadastrada (cadastre na aba Empresas)' : 'falta a empresa proprietária')); return; }
       item.prop = emp.nome; item.propId = emp.id;
       // v2.71: status padronizado; datas e locação
