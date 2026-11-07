@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.95 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.96 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17047,7 +17047,7 @@ function _tagProx(sig, fam, excetoId) {
 function _tagPlano(obraId) {
   const sig = _obraSigla(obraId); if (!sig) return { erro: 'A obra ainda não tem sigla. Preencha "Sigla (4 caracteres)" no cadastro da obra.' };
   const eqs = (dados.equipamentos || []).filter(e => e.obra === obraId);
-  const usados = new Set((dados.equipamentos || []).map(e => String(e.tag || '').toUpperCase()));
+  const usados = new Set((dados.equipamentos || []).concat(dados.frota || []).map(e => String(e.tag || '').toUpperCase()));
   const plano = [], porFam = {};
   eqs.forEach(e => { const f = String(e.familia || '').toUpperCase() || 'EQ'; (porFam[f] = porFam[f] || []).push(e); });
   Object.entries(porFam).forEach(([f, l]) => {
@@ -17059,21 +17059,30 @@ function _tagPlano(obraId) {
       const nova = prox(); usados.add(nova.toUpperCase()); plano.push({ e, de: e.tag || '', para: nova });
     });
   });
-  return { sig, plano, total: eqs.length };
+  // v3.96: veículos da frota → SIGLA-VL-NN
+  const vs = (dados.frota || []).filter(v => v.obra === obraId), preV = sig + '-VL', reV = new RegExp('^' + preV + '-(\\d+)$', 'i');
+  const jaV = new Set(vs.filter(v => reV.test(String(v.tag || ''))).map(v => _tagNum(v.tag))); let nv = 0;
+  vs.slice().sort((a, b) => String(a.tag || a.placa || '').localeCompare(String(b.tag || b.placa || ''), 'pt-BR', { numeric: true })).forEach(v => {
+    if (reV.test(String(v.tag || ''))) return;
+    let t; do { nv++; t = preV + '-' + String(nv).padStart(2, '0'); } while (jaV.has(nv) || usados.has(t.toUpperCase()));
+    usados.add(t.toUpperCase()); plano.push({ e: v, de: v.tag || '', para: t, col: 'frota' });
+  });
+  return { sig, plano, total: eqs.length + vs.length };
 }
 async function _tagTrocar(pares, onProg) {
   // pares: [{e, de, para}] — troca no equipamento e no histórico
   let feitos = 0, hist = 0;
-  for (const { e, de, para } of pares) {
-    for (const col of _TAG_COLS) {
-      (dados[col] || []).forEach(d => { let m = false; if (d.equip === de && (!d.equipId || d.equipId === e.id)) { d.equip = para; m = true; } if (d.tag === de && (!d.equipId || d.equipId === e.id)) { d.tag = para; m = true; } });
+  for (const { e, de, para, col: tipoCol } of pares) {
+    const idF = tipoCol === 'frota' ? 'veicId' : 'equipId', cols = tipoCol === 'frota' ? ['mobilizacoes', 'abastVeic', 'fotos'] : _TAG_COLS;
+    for (const col of cols) {
+      (dados[col] || []).forEach(d => { if (d[idF] && d[idF] !== e.id) return; if (d.equip === de) d.equip = para; if (d.tag === de) d.tag = para; });
       if (db && _firebaseReady && de) {
         const docs = new Map();
-        for (const [campo, val] of [['equipId', e.id], ['equip', de], ['tag', de]]) {
+        for (const [campo, val] of [[idF, e.id], ['equip', de], ['tag', de]]) {
           try { const s = await db.collection(col).where(campo, '==', val).get(); s.docs.forEach(d => docs.set(d.id, d)); } catch (x) {}
         }
         for (const d of docs.values()) { const x = d.data(), mud = {};
-          if (x.equipId && x.equipId !== e.id) continue;
+          if (x[idF] && x[idF] !== e.id) continue;
           if (x.equip === de) mud.equip = para; if (x.tag === de) mud.tag = para;
           if (Object.keys(mud).length) { try { await db.collection(col).doc(d.id).set(mud, { merge: true }); hist++; } catch (y) {} } }
       }
@@ -17108,14 +17117,14 @@ function tagSiglaSalvar() {
 function tagPadronizarPrev() {
   const id = document.getElementById('tp-obra').value, box = document.getElementById('tp-prev');
   document.getElementById('tp-sig').value = _obraSigla(id);
-  const r = _tagPlano(id), desf = (dados.equipamentos || []).filter(e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm);
+  const r = _tagPlano(id), desf = (dados.equipamentos || []).concat(dados.frota || []).filter(e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm);
   document.getElementById('tp-desf').style.display = desf.length ? '' : 'none';
   if (r.erro) { box.innerHTML = `<div class="alert alert-warning" style="font-size:13px">${r.erro}</div>`; document.getElementById('tp-ok').disabled = true; return; }
   document.getElementById('tp-ok').disabled = !r.plano.length;
-  box.innerHTML = !r.plano.length ? `<div style="padding:14px;color:var(--text-3)">Todos os ${r.total} equipamentos desta obra já estão no padrão ${_e(r.sig)}-FAMÍLIA-NN.</div>`
-    : `<div style="font-size:12.5px;color:var(--text-2);margin-bottom:8px"><b>${r.plano.length}</b> de ${r.total} equipamentos vão mudar. O histórico (apontamentos, diesel, fotos, mobilizações, partes diárias e paradas) acompanha, e a TAG anterior fica guardada.</div>
+  box.innerHTML = !r.plano.length ? `<div style="padding:14px;color:var(--text-3)">Todos os ${r.total} equipamentos e veículos desta obra já estão no padrão ${_e(r.sig)}-FAMÍLIA-NN.</div>`
+    : `<div style="font-size:12.5px;color:var(--text-2);margin-bottom:8px"><b>${r.plano.length}</b> de ${r.total} equipamentos e veículos vão mudar. O histórico (apontamentos, diesel, abastecimentos, fotos, mobilizações, partes diárias e paradas) acompanha, e a TAG anterior fica guardada.</div>
       <div class="table-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>TAG atual</th><th></th><th>TAG nova</th><th>Família</th><th>Placa / série</th></tr></thead><tbody>
-      ${r.plano.map(p => `<tr><td class="td-mono">${_e(p.de || '—')}</td><td>→</td><td class="td-mono" style="font-weight:800;color:var(--red)">${_e(p.para)}</td><td style="font-size:12px">${_e(p.e.familia || '')}</td><td class="td-mono" style="font-size:12px">${_e(p.e.placa || p.e.serie || '')}</td></tr>`).join('')}</tbody></table></div>`;
+      ${r.plano.map(p => `<tr><td class="td-mono">${_e(p.de || '—')}</td><td>→</td><td class="td-mono" style="font-weight:800;color:var(--red)">${_e(p.para)}</td><td style="font-size:12px">${p.col === 'frota' ? 'Frota · ' + _e(p.e.tipo || 'veículo') : _e(p.e.familia || '')}</td><td class="td-mono" style="font-size:12px">${_e(p.e.placa || p.e.serie || '')}</td></tr>`).join('')}</tbody></table></div>`;
 }
 async function tagPadronizarAplicar() {
   if (!_ehMaster()) return;
@@ -17123,20 +17132,22 @@ async function tagPadronizarAplicar() {
   const b = document.getElementById('tp-ok'); b.disabled = true;
   const agora = new Date().toISOString();
   const hist = await _tagTrocar(r.plano, (n, t) => { b.textContent = 'Aplicando ' + n + '/' + t + '…'; });
-  r.plano.forEach(({ e, de, para }) => { e.tagAnterior = de; e.tagPadronizadaEm = agora; e.tag = para; _fbGravar('equipamentos', e); });
+  r.plano.forEach(({ e, de, para, col }) => { e.tagAnterior = de; e.tagPadronizadaEm = agora; e.tag = para; _fbGravar(col || 'equipamentos', e); });
   b.textContent = 'Aplicar';
+  try { renderFrota(); } catch (x) {}
   toast('✓ ' + r.plano.length + ' TAGs padronizadas' + (hist ? ' · ' + hist + ' registro(s) do histórico atualizados' : '') + '.');
   try { renderEquipamentos(); } catch (x) {} tagPadronizarPrev();
 }
 async function tagDesfazer() {
   if (!_ehMaster()) return;
   const id = document.getElementById('tp-obra').value;
-  const l = (dados.equipamentos || []).filter(e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm);
-  if (!l.length || !confirm('Voltar ' + l.length + ' equipamento(s) para a TAG anterior? O histórico volta junto.')) return;
-  const pares = l.map(e => ({ e, de: e.tag, para: e.tagAnterior }));
+  const ok = e => e.obra === id && e.tagAnterior && e.tagPadronizadaEm;
+  const pares = (dados.equipamentos || []).filter(ok).map(e => ({ e, de: e.tag, para: e.tagAnterior })).concat((dados.frota || []).filter(ok).map(e => ({ e, de: e.tag, para: e.tagAnterior, col: 'frota' })));
+  if (!pares.length || !confirm('Voltar ' + pares.length + ' equipamento(s)/veículo(s) para a TAG anterior? O histórico volta junto.')) return;
   const b = document.getElementById('tp-desf'); b.disabled = true;
   await _tagTrocar(pares, (n, t) => { b.textContent = 'Voltando ' + n + '/' + t + '…'; });
-  pares.forEach(({ e, de, para }) => { e.tag = para; e.tagAnterior = de; delete e.tagPadronizadaEm; e.tagPadronizadaEm = null; _fbGravar('equipamentos', e); });
+  pares.forEach(({ e, de, para, col }) => { e.tag = para; e.tagAnterior = de; e.tagPadronizadaEm = null; _fbGravar(col || 'equipamentos', e); });
+  try { renderFrota(); } catch (x) {}
   b.disabled = false; b.textContent = '↺ Voltar às TAGs anteriores';
   toast('TAGs anteriores restauradas.'); try { renderEquipamentos(); } catch (x) {} tagPadronizarPrev();
 }
@@ -17177,6 +17188,13 @@ async function tagDesfazer() {
   });
   const tg = $('equip-tag'); if (tg) tg.addEventListener('input', () => { delete tg.dataset.sug; });
 })();
+// v3.96: veículo novo da frota já nasce SIGLA-VL-NN quando a obra tem sigla
+(function () { const oP = _frTagProx;
+  _frTagProx = window._frTagProx = function (obra, excetoId) { const sg = _obraSigla(obra); if (!sg) return oP.apply(this, arguments);
+    const pre = sg + '-VL', re = new RegExp('^' + pre + '-(\\d+)$', 'i'), fr = (dados.frota || []).filter(v => v.id !== excetoId);
+    let mx = 0; fr.forEach(v => { const m = re.exec(String(v.tag || '')); if (m) mx = Math.max(mx, +m[1]); });
+    const us = new Set(fr.concat(dados.equipamentos || []).map(v => String(v.tag || '').toUpperCase())); let n = mx + 1, t;
+    do { t = pre + '-' + String(n++).padStart(2, '0'); } while (us.has(t)); return t; }; })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {

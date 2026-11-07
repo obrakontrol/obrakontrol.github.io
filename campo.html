@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.92</div>
+  <div class="login-versao">ObraKontrol Campo · v2.93</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6188,6 +6188,16 @@ function propNovoOk() {
     const pre = (sg + '-' + fam.cod).toUpperCase(), re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$', 'i');
     let mx = 0; (eqs || dadosCampo.equipamentos || []).forEach(e => { const m = re.exec(String(e.tag || '').trim()); if (m) mx = Math.max(mx, +m[1]); });
     return pre + '-' + String(mx + 1).padStart(2, '0');
+  };
+  // veículo leve novo: SIGLA-VL-NN
+  const oV = _vlTagProx;
+  _vlTagProx = function (obra, frota) {
+    const o = (dadosCampo.obras || []).concat(window._mobObras || []).find(x => x.id === obra); const sg = o && o.sigla ? String(o.sigla).toUpperCase() : '';
+    if (!sg) return oV.apply(this, arguments);
+    const pre = sg + '-VL', re = new RegExp('^' + pre + '-(\\d+)$', 'i'); let mx = 0;
+    (frota || []).forEach(v => { const m = re.exec(String(v.tag || '')); if (m) mx = Math.max(mx, +m[1]); });
+    const us = new Set((frota || []).map(v => String(v.tag || '').toUpperCase())); let n = mx + 1, t;
+    do { t = pre + '-' + String(n++).padStart(2, '0'); } while (us.has(t)); return t;
   };
   // garante a lista de obras (com a sigla) mesmo para quem tem obra fixa
   let n = 0; const t = setInterval(() => { if (++n > 20) return clearInterval(t);
