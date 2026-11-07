@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.99</div>
+  <div class="login-versao">ObraKontrol Campo · v3.00</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6487,6 +6487,28 @@ function otDefinir(id) {
       setTimeout(_otLabel, 300);
     }
     return r; };
+})();
+// ══════════════════════════════════════════════════════════════
+// v3.00: OBRA DE TRABALHO como lista suspensa no próprio campo da obra (tela inicial)
+// ══════════════════════════════════════════════════════════════
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `#ot-sel{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.10) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:5px 30px 5px 10px;font:inherit;font-weight:700;font-size:14px;max-width:min(78vw,340px);text-overflow:ellipsis;cursor:pointer}
+    #ot-sel option{color:#111;background:#fff}#ot-sel.vazio{border-color:#E30613;background-color:rgba(227,6,19,.25)}`;
+  document.head.appendChild(css);
+  _otLabel = function () {
+    const l = document.getElementById('home-obra-label'); if (!l || !usuarioCampo?.obraTodas) return;
+    const obras = (window._mobObras || dadosCampo.obras || []).filter(o => !/encerr/i.test(o.status || '') || o.id === usuarioCampo.obra).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+    l.innerHTML = `<select id="ot-sel" class="${usuarioCampo.obra ? '' : 'vazio'}" onchange="otDefinir(this.value)" aria-label="Obra em que você está lançando">${usuarioCampo.obra ? '' : '<option value="">Escolha a obra…</option>'}${obras.map(o => `<option value="${o.id}" ${o.id === usuarioCampo.obra ? 'selected' : ''}>${_esc(o.nome || '')}${o.cod ? ' · ' + _esc(o.cod) : ''}</option>`).join('')}</select>`;
+  };
+  otEscolher = function () { _otLabel(); const s = document.getElementById('ot-sel'); if (s) { s.focus(); try { s.showPicker && s.showPicker(); } catch (e) {} } };
+  const oD = otDefinir; otDefinir = function (id) { if (!id) return; const antes = usuarioCampo.obra; oD.apply(this, arguments); if (usuarioCampo.obra !== id) { usuarioCampo.obra = antes; } _otLabel(); };
+  // sem a janela de baixo: o campo já é a lista; tira o clique do bloco inteiro
+  const oE = entrarNoCampo;
+  entrarNoCampo = function () { const r = oE.apply(this, arguments); document.getElementById('ot-modal')?.remove();
+    const w = document.querySelector('.home-obra'); if (w && w.dataset.ot) { const n = w.cloneNode(true); w.replaceWith(n); n.style.cursor = ''; }
+    setTimeout(() => { document.getElementById('ot-modal')?.remove(); _otLabel(); }, 400); setTimeout(() => { document.getElementById('ot-modal')?.remove(); _otLabel(); }, 1500); return r; };
 })();
 </script>
 </body>
