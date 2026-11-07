@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.06 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.07 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -3440,7 +3440,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
       </div>
       <label id="import-custo-wrap" style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;margin-top:4px">
         <input type="checkbox" id="import-atualizar-custo" style="margin-top:3px"/>
-        <span><strong>Atualizar cadastros que já existem</strong><br><span style="font-size:11px;color:var(--text-3)">Cargos: custo/hora, adicional HE e adicional domingo/feriado. Equipamentos: custo/hora. Tanques: preço do litro. Funcionários: gera apontamento, apropriador e telefone. Frentes: coordenada e responsável. Modelos: tanque e consumo previsto. Abastecimentos (histórico): preço do litro e nº do ticket. Repúblicas: proprietário, CPF/CNPJ, telefone, datas do contrato e observações. Nada mais é alterado, e célula em branco não apaga o valor atual.</span></span>
+        <span><strong>Atualizar cadastros que já existem</strong><br><span style="font-size:11px;color:var(--text-3)">Cargos: custo/hora, adicional HE e adicional domingo/feriado. Equipamentos: custo/hora. Tanques: preço do litro. Funcionários: gera apontamento, apropriador, telefone, salário, CPF, datas e situação (férias/afastado). Frentes: coordenada e responsável. Modelos: tanque e consumo previsto. Abastecimentos (histórico): preço do litro e nº do ticket. Repúblicas: proprietário, CPF/CNPJ, telefone, datas do contrato e observações. Nada mais é alterado, e célula em branco não apaga o valor atual.</span></span>
       </label>
       <div id="import-preview" style="margin-top:1rem;font-size:12px;color:var(--text-3);background:var(--bg);padding:10px;border-radius:6px;display:none"></div>
       <input type="hidden" id="import-tipo"/>
@@ -8706,6 +8706,7 @@ function _importarLinhas(tipo, rows, resumo) {
         if (temCol2(['admiss'])) mud.admissao = item.admissao;
         if (temCol2(['demiss'])) mud.demissao = item.demissao;
         if (temCol2(['tipo de custo','direto'])) mud.direto = item.direto;
+        if (temCol2(['situação','situacao']) && item.ausTipo && x && _fnAus(x) !== item.ausTipo) { mud.ausTipo = item.ausTipo; mud.ausIni = item.ausIni; mud.ausFim = item.ausFim || ''; }   // v4.07
         if (x && Object.keys(mud).some(k => String(x[k] || '') !== String(mud[k] || ''))) { Object.assign(x, mud); (window.__impAtualizados = window.__impAtualizados || []).push([tipo, x]); r.atual = (r.atual||0) + 1; return; }
       }
       if (document.getElementById('import-atualizar-custo')?.checked && tipo === 'equipamentos') {
