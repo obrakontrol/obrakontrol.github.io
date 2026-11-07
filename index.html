@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.08 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.09 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17435,18 +17435,18 @@ function _alojCasas(at) {
   if (!rs.length) return '<div class="dx-vazio">Sem dados</div>';
   const cama = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>';
   return `<div class="ak-grid">${rs.map(r => { const c = _ocupCor(r.o, r.v), pc = Math.round(r.p * 100);
-    return `<div class="ak" style="--c:${c}" title="${_e(r.l)} · ${r.o} de ${r.v} vagas"><svg class="ak-teto" viewBox="0 0 100 34" preserveAspectRatio="none"><path d="M3 33 L50 3 L97 33 Z" fill="${c}" fill-opacity=".13" stroke="${c}" stroke-width="4.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
-      <div class="ak-corpo"><div class="ak-jan"><i></i><i></i><i></i><i></i></div><div class="ak-nome">${_e(r.l)}</div><div class="ak-qt">${cama}<span>${r.o} / ${r.v}</span></div>
+    return `<div class="ak" style="--c:${c}" title="${_e(r.l)} · ${r.o} de ${r.v} vagas"><svg class="ak-teto" viewBox="0 0 100 44" preserveAspectRatio="none"><path d="M0 44 L50 2 L100 44 Z" fill="${c}" fill-opacity=".13" stroke="none"/><path d="M1.5 43 L50 3 L98.5 43" fill="none" stroke="${c}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
+      <div class="ak-jan"><i></i><i></i><i></i><i></i></div><div class="ak-corpo"><div class="ak-nome">${_e(r.l)}</div><div class="ak-qt">${cama}<span>${r.o} / ${r.v}</span></div>
       <div class="ak-bar"><i style="width:${Math.min(100, pc)}%"></i></div><div class="ak-pc">${pc}%</div></div></div>`; }).join('')}</div>`;
 }
 (function () {
   const css = document.createElement('style');
   css.textContent = `.ak-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:14px 12px}
-    .ak{position:relative;padding-top:30px;min-width:0}
-    .ak-teto{position:absolute;top:0;left:0;width:100%;height:32px;overflow:visible}
+    .ak{position:relative;padding-top:44px;min-width:0}
+    .ak-teto{position:absolute;top:0;left:0;width:100%;height:44px;overflow:visible}
     .ak-teto path{stroke-width:4.5px}
-    .ak-corpo{border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-top:0;border-radius:0 0 10px 10px;background:color-mix(in srgb,var(--c) 13%,transparent);padding:2px 10px 9px;text-align:center;margin:0 6px}
-    .ak-jan{display:grid;grid-template-columns:6px 6px;gap:2px;justify-content:center;margin:0 auto 5px}.ak-jan i{width:6px;height:6px;background:var(--c);border-radius:1px}
+    .ak-corpo{border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-top:0;border-radius:0 0 10px 10px;background:color-mix(in srgb,var(--c) 13%,transparent);padding:6px 10px 9px;text-align:center}
+    .ak-jan{position:absolute;top:22px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:7px 7px;gap:2px}.ak-jan i{width:7px;height:7px;background:var(--c);border-radius:1.5px}
     .ak-nome{font-weight:800;font-size:12.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .ak-qt{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;margin:4px 0 6px;font-variant-numeric:tabular-nums;opacity:.92}
     .ak-bar{height:7px;border-radius:9px;background:color-mix(in srgb,currentColor 14%,transparent);overflow:hidden}.ak-bar i{display:block;height:100%;background:var(--c);border-radius:9px}
