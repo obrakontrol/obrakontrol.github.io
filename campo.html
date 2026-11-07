@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.93</div>
+  <div class="login-versao">ObraKontrol Campo · v2.94</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -1914,7 +1914,7 @@ function renderFuncionariosList() {
   const busca = document.getElementById('mo-search')?.value?.toLowerCase() || '';
   const obraId = usuarioCampo?.obra || '';
   let lista = obraId
-    ? dadosCampo.funcionarios.filter(f => !f.obra || f.obra === obraId)
+    ? dadosCampo.funcionarios.filter(f => (!f.obra || f.obra === obraId) && !_fnAus(f))
     : dadosCampo.funcionarios;
   if (busca) lista = lista.filter(f =>
     f.nome?.toLowerCase().includes(busca) || f.mat?.toLowerCase().includes(busca)
@@ -1957,7 +1957,7 @@ function selecionarTurno() {
   const busca = document.getElementById('mo-search')?.value?.toLowerCase() || '';
   const obraId = usuarioCampo?.obra || '';
   let lista = obraId
-    ? dadosCampo.funcionarios.filter(f => !f.obra || f.obra === obraId)
+    ? dadosCampo.funcionarios.filter(f => (!f.obra || f.obra === obraId) && !_fnAus(f))
     : dadosCampo.funcionarios;
   if (busca) lista = lista.filter(f =>
     f.nome?.toLowerCase().includes(busca) || f.mat?.toLowerCase().includes(busca)
@@ -2341,7 +2341,7 @@ function _apEu() { const m = String(usuarioCampo?.mat || '').replace(/\s+/g, '')
 // v2.20: quem não gera apontamento (indireto, administrativo) não aparece na lista; o próprio apropriador sempre aparece
 function _apGera(f) { return f.geraApont ? f.geraApont !== 'Não' : !/^n/i.test(String(f.direto || '')); }
 function _normId(v) { return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
-function _apFuncs() { const o = _apObra(), eu = _apEu(), hj = _hojeISO(); return dadosCampo.funcionarios.filter(f => (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && (!f.demissao || f.demissao > hj) && (!f.admissao || f.admissao <= hj) && (_apGera(f) || (eu && f.id === eu.id) || ap.mo.has(f.id))); }
+function _apFuncs() { const o = _apObra(), eu = _apEu(), hj = _hojeISO(); return dadosCampo.funcionarios.filter(f => (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && (!f.demissao || f.demissao > hj) && (!f.admissao || f.admissao <= hj) && !_fnAus(f, hj) && (_apGera(f) || (eu && f.id === eu.id) || ap.mo.has(f.id))); }
 function _apEquips() { const o = _apObra(), hj = _hojeISO(); return dadosCampo.equipamentos.filter(e => (!o || !e.obra || e.obra === o) && !/desmob/i.test(e.status || '') && (!e.dataDesmob || e.dataDesmob > hj) && (!e.dataMob || e.dataMob <= hj)); }
 function _apTurno() { const id = document.getElementById('ap-turno').value; return dadosCampo.turnos.find(t => (t.id || t.cod) === id); }
 function _apHorasTurno(t) {
@@ -3141,7 +3141,7 @@ let _repSel = { mo: new Set(), eq: new Set() }, _repOferecido = '';
 function _repDisponivel() {
   const u = _repUltima(); if (!u || (u.uid && u.uid === ap.uid)) return null;
   const o = _apObra();
-  const pessoas = u.mo.map(id => dadosCampo.funcionarios.find(f => f.id === id)).filter(f => f && f.status !== 'Desligado' && (!o || !f.obra || f.obra === o));
+  const pessoas = u.mo.map(id => dadosCampo.funcionarios.find(f => f.id === id)).filter(f => f && f.status !== 'Desligado' && !_fnAus(f) && (!o || !f.obra || f.obra === o));
   const equips = (u.eq || []).map(id => dadosCampo.equipamentos.find(e => e.id === id)).filter(e => e && (!o || !e.obra || e.obra === o));
   return pessoas.length || equips.length ? { u, pessoas, equips } : null;
 }
@@ -5173,7 +5173,7 @@ function vleRender() {
     ${v ? `<div class="vl-info"><b>${E(v.tag || '—')}</b> · ${E(v.placa)} · ${E(v.modelo || '')}${v.locadora ? '<br>Locadora: ' + E(v.locadora) : ''}${dev && r ? `<br>Com <b>${E(r.nome)}</b> desde ${E(String(r.inicio || '').split('-').reverse().join('/'))}${r.km ? ' · saiu com ' + E((+r.km).toLocaleString('pt-BR')) + ' km' : ''}` : ''}</div>` : ''}
   </div></div>`;
   if (!dev) {
-    const fs = (dadosCampo.funcionarios || []).filter(x => (!o || !x.obra || x.obra === o) && x.status !== 'Desligado' && !(x.demissao && x.demissao <= _hojeISO())).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+    const fs = (dadosCampo.funcionarios || []).filter(x => (!o || !x.obra || x.obra === o) && x.status !== 'Desligado' && !_fnAus(x) && !(x.demissao && x.demissao <= _hojeISO())).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
     const dCnh = vle.cnhVal ? Math.round((new Date(vle.cnhVal + 'T12:00') - new Date(_hojeISO() + 'T12:00')) / 864e5) : null;
     h += `<div class="card"><div class="card-header"><span class="card-title">Colaborador (condutor)</span></div><div class="card-body">
       <div class="form-group"><label class="form-label">Colaborador *</label><div class="vle-row">${sel(fs.map(x => [x.id, x.nome + ' · Mat. ' + (x.mat || '—')]), vle.funcId, 'Escolha…', "vleCampo('funcId',this.value,1)")}<button type="button" class="btn btn-outline" style="flex:0 0 auto" onclick="abrirQR('vlec')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h4v4"/></svg>Ler crachá</button></div></div>
@@ -5404,7 +5404,7 @@ function abvRender() {
   const vs = (window._vlFrota || []).filter(v => v.status !== 'Devolvido' && (!o || v.obra === o)).sort((a, b) => String(a.tag || a.placa).localeCompare(String(b.tag || b.placa)));
   const v = _abvVeic(), u = v ? _abvUlt(v) : null;
   const postos = [...new Set((window._abvLista || []).filter(a => !o || a.obra === o).map(a => a.posto).filter(Boolean).concat(['Auto Posto Petromoc', 'Auto Posto Vale Azul']))].sort();
-  const funcs = (dadosCampo.funcionarios || []).filter(f => (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && !(f.demissao && f.demissao <= _hojeISO())).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  const funcs = (dadosCampo.funcionarios || []).filter(f => (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && !_fnAus(f) && !(f.demissao && f.demissao <= _hojeISO())).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   el.innerHTML = (!usuarioCampo.obra ? `<div class="card"><div class="card-body"><div class="form-group"><label class="form-label">Obra *</label>${sel(obras.map(x => [x.id, (x.cod ? x.cod + ' · ' : '') + x.nome]), abv.obra, 'Escolha a obra…', "abvCampo('obra',this.value,1)")}</div></div></div>` : '') + `
     <div class="card"><div class="card-body">
       <div class="form-group"><label class="form-label">Veículo *</label><div class="vle-row">${sel(vs.map(x => [x.id, (x.tag ? x.tag + ' · ' : '') + x.placa + ' · ' + (x.modelo || '')]), abv.veicId, vs.length ? 'Escolha…' : 'Nenhum veículo nesta obra', "abvCampo('veicId',this.value,1)")}
@@ -5647,7 +5647,7 @@ function _pdRasc() { if (!pd || !pd.equipId) return; try { const { foto, _ult, .
 function pdRender() {
   const el = document.getElementById('pd-content'); if (!el || !pd) return; const e = _pdEq(), E = _pdE, km = _medKmC(e), un = km ? 'km' : 'h', med = km ? 'Hodômetro' : 'Horímetro';
   document.getElementById('pd-sub').textContent = e ? (e.tag || e.placa) + ' · ' + String(pd.data).split('-').reverse().join('/') : 'Equipamento';
-  const eqs = _pdEquips(), frs = _daObraCampo(dadosCampo.frentes || []).filter(f => f.cod), fs = _daObraCampo(dadosCampo.funcionarios || []).filter(f => f.status !== 'Desligado' && !f.demissao);
+  const eqs = _pdEquips(), frs = _daObraCampo(dadosCampo.frentes || []).filter(f => f.cod), fs = _daObraCampo(dadosCampo.funcionarios || []).filter(f => f.status !== 'Desligado' && !_fnAus(f) && !f.demissao);
   const emp = e ? ((dadosCampo.empresas || []).find(x => x.cod === e.prop || x.nome === e.prop || (e.propId && x.id === e.propId)) || {}) : {}, mod = e ? ((dadosCampo.modelos || []).find(m => m.cod === e.codModelo) || {}) : {};
   let h = `<div class="card"><div class="card-body">
     <div style="display:flex;gap:10px"><div class="form-group" style="flex:1"><label class="form-label">Dia *</label><input class="form-control" type="date" value="${E(pd.data)}" max="${_hojeISO()}" onchange="pd.data=this.value;if(pd.equipId)pdEscolher(pd.equipId);else pdRender()"/></div></div>
@@ -6204,6 +6204,10 @@ function propNovoOk() {
     if (typeof usuarioCampo !== 'undefined' && usuarioCampo && typeof fbCarregar === 'function' && (!window._mobObras || !window._mobObras.length)) {
       clearInterval(t); fbCarregar('obras').then(l => { if (l && l.length) window._mobObras = l; }).catch(() => {}); } }, 3000);
 })();
+// ══════════════════════════════════════════════════════════════
+// v2.94: funcionário de FÉRIAS ou AFASTADO (no período) não aparece para apontamento nem nas listas de pessoas
+// ══════════════════════════════════════════════════════════════
+function _fnAus(f, d) { if (!f || !f.ausTipo) return ''; d = d || _hojeISO(); return (!f.ausIni || f.ausIni <= d) && (!f.ausFim || f.ausFim >= d) ? f.ausTipo : ''; }
 </script>
 </body>
 </html>

@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.05 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.06 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -10419,7 +10419,7 @@ renderDiario = function () {
   (dados.aponMO || []).filter(a => a.data === dataSel && a.status !== 'rejeitado').forEach(a => moMats.add(String(a.mat || '')));
   const eqIds = new Set(doDia.flatMap(t => (t.eq || []).map(x => x.id))), eqTags = new Set(doDia.flatMap(t => (t.eq || []).map(x => String(x.tag || '').toLowerCase())));
   (dados.aponEQ || []).filter(a => a.data === dataSel && a.status !== 'rejeitado').forEach(a => eqTags.add(String(a.equip || '').toLowerCase()));
-  const ativo = f => (!ob || !f.obra || f.obra === ob) && f.status !== 'Desligado' && (!f.demissao || f.demissao > dataSel) && (!f.admissao || f.admissao <= dataSel);
+  const ativo = f => (!ob || !f.obra || f.obra === ob) && f.status !== 'Desligado' && (!f.demissao || f.demissao > dataSel) && (!f.admissao || f.admissao <= dataSel) && !(typeof _fnAus === 'function' && _fnAus(f, dataSel));
   const funcs = (dados.funcionarios || []).filter(ativo);
   const devem = funcs.filter(f => _geraApont(f) === 'Sim');
   const apontado = f => moIds.has(f.id) || moMats.has(String(f.mat));
@@ -11017,7 +11017,7 @@ function agHoras() {
   document.getElementById('ag-hn').value = Math.round(hn * 2) / 2; document.getElementById('ag-he').value = Math.round(he * 2) / 2; agEqDefault();
 }
 function agEqDefault() { const hn = _agV('ag-hn'); _ag.eq.forEach(v => { if (v.auto) v.hp = hn; }); agRender(); }
-function _agFuncs() { const ob = _agV('ag-obra'), d = _agV('ag-data') || _hojeLocal(); return (dados.funcionarios || []).filter(f => (!f.obra || f.obra === ob) && f.status !== 'Desligado' && (!f.demissao || f.demissao > d) && (typeof _geraApont !== 'function' || _geraApont(f) === 'Sim')).sort((a, b) => String(a.nome).localeCompare(String(b.nome))); }
+function _agFuncs() { const ob = _agV('ag-obra'), d = _agV('ag-data') || _hojeLocal(); return (dados.funcionarios || []).filter(f => (!f.obra || f.obra === ob) && f.status !== 'Desligado' && !(typeof _fnAus === 'function' && _fnAus(f, d)) && (!f.demissao || f.demissao > d) && (typeof _geraApont !== 'function' || _geraApont(f) === 'Sim')).sort((a, b) => String(a.nome).localeCompare(String(b.nome))); }
 function _agEquips() { const ob = _agV('ag-obra'), d = _agV('ag-data') || _hojeLocal(); return (dados.equipamentos || []).filter(e => (!e.obra || e.obra === ob) && _eqDeveApontar(e, d)).sort((a, b) => String(a.tag || a.placa).localeCompare(String(b.tag || b.placa))); }
 function agRender() {
   const n = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -16232,7 +16232,7 @@ function _medKm(tagOuEq) { const e = typeof tagOuEq === 'object' ? tagOuEq : (da
 })();
 // v3.68: % do efetivo mobilizado que está alojado (rosca) + por tipo de custo e vínculo
 function _alojEfetivo(at) {
-  const hj = _hojeLocal(), ef = (dados.funcionarios || []).filter(f => (!_dx.obra || f.obra === _dx.obra) && f.status !== 'Desligado' && (!f.demissao || f.demissao > hj));
+  const hj = _hojeLocal(), ef = (dados.funcionarios || []).filter(f => (!_dx.obra || f.obra === _dx.obra) && f.status !== 'Desligado' && (!f.demissao || f.demissao > hj) && !(typeof _fnAus === 'function' && _fnAus(f, hj)));
   const ids = new Set(); at.forEach(r => repMoradores(r).forEach(m => { if (m.func) ids.add(m.func); }));
   const al = ef.filter(f => ids.has(f.id)), n = ef.length, a = al.length, p = n ? Math.round(a / n * 100) : 0;
   if (!n) return '';
@@ -17354,6 +17354,81 @@ function mmLimparDup() {
     const o = idEd ? (dados.obras || []).find(x => x.id === idEd) : [...(dados.obras || [])].reverse().find(x => (x.cod || '') === cod);
     if (o) { o.encargosPJ = v === '' ? 0 : (parseFloat(v) || 0); if (db && _firebaseReady) fbSave('obras', o.id, o).catch(() => {}); }
     if ($('obra-encargos-pj')) $('obra-encargos-pj').value = ''; return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.06: SITUAÇÃO DO FUNCIONÁRIO — Ativo · Férias · Afastado · Desligado
+//  • Férias e Afastado têm período (de / até). Dentro do período a pessoa não aparece para apontamento
+//    (campo e painel) e não conta no efetivo nem na pendência de apontamento. Sem "até" = até alguém mudar.
+//  • cards em Funcionários: Total, CLT, PJ, Ativos, Férias, Afastados, Desligados (clique filtra)
+// ═══════════════════════════════════════════════════════════════
+function _fnAus(f, d) { if (!f || !f.ausTipo) return ''; d = d || _hojeLocal(); return (!f.ausIni || f.ausIni <= d) && (!f.ausFim || f.ausFim >= d) ? f.ausTipo : ''; }
+function _fnSituacao(f, d) { d = d || _hojeLocal(); if (f.demissao && f.demissao <= d) return 'Desligado'; return _fnAus(f, d) || 'Ativo'; }
+window._fnSitF = '';
+function fnCardFiltro(tipo, v) {
+  if (tipo === 'vinc') { const s = document.getElementById('filtro-func-vinculo'); if (s) s.value = s.value === v ? '' : v; }
+  else window._fnSitF = window._fnSitF === v ? '' : v;
+  renderFuncionarios(0);
+}
+function _fnCards() {
+  const card = document.querySelector('#page-funcionarios .card .card-body'); if (!card) return;
+  let bar = card.querySelector('.fn-cards'); if (!bar) { card.insertAdjacentHTML('afterbegin', '<div class="fn-cards"></div>'); bar = card.querySelector('.fn-cards'); }
+  const o = obraAtiva && obraAtiva.id, l = (dados.funcionarios || []).filter(f => !o || o === 'todas' || !f.obra || f.obra === o);
+  const vin = document.getElementById('filtro-func-vinculo')?.value || '', sf = window._fnSitF || '';
+  const lv = sf ? l.filter(f => _fnSituacao(f) === sf) : l, ls = vin ? l.filter(f => (f.vinculo === 'PJ' ? 'PJ' : 'CLT') === vin) : l;
+  const nV = v => lv.filter(f => !v || (f.vinculo === 'PJ' ? 'PJ' : 'CLT') === v).length, nS = s => ls.filter(f => _fnSituacao(f) === s).length;
+  const cardH = (on, c, ico, t, sub, q, click) => `<div role="button" tabindex="0" onclick="${click}" onkeydown="if(event.key==='Enter')${click}" style="cursor:pointer;border:1px solid ${on ? c : 'var(--border)'};border-left:4px solid ${c};${on ? 'box-shadow:0 0 0 2px ' + c + '33;background:' + c + '0F;' : 'background:var(--surface,#fff);'}border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:22px">${ico}</span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13.5px;line-height:1.25;overflow-wrap:anywhere">${t}</div><div style="font-size:11.5px;color:var(--text-3)">${sub}</div></div><span style="font-size:24px;font-weight:800;color:${c};flex:none">${q}</span></div>`;
+  const V = [['', 'Total', '#6B7280', '👥'], ['CLT', 'CLT', '#2563EB', '🪪'], ['PJ', 'PJ', '#7C3AED', '💼']];
+  const S = [['Ativo', 'Ativos', '#16A34A', '✅'], ['Férias', 'Férias', '#0EA5E9', '🏖️'], ['Afastado', 'Afastados', '#D97706', '🩹'], ['Desligado', 'Desligados', '#9CA3AF', '📦']];
+  bar.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:10px">${V.map(([k, t, c, i]) => cardH(k ? vin === k : !vin, c, i, t, 'funcionário(s)', nV(k), k ? `fnCardFiltro('vinc','${k}')` : `fnCardFiltro('vinc','')`)).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:14px">${S.map(([k, t, c, i]) => cardH(sf === k, c, i, t, 'situação hoje', nS(k), `fnCardFiltro('sit','${k}')`)).join('')}</div>`;
+}
+(function () {
+  const $ = id => document.getElementById(id);
+  // coluna Situação: Férias / Afastado (com o período)
+  _FN_COLS['Situação'] = f => { const s = _fnSituacao(f); return s === 'Ativo' && f.demissao ? 'Sai em breve' : s; };
+  const oR = window.renderFuncionarios;
+  window.renderFuncionarios = renderFuncionarios = function () {
+    const all = dados.funcionarios || [], sf = window._fnSitF; let r;
+    if (sf) dados.funcionarios = all.filter(f => _fnSituacao(f) === sf);
+    try { r = oR.apply(this, arguments); } finally { dados.funcionarios = all; }
+    try {
+      _fnCards();
+      const ths = [...document.querySelectorAll('#tabela-func thead th')], iS = ths.findIndex(th => th.dataset.k === 'Situação' || th.textContent.trim().replace(/[▼↑↓]/g, '') === 'Situação');
+      const porId = new Map(all.map(f => [f.id, f]));
+      if (iS >= 0) document.querySelectorAll('#tbody-func tr').forEach(tr => { const cb = tr.querySelector('[data-id]'), f = cb && porId.get(cb.dataset.id); if (!f) return; const a = _fnAus(f); if (!a || (f.demissao && f.demissao <= _hojeLocal())) return;
+        const td = tr.children[iS]; if (td) td.innerHTML = `<span class="tag tag-${a === 'Férias' ? 'blue' : 'amber'}">${a}</span>${f.ausFim ? `<div style="font-size:10.5px;color:var(--text-3)">até ${fmtData(f.ausFim)}</div>` : ''}`; });
+    } catch (e) {}
+    return r;
+  };
+  // cadastro: situação + período
+  const gD = $('func-demissao')?.closest('.form-group');
+  if (gD && !$('func-sit')) gD.insertAdjacentHTML('afterend', `<div class="form-group"><label class="form-label" for="func-sit">Situação</label><select class="form-control" id="func-sit" onchange="document.getElementById('func-aus-per').style.display=this.value?'':'none'"><option value="">Ativo</option><option value="Férias">Férias</option><option value="Afastado">Afastado</option></select>
+      <div style="font-size:11px;color:var(--text-3);margin-top:3px">Férias e afastado não aparecem para apontamento e não contam no efetivo durante o período.</div></div>
+    <div class="form-group" id="func-aus-per" style="display:none"><label class="form-label">Período</label><div style="display:flex;gap:6px;align-items:center"><input type="date" class="form-control" id="func-aus-ini" title="De"/><span>até</span><input type="date" class="form-control" id="func-aus-fim" title="Até (retorno)"/></div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:3px">Sem a data final, fica até alguém mudar para Ativo. Com a data final, volta sozinho no dia seguinte.</div></div>`);
+  const mostra = f => { if (!$('func-sit')) return; const vig = f && f.ausTipo && !(f.ausFim && f.ausFim < _hojeLocal()); $('func-sit').value = vig ? f.ausTipo : ''; $('func-aus-ini').value = vig ? f.ausIni || '' : ''; $('func-aus-fim').value = vig ? f.ausFim || '' : ''; $('func-aus-per').style.display = vig ? '' : 'none'; };
+  const oE = window.editarFuncionario; window.editarFuncionario = editarFuncionario = function (id) { const r = oE.apply(this, arguments); mostra((dados.funcionarios || []).find(x => x.id === id)); return r; };
+  const oO = window.openModal; window.openModal = openModal = function (id) { const r = oO.apply(this, arguments); if (id === 'modal-novo-func' && !$('func-edit-id')?.value) mostra(null); return r; };
+  const oS = window.salvarFuncionario; window.salvarFuncionario = salvarFuncionario = function () {
+    const tipo = $('func-sit')?.value || '', ini = $('func-aus-ini')?.value || '', fim = $('func-aus-fim')?.value || '', mat = ($('func-mat')?.value || '').trim(), obra = $('func-obra')?.value || '', idEd = $('func-edit-id')?.value || '';
+    if (tipo && ini && fim && fim < ini) { toast('A data final do período é antes da inicial.', 'error'); return; }
+    const r = oS.apply(this, arguments);
+    if ($('modal-novo-func')?.classList.contains('open')) return r;
+    const f = idEd ? (dados.funcionarios || []).find(x => x.id === idEd) : [...(dados.funcionarios || [])].reverse().find(x => String(x.mat) === mat && (x.obra || '') === obra);
+    if (!f) return r;
+    const antes = [f.ausTipo || '', f.ausIni || '', f.ausFim || ''].join('|');
+    if (tipo) { f.ausTipo = tipo; f.ausIni = ini || _hojeLocal(); f.ausFim = fim; } else if (f.ausTipo && _fnAus(f)) { f.ausFim = _hojeLocal() < (f.ausIni || '') ? '' : (() => { const d = new Date(_hojeLocal() + 'T12:00'); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })(); if (!f.ausFim) { delete f.ausTipo; delete f.ausIni; } }
+    if ([f.ausTipo || '', f.ausIni || '', f.ausFim || ''].join('|') !== antes) {
+      (f.ausHist = f.ausHist || []).push({ tipo: f.ausTipo || 'Ativo', ini: f.ausIni || '', fim: f.ausFim || '', em: new Date().toISOString(), por: usuarioLogado?.nome || '' });
+      if (db && _firebaseReady) fbSave('funcionarios', f.id, f).catch(() => {});
+      try { renderFuncionarios(); } catch (e) {}
+    }
+    return r; };
+  // importação: coluna Situação (Férias / Afastado) e "Retorno previsto"
+  const D = IMPORT_DEF.funcionarios; if (D) { D.col = D.col.concat(['Situação (Ativo/Férias/Afastado)', 'Retorno previsto (DD/MM/AAAA)']); const m = D.map;
+    D.map = g => { const x = m(g), s = String(g(['situação', 'situacao']) || ''); const t = /f[eé]rias/i.test(s) ? 'Férias' : /afast/i.test(s) ? 'Afastado' : '';
+      if (t && !x.demissao) { x.ausTipo = t; x.ausIni = _hojeLocal(); x.ausFim = excelDataParaISO(g(['retorno'])) || ''; } return x; }; }
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
