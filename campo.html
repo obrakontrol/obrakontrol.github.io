@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.95</div>
+  <div class="login-versao">ObraKontrol Campo · v2.96</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6249,6 +6249,20 @@ function rdoAbrirTurno(d, uid) {
     const r = await oS.apply(this, arguments);
     try { if (uid && ap.uid !== uid && _rdoTurnoReg(d, uid)) setTimeout(() => rdoAbrirTurno(d, uid), 350); } catch (e) {}
     return r; };
+})();
+// ══════════════════════════════════════════════════════════════
+// v2.96: TELA INICIAL REORGANIZADA — Apropriação · Abastecimento / Parte diária · Movimentação /
+// Pendentes · Meu Resumo / Alojamentos (em desenvolvimento) · Ver frente
+// ══════════════════════════════════════════════════════════════
+function alojAbrirCampo() { toast('Alojamentos: em desenvolvimento — em breve no app.', 'ok'); }
+(function () {
+  const res = document.querySelector('.hcard[onclick="abrirMeuResumo()"]'); if (!res) return;
+  const grid = res.parentElement;
+  if (!document.getElementById('card-aloj')) res.insertAdjacentHTML('afterend', `<div class="hcard" onclick="alojAbrirCampo()" id="card-aloj"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/><path d="M9 21v-6h6v6"/></svg><div class="hcard-t">Alojamentos</div><div class="hcard-s">Em desenvolvimento</div></div>`);
+  const sel = ['abrirModulo(\'ap\')', 'abrirModulo(\'fuel\')', 'pdAbrir()', 'abrirMobilizacao()', 'sincronizarPendentes()', 'abrirMeuResumo()', 'alojAbrirCampo()', 'abrirQR(\'verfrente\')'];
+  sel.forEach(s => { const c = [...grid.children].find(x => x.classList.contains('hcard') && x.getAttribute('onclick') === s); if (c) grid.appendChild(c); });
+  // o que sobrar (cards novos no futuro) vai para o fim, depois destes
+  [...grid.children].filter(x => x.classList.contains('hcard') && !sel.includes(x.getAttribute('onclick'))).forEach(c => grid.appendChild(c));
 })();
 </script>
 </body>
