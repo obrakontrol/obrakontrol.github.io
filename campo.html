@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.98</div>
+  <div class="login-versao">ObraKontrol Campo · v2.99</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6324,12 +6324,13 @@ function alRender() {
 }
 function alCasa(id) { _al.rep = _al.reps.find(r => r.id === id) || null; _al.busca = false; alRender(); window.scrollTo(0, 0); }
 function _alCasaRender() {
-  const r = _al.rep, el = document.getElementById('al-content'), bar = document.getElementById('al-bar'), M = _alMor(r), v = +r.vagas || 0, hj = _hojeISO();
+  const r = _al.rep, el = document.getElementById('al-content'), bar = document.getElementById('al-bar'), M = _alMor(r).slice().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), v = +r.vagas || 0, hj = _hojeISO();
   document.getElementById('al-tit').textContent = r.nome; document.getElementById('al-sub').textContent = M.length + ' de ' + v + ' vagas' + (r.endereco ? ' · ' + r.endereco : '');
   const uv = (() => { try { return JSON.parse(localStorage.getItem('al_ult_vis_' + r.id) || 'null'); } catch (e) { return null; } })();
   bar.style.display = ''; bar.innerHTML = `<button class="btn btn-outline" onclick="alBuscaAbrir()">+ Dar entrada</button><button class="btn btn-green" onclick="alVistoria()">Fazer vistoria</button>`;
   el.innerHTML = `<div class="card"><div class="card-body"><div class="al-sec">Moradores · ${M.length} de ${v}</div>
-      ${M.length ? M.map(m => `<div class="al-m"><div class="x"><b>${_alE(m.nome)}</b><span>Mat. ${_alE(m.mat || '—')}${m.funcao ? ' · ' + _alE(m.funcao) : ''} · desde ${_alBR(m.entrada)}</span></div>
+      ${M.length > 6 ? `<input class="form-control" id="al-mq" placeholder="🔍 Buscar morador por nome, matrícula ou CPF…" oninput="alMorFiltro(this.value)" autocomplete="off" style="margin-bottom:6px"/><div class="al-vz" id="al-mq-vz" style="display:none;padding:8px 0">Ninguém com esse nome nesta casa.</div>` : ''}
+      ${M.length ? M.map(m => `<div class="al-m" data-q="${_alE(String((m.nome || '') + ' ' + (m.mat || '') + ' ' + String(m.cpf || '').replace(/\D/g, '')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())}"><div class="x"><b>${_alE(m.nome)}</b><span>Mat. ${_alE(m.mat || '—')}${m.funcao ? ' · ' + _alE(m.funcao) : ''} · desde ${_alBR(m.entrada)}</span></div>
         <input type="date" class="form-control" id="al-sai-${m.id}" value="${hj}" max="${hj}" style="width:132px;padding:6px 6px;font-size:12.5px"/><button class="btn btn-outline btn-sm" onclick="alSaida('${m.id}')">Saída</button></div>`).join('') : '<div class="al-vz">Ninguém morando aqui no momento.</div>'}</div></div>
     <div class="card" id="al-ent" style="display:${_al.busca ? '' : 'none'}"><div class="card-body"><div class="al-sec">Dar entrada</div>
       <div class="form-group"><label class="form-label">Data de entrada</label><input type="date" class="form-control" id="al-ent-d" value="${hj}" max="${hj}"/></div>
@@ -6339,7 +6340,7 @@ function _alCasaRender() {
 }
 function alBuscaAbrir() { _al.busca = true; _alCasaRender(); setTimeout(() => { const q = document.getElementById('al-ent-q'); if (q) { q.focus(); q.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }, 50); }
 function _alLivres() {
-  const o = usuarioCampo?.obra || '', hj = _hojeISO(), ocup = new Set(_al.reps.flatMap(r => _alMor(r).map(m => m.func)));
+  const o = (_al.rep && _al.rep.obra) || usuarioCampo?.obra || '', hj = _hojeISO(), ocup = new Set(_al.reps.flatMap(r => _alMor(r).map(m => m.func)));
   return (dadosCampo.funcionarios || []).filter(f => (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && !(f.demissao && f.demissao <= hj) && !f.provisorio && !ocup.has(f.id));
 }
 function alBusca(q) {
@@ -6444,6 +6445,48 @@ async function alProvOk() {
   const oL = _alCarregar; _alCarregar = async function () { const r = await oL.apply(this, arguments); try { _alVincular(); } catch (e) {} return r; };
   // o funcionário provisório não pode entrar duas vezes pela busca: ocupados por CPF também
   const oLv = _alLivres; _alLivres = function () { const cpfs = new Set(_al.reps.flatMap(r => _alMor(r).map(m => _cpfDig(m.cpf)).filter(Boolean))); return oLv.apply(this, arguments).filter(f => !cpfs.has(_cpfDig(f.cpf))); };
+})();
+// ══════════════════════════════════════════════════════════════
+// v2.99: OBRA DE TRABALHO para quem tem acesso a todas as obras — toque em "Todas as obras" na tela
+// inicial e escolha a obra; tudo o que lançar (apropriação, abastecimento, parte diária, movimentação,
+// alojamentos) vai para ela. Fica guardada no celular até trocar. · Alojamentos: busca de morador (ordem alfabética)
+// ══════════════════════════════════════════════════════════════
+function alMorFiltro(q) { const n = String(q || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); let v = 0;
+  document.querySelectorAll('#al-content .al-m[data-q]').forEach(el => { const ok = !n || el.dataset.q.includes(n.replace(/[.\-]/g, '')) || el.dataset.q.includes(n); el.style.display = ok ? '' : 'none'; if (ok) v++; });
+  const z = document.getElementById('al-mq-vz'); if (z) z.style.display = v ? 'none' : ''; }
+const _otChave = () => 'campo_obra_trab_' + (usuarioCampo?.id || usuarioCampo?.mat || 'x');
+function _otNome(id) { const o = (window._mobObras || dadosCampo.obras || []).find(x => x.id === id); return o ? (o.cod ? o.cod + ' · ' : '') + (o.nome || '') : ''; }
+function _otLabel() { const l = document.getElementById('home-obra-label'); if (!l || !usuarioCampo?.obraTodas) return;
+  l.innerHTML = usuarioCampo.obra ? _esc(_otNome(usuarioCampo.obra) || 'Obra escolhida') + ' <b style="opacity:.75">▾ trocar</b>' : '<b>Escolha a obra ▾</b>'; }
+async function otEscolher() {
+  if (!usuarioCampo?.obraTodas) return;
+  try { const l = await fbCarregar('obras'); if (l && l.length) window._mobObras = l; } catch (e) {}
+  const obras = (window._mobObras || dadosCampo.obras || []).filter(o => !/encerr/i.test(o.status || '')).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  let m = document.getElementById('ot-modal'); if (m) m.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div id="ot-modal" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div style="background:var(--card,#fff);color:var(--text);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:80vh;overflow:auto">
+      <div style="font-weight:800;font-size:17px;margin-bottom:4px">Em qual obra você está lançando?</div><div style="font-size:12.5px;color:var(--text3);margin-bottom:12px">Tudo o que você lançar no app vai para esta obra. Dá para trocar a qualquer momento aqui na tela inicial.</div>
+      ${obras.map(o => `<button type="button" onclick="otDefinir('${o.id}')" style="display:block;width:100%;text-align:left;border:1.5px solid ${o.id === usuarioCampo.obra ? '#E30613' : 'rgba(127,127,127,.25)'};background:${o.id === usuarioCampo.obra ? 'rgba(227,6,19,.07)' : 'transparent'};color:var(--text);border-radius:12px;padding:12px 14px;margin-bottom:8px;font-size:14.5px"><b>${_esc(o.nome || '')}</b>${o.cod ? `<span style="display:block;font-size:12px;color:var(--text3)">${_esc(o.cod)}${o.local ? ' · ' + _esc(o.local) : ''}</span>` : ''}</button>`).join('') || '<div style="color:var(--text3)">Nenhuma obra ativa.</div>'}
+    </div></div>`);
+}
+function otDefinir(id) {
+  const aberto = typeof apRascunhos === 'function' && apRascunhos().length;
+  if (aberto && usuarioCampo.obra && usuarioCampo.obra !== id && !confirm('Você tem turno em andamento na obra atual. Trocar de obra mesmo assim? (o turno aberto continua na obra dele)')) return;
+  usuarioCampo.obra = id; try { localStorage.setItem(_otChave(), id); localStorage.setItem('campo_usuario', JSON.stringify(usuarioCampo)); } catch (e) {}
+  document.getElementById('ot-modal')?.remove(); _otLabel(); toast('Lançando em: ' + _otNome(id), 'ok');
+  try { apAtualizarHome(); } catch (e) {}
+}
+(function () {
+  const oE = entrarNoCampo;
+  entrarNoCampo = function () {
+    if (usuarioCampo && (!usuarioCampo.obra || usuarioCampo.obraTodas)) { usuarioCampo.obraTodas = true; let o = ''; try { o = localStorage.getItem(_otChave()) || ''; } catch (e) {} usuarioCampo.obra = o; }
+    const r = oE.apply(this, arguments);
+    if (usuarioCampo?.obraTodas) {
+      const w = document.querySelector('.home-obra'); if (w && !w.dataset.ot) { w.dataset.ot = '1'; w.style.cursor = 'pointer'; w.addEventListener('click', otEscolher); }
+      fbCarregar('obras').then(l => { if (l && l.length) window._mobObras = l; _otLabel(); if (!usuarioCampo.obra) otEscolher(); }).catch(() => _otLabel());
+      setTimeout(_otLabel, 300);
+    }
+    return r; };
 })();
 </script>
 </body>
