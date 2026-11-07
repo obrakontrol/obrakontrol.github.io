@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.09 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.10 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17453,6 +17453,96 @@ function _alojCasas(at) {
     .ak-pc{font-size:12px;font-weight:700;margin-top:4px}
     @media (max-width:1100px){.dx-aloj3{grid-template-columns:1fr!important}}`;
   document.head.appendChild(css);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.10: RDO — os RDOs de cada turno (gerados no app ao encerrar o turno) ficam em Dia a dia → RDO.
+// Filtra por mês, frente e apontador; seleciona e baixa em PDF (um RDO por página) — ou o mês inteiro.
+// ═══════════════════════════════════════════════════════════════
+const _rdoN = v => (+v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+const _rdoBR = d => String(d || '').split('-').reverse().join('/');
+const _rdoHr = t => { const d = new Date(t); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+window._rdoSel = new Set();
+function _rdoLista() { const o = _okObraAtual(), $ = k => document.getElementById(k), mes = $('rdo-mes')?.value || '', fr = $('rdo-fr')?.value || '', ap = $('rdo-ap')?.value || '';
+  return (dados.rdos || []).filter(x => (o === 'todas' || x.obra === o) && (!mes || String(x.data).slice(0, 7) === mes) && (!fr || x.frente === fr) && (!ap || x.apontador === ap))
+    .sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(a.horaIni).localeCompare(String(b.horaIni))); }
+function renderRdos() {
+  const $ = k => document.getElementById(k), tb = $('tbody-rdo'); if (!tb) return;
+  const o = _okObraAtual(), todos = (dados.rdos || []).filter(x => o === 'todas' || x.obra === o);
+  const sm = $('rdo-mes'); if (sm && !sm.dataset.ok) { const ms = [...new Set(todos.map(x => String(x.data).slice(0, 7)))].sort().reverse(); sm.innerHTML = '<option value="">Todos os meses</option>' + ms.map(m => `<option value="${m}">${_mesTxt(m)}</option>`).join(''); sm.value = ms[0] || ''; sm.dataset.ok = '1'; }
+  const opt = (id, vals, t) => { const s = $(id), v = s?.value || ''; if (!s) return; s.innerHTML = `<option value="">${t}</option>` + vals.map(x => `<option value="${_e(x[0])}">${_e(x[1])}</option>`).join(''); s.value = vals.some(x => x[0] === v) ? v : ''; };
+  opt('rdo-fr', [...new Set(todos.map(x => x.frente).filter(Boolean))].sort().map(f => { const x = todos.find(y => y.frente === f); return [f, f + (x.frenteDesc ? ' · ' + x.frenteDesc : '')]; }), 'Todas as frentes');
+  opt('rdo-ap', [...new Set(todos.map(x => x.apontador).filter(Boolean))].sort().map(a => [a, a]), 'Todos os apontadores');
+  const l = _rdoLista(), ids = new Set(l.map(x => x.id)); window._rdoSel = new Set([...window._rdoSel].filter(i => ids.has(i)));
+  const ns = window._rdoSel.size, bs = $('rdo-bsel'); if (bs) { bs.disabled = !ns; bs.textContent = '⬇ PDF dos selecionados' + (ns ? ' (' + ns + ')' : ''); }
+  const bm = $('rdo-bmes'); if (bm) { bm.disabled = !l.length; bm.textContent = '⬇ PDF de todos da lista (' + l.length + ')'; }
+  const cm = $('rdo-cb-all'); if (cm) { cm.checked = !!l.length && ns === l.length; cm.indeterminate = ns > 0 && ns < l.length; }
+  const kp = $('rdo-kpis'); if (kp) { const k = (lb, v, sub) => `<div class="stat-card"><div class="stat-label">${lb}</div><div class="stat-value">${v}</div><div class="stat-sub">${sub}</div></div>`;
+    kp.innerHTML = k('RDOs', l.length, new Set(l.map(x => x.data)).size + ' dia(s)') + k('Frentes', new Set(l.map(x => x.frente)).size, 'com turno encerrado') + k('Apontadores', new Set(l.map(x => x.apontador)).size, 'que geraram RDO') + k('Fotos', l.reduce((s, x) => s + (x.fotos || []).length, 0), 'no relatório fotográfico'); }
+  tb.innerHTML = l.length ? l.map(x => `<tr><td><input type="checkbox" class="cb-row-check" ${window._rdoSel.has(x.id) ? 'checked' : ''} onchange="rdoMarcar('${x.id}',this.checked)"></td>
+      <td class="td-mono">${_rdoBR(x.data)}</td><td><b>${_e(x.frente || '')}</b>${x.frenteDesc ? `<div style="font-size:11px;color:var(--text-3)">${_e(x.frenteDesc)}</div>` : ''}</td><td>${_e(x.servico || '—')}</td>
+      <td class="td-mono" style="white-space:nowrap">${_e(x.horaIni || '')}–${_e(x.horaFim || '')}</td><td>${_e(x.apontador || '—')}</td><td style="text-align:right">${(x.mo || []).length}</td><td style="text-align:right">${(x.eq || []).length}</td>
+      <td style="text-align:right;white-space:nowrap">${x.qtd ? _rdoN(x.qtd) + ' ' + _e(x.unid || '') : x.prodStatus === 'andamento' ? 'em andamento' : '—'}</td><td style="text-align:right">${(x.fotos || []).length}</td>
+      <td style="white-space:nowrap">${x.climaM || x.climaT ? _e((x.climaM || '—') + ' / ' + (x.climaT || '—')) : '<span style="color:var(--text-3)">—</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="rdoBaixar(['${x.id}'])">PDF</button></td></tr>`).join('')
+    : `<tr><td colspan="12" class="empty-row">Nenhum RDO ${todos.length ? 'com esses filtros' : 'ainda. Eles chegam aqui quando o apontador encerra o turno no app de campo (versão 2.95 ou mais nova)'}.</td></tr>`;
+}
+function rdoMarcar(id, on) { if (on) window._rdoSel.add(id); else window._rdoSel.delete(id); renderRdos(); }
+function rdoMarcarTodos(on) { window._rdoSel = on ? new Set(_rdoLista().map(x => x.id)) : new Set(); renderRdos(); }
+function _rdoPagina(x, FT) {
+  const E = _e, o = (dados.obras || []).find(y => y.id === x.obra) || {}, lg = o.logo || '';
+  const tb = (cab, linhas) => `<table><thead><tr>${cab.map(c => `<th${/^(Qtd|Horas|Trab|Parado)/.test(c) ? ' class="n"' : ''}>${c}</th>`).join('')}</tr></thead><tbody>${linhas.join('') || `<tr><td colspan="${cab.length}" class="vz">—</td></tr>`}</tbody></table>`;
+  const porF = {}; (x.mo || []).forEach(p => { const f = p.funcao || 'Sem função'; porF[f] = (porF[f] || 0) + 1; });
+  return `<section class="pg"><div class="hd">${lg ? `<img src="${lg}" alt="">` : '<span></span>'}<div class="tt"><b>RELATÓRIO DIÁRIO DE OBRA</b>${E((o.nomeProjeto || o.nome || '').trim())}</div></div>
+    <div class="meta"><div><span>Data</span>${_rdoBR(x.data)}</div><div><span>Apontador / encarregado</span>${E(x.apontador || '')}</div><div><span>Tempo · manhã</span>${E(x.climaM || '—')}</div><div><span>Tempo · tarde</span>${E(x.climaT || '—')}</div></div>
+    <h3>Frente e serviço</h3>${tb(['Frente', 'Serviço', 'Horário', 'Pessoas', 'Produção'], [`<tr><td><b>${E(x.frente || '')}</b>${x.frenteDesc ? '<br>' + E(x.frenteDesc) : ''}</td><td>${E(x.servico || '—')}${x.obs ? '<br><i>' + E(x.obs) + '</i>' : ''}</td><td>${E(x.horaIni || '')}–${E(x.horaFim || '')}</td><td class="n">${(x.mo || []).length}</td><td class="n">${x.qtd ? _rdoN(x.qtd) + ' ' + E(x.unid || '') : x.prodStatus === 'andamento' ? 'em andamento' : '—'}</td></tr>`])}
+    <div class="two"><div><h3>Efetivo por função · ${(x.mo || []).length}</h3>${tb(['Função', 'Qtd.'], Object.entries(porF).sort((a, b) => b[1] - a[1]).map(([f, n]) => `<tr><td>${E(f)}</td><td class="n">${n}</td></tr>`))}</div>
+    <div><h3>Material aplicado</h3>${tb(['Descrição', 'Unid.', 'Qtd.'], (x.mat || []).map(m => `<tr><td>${E(m.desc)}</td><td>${E(m.unid)}</td><td class="n">${_rdoN(m.qtd)}</td></tr>`))}</div></div>
+    <h3>Equipamentos</h3>${tb(['Equipamento', 'Operador', 'Trab. (h)', 'Parado (h)', 'Motivo'], (x.eq || []).map(e => `<tr><td><b>${E(e.tag)}</b>${e.desc ? ' · ' + E(e.desc) : ''}</td><td>${E(e.operador || '')}</td><td class="n">${_rdoN(e.hp)}</td><td class="n">${_rdoN(e.hpar)}</td><td>${E(e.motivo || '')}</td></tr>`))}
+    <h3>Paradas</h3>${tb(['Início', 'Fim', 'Motivo', 'Quem', 'Horas'], (x.par || []).map(p => `<tr><td>${E(p.ini)}</td><td>${E(p.fim || '…')}</td><td>${E(p.motivo)}</td><td>${E(p.quem)}</td><td class="n">${_rdoN(p.horas)}</td></tr>`))}
+    ${FT.length ? `<h3>Relatório fotográfico · ${FT.length}</h3><div class="fts">${FT.map(f => `<figure><img src="${f.img}" alt=""><figcaption>${E(x.frente || '')} · ${E(x.servico || '')} · ${_rdoHr(f.em)}</figcaption></figure>`).join('')}</div>` : ''}
+    <h3>Ocorrências e observações</h3><div class="oc">${E(x.ocorr || '—')}</div>
+    <div class="ass"><div>${E(x.apontador || '')}<br>Apontador / encarregado</div><div>Engenharia / fiscalização</div></div>
+    <div class="ft">Gerado pelo ObraKontrol em ${new Date().toLocaleString('pt-BR')}</div></section>`;
+}
+async function rdoBaixar(ids) {
+  ids = ids || [...window._rdoSel]; const l = (dados.rdos || []).filter(x => ids.includes(x.id)).sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.horaIni).localeCompare(String(b.horaIni)));
+  if (!l.length) { toast('Selecione pelo menos um RDO.', 'error'); return; }
+  const w = window.open('', '_blank'); if (!w) { toast('Libere as janelas pop-up para gerar o PDF.', 'error'); return; }
+  w.document.write('<p style="font-family:Arial;padding:20px">Montando ' + l.length + ' RDO(s) e buscando as fotos…</p>');
+  const foto = async f => { try { if (db && _firebaseReady && f.id) { const d = await Promise.race([db.collection('fotos').doc(f.id).get(), new Promise(r => setTimeout(() => r(null), 8000))]); if (d && d.exists && d.data().img) return { ...f, img: d.data().img }; } } catch (e) {} return f.th ? { ...f, img: f.th } : null; };
+  const pags = []; for (const x of l) { const FT = (await Promise.all((x.fotos || []).map(foto))).filter(Boolean); pags.push(_rdoPagina(x, FT)); }
+  const nome = l.length === 1 ? 'RDO ' + _rdoBR(l[0].data) + ' ' + (l[0].frente || '') : 'RDOs ' + _rdoBR(l[0].data) + ' a ' + _rdoBR(l[l.length - 1].data);
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(nome)}</title><style>
+    @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:14px;font-size:12px}
+    .pg{break-after:page;page-break-after:always}.pg:last-child{break-after:auto;page-break-after:auto}
+    .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:8px}.hd img{height:46px;max-width:200px;object-fit:contain}
+    .tt{text-align:right}.tt b{font-size:18px;display:block}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.meta div{border:1px solid #ccc;border-radius:6px;padding:6px 8px}.meta span{display:block;font-size:9.5px;color:#666;text-transform:uppercase;letter-spacing:.05em}
+    h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;background:#111;color:#fff;padding:5px 8px;margin:14px 0 0;border-radius:4px 4px 0 0}
+    table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #999;padding:5px 6px;background:#f3f3f3}td{border-bottom:1px solid #ddd;padding:5px 6px;vertical-align:top}.n{text-align:right;white-space:nowrap}.vz{color:#888;text-align:center}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.oc{border:1px solid #ccc;border-top:0;padding:8px;min-height:40px;white-space:pre-wrap}
+    .ass{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px;font-size:11px}
+    .fts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #ccc;border-top:0;padding:8px}.fts figure{margin:0;break-inside:avoid}.fts img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;display:block}.fts figcaption{font-size:9.5px;color:#444;margin-top:3px}
+    .ft{margin-top:14px;font-size:9.5px;color:#888;text-align:right}@media print{.np{display:none}body{padding:0}}
+    .np{position:sticky;top:0;background:#111;color:#fff;padding:8px;text-align:center;margin:-14px -14px 12px;z-index:2}.np button{background:#E30613;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}.np span{margin-left:10px;font-size:12px;opacity:.8}</style></head><body>
+    <div class="np"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${l.length} RDO(s) · um por página · escolha "Salvar como PDF"</span></div>${pags.join('')}</body></html>`;
+  w.document.open(); w.document.write(html); w.document.close();
+}
+(function () {
+  const $ = id => document.getElementById(id), ref = $('page-apon-diesel') || $('page-perdas');
+  if (ref && !$('page-rdos')) ref.insertAdjacentHTML('afterend', `
+    <div class="page" id="page-rdos"><div class="page-header"><div><div class="page-title">RDO — Relatório diário de obra</div><div class="page-sub">Um RDO por turno, gerado no app de campo quando o apontador encerra o turno (com material, paradas e fotos).</div></div>
+      <div class="btn-group"><button class="btn btn-outline btn-sm" id="rdo-bmes" onclick="rdoBaixar(_rdoLista().map(x=>x.id))">⬇ PDF de todos da lista</button><button class="btn btn-primary btn-sm" id="rdo-bsel" onclick="rdoBaixar()" disabled>⬇ PDF dos selecionados</button></div></div>
+      <div id="rdo-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
+      <div class="card"><div class="card-body"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <select class="form-control" id="rdo-mes" onchange="renderRdos()" style="max-width:190px"></select><select class="form-control" id="rdo-fr" onchange="renderRdos()" style="max-width:260px"></select><select class="form-control" id="rdo-ap" onchange="renderRdos()" style="max-width:240px"></select></div>
+        <div class="table-wrap"><table><thead><tr><th style="width:36px"><input type="checkbox" class="cb-row-check" id="rdo-cb-all" onchange="rdoMarcarTodos(this.checked)" title="Selecionar todos"></th><th>Data</th><th>Frente</th><th>Serviço</th><th>Horário</th><th>Apontador</th><th style="text-align:right">Pessoas</th><th style="text-align:right">Equip.</th><th style="text-align:right">Produção</th><th style="text-align:right">Fotos</th><th>Tempo (manhã / tarde)</th><th></th></tr></thead><tbody id="tbody-rdo"></tbody></table></div></div></div></div>`);
+  const nav = document.querySelector(`.nav-item[onclick*="showPage('apon-diesel'"]`);
+  if (nav && !document.querySelector(`[onclick*="showPage('rdos'"]`)) nav.insertAdjacentHTML('afterend', `<div class="nav-item" onclick="showPage('rdos',this)" title="RDO"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>RDO</span></div>`);
+  try { OK_MOD_PAGINAS.maoDeObra.push('rdos'); } catch (e) {}
+  try { _COLS_AO_VIVO.push('rdos'); } catch (e) {}
+  dados.rdos = dados.rdos || [];
+  const oInit = window.pageInit; window.pageInit = function (id) { const r = oInit.apply(this, arguments); if (id === 'rdos') { renderRdos(); if (db && _firebaseReady) fbLoadAll('rdos').then(l => { if (l) { dados.rdos = l; const m = $('rdo-mes'); if (m) m.dataset.ok = ''; renderRdos(); } }).catch(() => {}); } return r; };
+  const oSel = window.selecionarObra; window.selecionarObra = function () { const r = oSel.apply(this, arguments); try { if ($('page-rdos')?.classList.contains('active')) { const m = $('rdo-mes'); if (m) m.dataset.ok = ''; renderRdos(); } } catch (e) {} return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);

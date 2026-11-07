@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.94</div>
+  <div class="login-versao">ObraKontrol Campo · v2.95</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6208,6 +6208,48 @@ function propNovoOk() {
 // v2.94: funcionário de FÉRIAS ou AFASTADO (no período) não aparece para apontamento nem nas listas de pessoas
 // ══════════════════════════════════════════════════════════════
 function _fnAus(f, d) { if (!f || !f.ausTipo) return ''; d = d || _hojeISO(); return (!f.ausIni || f.ausIni <= d) && (!f.ausFim || f.ausFim >= d) ? f.ausTipo : ''; }
+// ══════════════════════════════════════════════════════════════
+// v2.95: RDO POR TURNO — ao encerrar o turno abre o RDO daquele turno (frente, efetivo, equipamentos,
+// paradas, material e fotos) para completar o tempo e as ocorrências e gerar o PDF / mandar no WhatsApp.
+// O RDO vai para o servidor (coleção rdos) e o escritório baixa todos no painel (Dia a dia → RDO).
+// O card "RDO do dia" saiu da tela inicial.
+// ══════════════════════════════════════════════════════════════
+function _rdoTurnoX(uid) { try { return JSON.parse(localStorage.getItem('ok_rdo_x_' + uid) || '{}'); } catch (e) { return {}; } }
+function _rdoTurnoReg(d, uid) { return _rdoLer(d).find(x => x.uid === uid) || null; }
+let _rdoSrvT = null;
+function _rdoServidor(imediato) {
+  if (!rdo || !rdo.uid) return; const reg = _rdoTurnoReg(rdo.data, rdo.uid); if (!reg) return;
+  const go = () => { const doc = { ...reg, id: 'rdo_' + reg.uid, apontador: usuarioCampo?.nome || '', apontadorId: usuarioCampo?.id || '', apontadorMat: usuarioCampo?.mat || '',
+      climaM: rdo.climaM || '', climaT: rdo.climaT || '', ocorr: rdo.ocorr || '', atualizadoEm: new Date().toISOString() };
+    try { if (JSON.stringify(doc).length > 700000) doc.fotos = (doc.fotos || []).map(f => ({ id: f.id, em: f.em })); } catch (e) {}
+    fbSalvar('rdos', doc).catch(() => {}); };
+  clearTimeout(_rdoSrvT); if (imediato) go(); else _rdoSrvT = setTimeout(go, 1500);
+}
+function rdoAbrirTurno(d, uid) {
+  _rdoTela(); rdo = { data: d, uid, ..._rdoTurnoX(uid) }; showScreen('rdo'); rdoRender(); _rdoServidor(true);
+}
+(function () {
+  const c = document.getElementById('card-rdo'); if (c) c.remove();
+  // só o turno escolhido
+  const oD = _rdoDados; _rdoDados = function () { if (!rdo || !rdo.uid) return oD.apply(this, arguments);
+    const o = _rdoLer; _rdoLer = d => o(d).filter(x => x.uid === rdo.uid); try { return oD.apply(this, arguments); } finally { _rdoLer = o; } };
+  const oC = rdoCampo; rdoCampo = function (k, v) { if (!rdo || !rdo.uid) return oC.apply(this, arguments); rdo[k] = v;
+    try { localStorage.setItem('ok_rdo_x_' + rdo.uid, JSON.stringify({ climaM: rdo.climaM || '', climaT: rdo.climaT || '', ocorr: rdo.ocorr || '' })); } catch (e) {} _rdoServidor(); };
+  const oR = rdoRender; rdoRender = function () { const r = oR.apply(this, arguments);
+    if (rdo && rdo.uid) { const el = document.getElementById('rdo-content'), dt = el && el.querySelector('input[type=date]'); if (dt) dt.closest('.form-group').remove();
+      const t = document.querySelector('#screen-rdo .topbar-title'); if (t) t.textContent = 'RDO do turno';
+      if (el && !el.querySelector('.rdo-ok')) el.insertAdjacentHTML('afterbegin', '<div class="card rdo-ok" style="border-color:#16A34A"><div class="card-body" style="font-size:13px">✅ <b>Turno encerrado.</b> Complete o tempo e as ocorrências e gere o PDF ou mande no WhatsApp. O RDO também fica no painel do escritório.</div></div>'); }
+    return r; };
+  const oP = rdoPdf; rdoPdf = function () { _rdoServidor(true); return oP.apply(this, arguments); };
+  const oW = rdoWhats; rdoWhats = function () { _rdoServidor(true); return oW.apply(this, arguments); };
+  // ao encerrar o turno: abre o RDO dele
+  const oS = salvarApropriacao;
+  salvarApropriacao = async function () {
+    const uid = ap.uid, d = document.getElementById('ap-data')?.value || _hojeISO();
+    const r = await oS.apply(this, arguments);
+    try { if (uid && ap.uid !== uid && _rdoTurnoReg(d, uid)) setTimeout(() => rdoAbrirTurno(d, uid), 350); } catch (e) {}
+    return r; };
+})();
 </script>
 </body>
 </html>
