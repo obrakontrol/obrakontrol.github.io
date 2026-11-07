@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.90</div>
+  <div class="login-versao">ObraKontrol Campo · v2.91</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -4960,7 +4960,7 @@ function vlRender() {
       <div class="form-group"><label class="form-label">Placa *</label><input class="form-control" value="${E(vl.placa)}" oninput="vl.placa=this.value.toUpperCase()" placeholder="ABC1D23" style="text-transform:uppercase;font-size:22px;font-weight:800;text-align:center;letter-spacing:.08em"/></div>
       <div class="form-group"><label class="form-label">Marca / modelo *</label>${sel(mods.map(m => [m.id, (m.nome || m.cod) + (_vlPend(m) ? ' ⏳' : '')]).concat([['__novo', '+ Modelo novo (não está na lista)']]), vl.modeloId, 'Escolha o modelo…', "vlCampo('modeloId',this.value,1)")}
         ${vl.modeloId === '__novo' ? `<input class="form-control" style="margin-top:8px" placeholder="Ex.: Fiat Strada Freedom 1.3" value="${E(vl.modeloNovo)}" oninput="vl.modeloNovo=this.value"/><div style="font-size:11.5px;color:var(--text2);margin-top:4px">Fica ⏳ pendente até o master aprovar no painel.</div>` : ''}</div>
-      <div class="form-group"><label class="form-label">Tipo *</label><div class="mob-seg">${['Carro', 'Picape', 'Van', 'Moto'].map(t => `<button type="button" class="${vl.tipo === t ? 'on' : ''}" onclick="vlCampo('tipo','${t}',1)">${t}</button>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">Tipo *</label><div class="mob-seg">${['Carro', 'Picape', 'Van', 'Ônibus', 'Moto'].map(t => `<button type="button" class="${vl.tipo === t ? 'on' : ''}" onclick="vlCampo('tipo','${t}',1)">${t}</button>`).join('')}</div></div>
       <div class="form-group"><label class="form-label">Locadora *</label>${sel(emps.map(e => [e.cod, (e.nome || e.razao || e.cod)]), vl.loc, 'Escolha a locadora…', "vlCampo('loc',this.value,1)")}</div>
     </div></div>`;
   }

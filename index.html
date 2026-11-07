@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.92 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.93 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -1333,9 +1333,10 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
 
 <div class="page" id="page-frota">
   <div class="page-header">
-    <div><div class="page-title">Frota · veículos leves</div><div class="page-sub">Veículos alugados de cada obra, quem é o responsável e o que está vencendo</div></div>
+    <div><div class="page-title">Frota</div><div class="page-sub">Veículos leves, vans e ônibus de cada obra: quem é o responsável e o que está vencendo</div></div>
     <div class="btn-group"><button class="btn btn-outline btn-sm" onclick="exportarFrota()">↓ Exportar Excel</button><button class="btn btn-primary" onclick="frNovo()">+ Novo veículo</button></div>
   </div>
+  <div class="fr-tabs" id="fr-tabs" role="tablist" aria-label="Tipo de veículo"></div>
   <div class="stats-grid" id="fr-kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:.875rem"></div>
   <div class="card"><div class="card-body">
     <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
@@ -1459,7 +1460,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
       <div class="form-grid">
         <div class="form-group form-full" style="background:var(--blue-light);border:1px solid #B5D4F4;border-radius:8px;padding:10px 12px"><label class="form-label" style="font-weight:600;color:var(--blue)" for="fr-obra">🏗️ Obra *</label><select class="form-control" id="fr-obra"><option value="">Selecione a obra…</option></select></div>
         <div class="form-group"><label class="form-label" for="fr-placa">Placa *</label><input class="form-control td-mono" id="fr-placa" maxlength="8" placeholder="ABC1D23" style="text-transform:uppercase;font-weight:700" oninput="this.value=this.value.toUpperCase()"/></div>
-        <div class="form-group"><label class="form-label" for="fr-tipo">Tipo</label><select class="form-control" id="fr-tipo"><option>Carro</option><option>Picape</option><option>Van / utilitário</option><option>Moto</option><option>Outro</option></select></div>
+        <div class="form-group"><label class="form-label" for="fr-tipo">Tipo</label><select class="form-control" id="fr-tipo"><option>Carro</option><option>Picape</option><option>Van</option><option>Utilitário</option><option>Micro-ônibus</option><option>Ônibus</option><option>Moto</option><option>Outro</option></select></div>
         <div class="form-group form-full"><label class="form-label" for="fr-modelo-sel">Marca / modelo * <span style="font-size:10px;color:var(--text-3);text-transform:none;letter-spacing:0">(do cadastro de Modelos)</span></label><select class="form-control" id="fr-modelo-sel"><option value="">Escolha…</option></select><input type="hidden" id="fr-modelo"/>
           <div id="fr-modelo-nota" style="font-size:11.5px;color:var(--text-3);margin-top:4px">Não achou? Cadastre em <b>Equipamentos → Modelos</b> e volte aqui.</div></div>
         <div class="form-group"><label class="form-label" for="fr-ano">Ano</label><input class="form-control" id="fr-ano" maxlength="9" placeholder="Ex.: 2025/2026"/></div>
@@ -13497,7 +13498,7 @@ async function uaExcluirManuais() {
     const m = (dados.modelos || []).find(x => (!x.obra || x.obra === it.obra) && (N(x.nome) === N(it.modelo) || N(x.cod) === N(it.modelo)));
     if (!m) return 'veículo ' + it.placa + ': modelo "' + it.modelo + '" não cadastrado (cadastre em Equipamentos → Modelos)';
     it.modelo = m.nome || m.cod; it.codModelo = m.cod || ''; it.modeloId = m.id; it.familia = m.familia || '';
-    const tp = String(it.tipo || ''); it.tipo = /pic/i.test(tp) ? 'Picape' : /van|util/i.test(tp) ? 'Van / utilitário' : /moto/i.test(tp) ? 'Moto' : /carro/i.test(tp) || !tp ? 'Carro' : 'Outro';
+    const tp = String(it.tipo || ''); it.tipo = /pic/i.test(tp) ? 'Picape' : /micro/i.test(tp) ? 'Micro-ônibus' : /[oô]nibus/i.test(tp) ? 'Ônibus' : /van/i.test(tp) ? 'Van' : /util/i.test(tp) ? 'Utilitário' : /moto/i.test(tp) ? 'Moto' : /carro/i.test(tp) || !tp ? 'Carro' : 'Outro';
     it.status = 'Em uso'; it.resp = []; it.criadoEm = new Date().toISOString(); if (!it.mobData) it.mobData = _hojeLocal();
     if (it._resp) { const f = (dados.funcionarios || []).find(x => String(x.mat) === it._resp && (!x.obra || x.obra === it.obra));
       if (!f) it.__aviso = 'veículo ' + it.placa + ': matrícula ' + it._resp + ' não encontrada — importado sem responsável';
@@ -16998,6 +16999,35 @@ function _mobMedP(m) { return m.medidor || ((dados.equipamentos || []).find(e =>
     if (typeof centro === 'string' && /R\$/.test(centro) && /\d,\d{1,2}\s*$/.test(centro))
       a[1] = centro.replace(/(\d{1,3}(?:\.\d{3})*|\d+),(\d{1,2})\s*$/, (m, i, d) => Math.round(parseFloat(i.replace(/\./g, '') + '.' + d)).toLocaleString('pt-BR'));
     return oD.apply(this, a); }; })();
+// ═══════════════════════════════════════════════════════════════
+// v3.93: FROTA em abas — Veículos leves · Vans · Ônibus (e Todos)
+// ═══════════════════════════════════════════════════════════════
+const _FR_CATS = [['leve', 'Veículos leves'], ['van', 'Vans'], ['onibus', 'Ônibus'], ['todos', 'Todos']];
+let _frCat = (() => { try { return localStorage.getItem('ok_fr_cat') || 'leve'; } catch (e) { return 'leve'; } })();
+function _frCatDe(v) {
+  const t = String(v.tipo || ''), m = String(v.modelo || '');
+  if (/[oô]nibus|micro/i.test(t) || /[oô]nibus|micro-?[oô]nibus|marcopolo|volare|busscar|caio|comil|neobus/i.test(m)) return 'onibus';
+  if (/van/i.test(t) || /\b(master|ducato|sprinter|daily|boxer|jumper|trafic|kombi|h100|hr van|van)\b/i.test(m)) return 'van';
+  return 'leve';
+}
+function frCatSel(c) { _frCat = c; try { localStorage.setItem('ok_fr_cat', c); } catch (e) {} renderFrota(); }
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `.fr-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 .875rem}
+    .fr-tab{border:1px solid var(--border);background:var(--surface);color:var(--text-2);border-radius:999px;padding:7px 14px;font:600 13px var(--font, inherit);cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+    .fr-tab b{font-family:var(--mono);font-size:11.5px;background:var(--bg);border-radius:999px;padding:1px 8px;color:var(--text-3)}
+    .fr-tab[aria-selected="true"]{background:var(--red);border-color:var(--red);color:#fff}.fr-tab[aria-selected="true"] b{background:rgba(255,255,255,.22);color:#fff}`;
+  document.head.appendChild(css);
+  const oR = renderFrota;
+  renderFrota = window.renderFrota = function () {
+    const base = _frLista, naObra = base().filter(v => v.status !== 'Devolvido'), n = c => c === 'todos' ? naObra.length : naObra.filter(v => _frCatDe(v) === c).length;
+    const tb = document.getElementById('fr-tabs');
+    if (tb) tb.innerHTML = _FR_CATS.map(([c, t]) => `<button type="button" class="fr-tab" role="tab" aria-selected="${_frCat === c}" onclick="frCatSel('${c}')">${t}<b>${n(c)}</b></button>`).join('');
+    if (_frCat === 'todos') return oR.apply(this, arguments);
+    _frLista = function () { return base().filter(v => _frCatDe(v) === _frCat); };
+    try { return oR.apply(this, arguments); } finally { _frLista = base; }
+  };
+})();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
