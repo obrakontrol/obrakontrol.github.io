@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.07 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.08 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -14517,7 +14517,7 @@ function dxRenderAloj() {
   if (!custo) {
     const porFn = {}, porTc = { Direto: 0, Indireto: 0, 'Fora do efetivo': 0 }; at.forEach(r => repMoradores(r).forEach(m => { const f = (dados.funcionarios || []).find(x => x.id === m.func); const fn = (f && _fnFuncaoNome(f)) || m.funcao || 'Sem função'; porFn[fn] = (porFn[fn] || 0) + 1;
       porTc[!f ? 'Fora do efetivo' : f.direto === 'Não' ? 'Indireto' : 'Direto']++; }));
-    const fnOrd = Object.entries(porFn).sort((a, b) => b[1] - a[1]), fnTop = fnOrd.slice(0, 10), fnResto = fnOrd.slice(10);
+    const fnOrd = Object.entries(porFn).sort((a, b) => b[1] - a[1]), fnTop = fnOrd.slice(0, 15), fnResto = fnOrd.slice(15);
     const mov = {}; todas.forEach(r => (r.moradores || []).forEach(m => { if (m.entrada && _dataOk(m.entrada)) { const k = m.entrada.slice(0, 7); mov[k] = mov[k] || { e: 0, s: 0 }; mov[k].e++; } if (m.saida && _dataOk(m.saida)) { const k = m.saida.slice(0, 7); mov[k] = mov[k] || { e: 0, s: 0 }; mov[k].s++; } }));
     const meses = Object.keys(mov).sort().slice(-12);
     const venc = at.map(r => ({ data: r.fim, t: r.nome + ' · fim do contrato', sub: (r.responsavel ? 'Proprietário: ' + r.responsavel : r.cod) }));
@@ -14526,14 +14526,10 @@ function dxRenderAloj() {
         ${_kpi(_ic.users, ocup, 'Pessoas alojadas', 'moradores hoje')}
         ${_kpi(_ic.target, pct(ocup, vagas), 'Ocupação', ocup + ' de ' + vagas + ' vagas', vagas && ocup > vagas ? '#E30613' : vagas && ocup / vagas >= .85 ? '#22C55E' : '#F59E0B')}
         ${_kpi(_ic.box, livres, 'Vagas livres', livres ? 'disponíveis para alojar' : 'tudo ocupado', livres ? '#F59E0B' : '')}</div>
-      ${_alojEfetivo(at)}
+      ${_alojEfetivo(at, _pn(_ic.pie || _ic.users, 'Alojados · custo direto × indireto', _donut(Object.entries(porTc).filter(([, v]) => v).map(([l, v]) => ({ l, v })), String(ocup), 'alojados', v => v + ' pessoa(s)'), 'pelo cadastro do funcionário'))}
       <div class="dx-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:12px">
-        ${_pn(_ic_casa, 'Ocupação por república', `<div class="dx-leg" style="margin-bottom:8px"><span><i style="background:#16A34A"></i>até metade</span><span><i style="background:#F59E0B"></i>mais da metade</span><span><i style="background:#DC2626"></i>lotada</span><span style="opacity:.7">cada barra = 100% das vagas daquela casa</span></div>`
-          + (() => { const rs = at.map(r => { const o = repMoradores(r).length, v = +r.vagas || 0; return { l: r.nome, o, v, p: v ? o / v : 0 }; }).sort((a, b) => b.p - a.p || b.v - a.v); if (!rs.length) return '<div class="dx-vazio">Sem dados</div>';
-              return `<div class="dx-hb">${rs.map(r => `<div class="l" title="${_e(r.l)}">${_e(r.l)}</div><div class="t"><i style="width:${Math.min(100, r.p * 100)}%;background:${_ocupCor(r.o, r.v)}"></i></div><div class="v">${r.o} de ${r.v} · ${Math.round(r.p * 100)}%</div>`).join('')}</div>`; })())}
-        <div style="display:grid;gap:12px;align-content:start">
-          ${_pn(_ic.pie || _ic.users, 'Alojados · custo direto × indireto', _donut(Object.entries(porTc).filter(([, v]) => v).map(([l, v]) => ({ l, v })), String(ocup), 'alojados', v => v + ' pessoa(s)'), 'pelo cadastro do funcionário')}
-          ${_pn(_ic.users, 'Top 10 funções alojadas', _hbars(fnTop.map(([l, v]) => ({ l, v, t: v + '' }))) + (fnResto.length ? `<div style="font-size:11.5px;color:var(--mu);margin-top:8px">+ ${fnResto.length} outra(s) função(ões) com ${fnResto.reduce((s, x) => s + x[1], 0)} pessoa(s)</div>` : ''))}</div></div>
+        ${_pn(_ic_casa, 'Ocupação por república', `<div class="dx-leg" style="margin-bottom:10px"><span><i style="background:#16A34A"></i>até metade</span><span><i style="background:#F59E0B"></i>mais da metade</span><span><i style="background:#DC2626"></i>lotada</span></div>` + _alojCasas(at))}
+        ${_pn(_ic.users, 'Top 15 funções alojadas', _hbars(fnTop.map(([l, v]) => ({ l, v, t: v + '' }))) + (fnResto.length ? `<div style="font-size:11.5px;color:var(--mu);margin-top:8px">+ ${fnResto.length} outra(s) função(ões) com ${fnResto.reduce((s, x) => s + x[1], 0)} pessoa(s)</div>` : ''))}</div>
       ${_alojVencFaixa(venc)}
       <div class="dx-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
         ${_pn(_ic.alert || _ic.users, 'Desligados ainda alojados', _alojDeslig(at), 'demitidos sem "Dar saída"')}
@@ -16232,16 +16228,16 @@ function _medKm(tagOuEq) { const e = typeof tagOuEq === 'object' ? tagOuEq : (da
   try { const D = IMPORT_DEF.equipamentos; if (D && !D.col.some(c => /medidor/i.test(c))) { D.col = D.col.concat(['Medidor (Horímetro/Hodômetro)']); const m = D.map; D.map = g => { const x = m(g), v = String(g(['medidor']) || ''); if (v) x.medidor = /hod|km/i.test(v) ? 'hodometro' : 'horimetro'; return x; }; } } catch (e) {}
 })();
 // v3.68: % do efetivo mobilizado que está alojado (rosca) + por tipo de custo e vínculo
-function _alojEfetivo(at) {
+function _alojEfetivo(at, extra) {
   const hj = _hojeLocal(), ef = (dados.funcionarios || []).filter(f => (!_dx.obra || f.obra === _dx.obra) && f.status !== 'Desligado' && (!f.demissao || f.demissao > hj) && !(typeof _fnAus === 'function' && _fnAus(f, hj)));
   const ids = new Set(); at.forEach(r => repMoradores(r).forEach(m => { if (m.func) ids.add(m.func); }));
   const al = ef.filter(f => ids.has(f.id)), n = ef.length, a = al.length, p = n ? Math.round(a / n * 100) : 0;
-  if (!n) return '';
+  if (!n) return extra ? `<div class="dx-grid" style="grid-template-columns:1fr;margin-bottom:12px">${extra}</div>` : '';
   const grupo = (nome, fn) => { const t = ef.filter(fn), x = t.filter(f => ids.has(f.id)).length; return t.length ? { l: nome, v: t.length ? x / t.length * 100 : 0, t: `${x} de ${t.length} · ${Math.round(x / t.length * 100)}%` } : null; };
   const barras = [grupo('Diretos', f => f.direto !== 'Não'), grupo('Indiretos', f => f.direto === 'Não'), grupo('CLT', f => f.vinculo !== 'PJ'), grupo('PJ', f => f.vinculo === 'PJ')].filter(Boolean);
-  return `<div class="dx-grid" style="grid-template-columns:1fr 1.3fr;margin-bottom:12px">
+  return `<div class="dx-grid dx-aloj3" style="grid-template-columns:1fr 1.15fr 1fr;margin-bottom:12px">
     ${_pn(_ic.pie || _ic.users, 'Efetivo alojado', _donut([{ l: 'Alojados', v: a }, { l: 'Não alojados', v: n - a }], p + '%', 'do efetivo', v => v + ' pessoa(s)'), a + ' de ' + n + ' mobilizados')}
-    ${_pn(_ic.users, 'Quanto de cada grupo está alojado', `<div class="dx-hb">${barras.map(r => `<div class="l">${_e(r.l)}</div><div class="t"><i style="width:${Math.min(100, r.v)}%;background:var(--rd)"></i></div><div class="v">${r.t}</div>`).join('')}</div>` + '<div style="font-size:11.5px;color:var(--mu);margin-top:8px">Efetivo mobilizado = funcionários ativos da obra (sem demissão). Quem mora numa república mas não está no efetivo não entra nesta conta.</div>', '% sobre o efetivo de cada grupo')}</div>`;
+    ${_pn(_ic.users, 'Quanto de cada grupo está alojado', `<div class="dx-hb">${barras.map(r => `<div class="l">${_e(r.l)}</div><div class="t"><i style="width:${Math.min(100, r.v)}%;background:var(--rd)"></i></div><div class="v">${r.t}</div>`).join('')}</div>` + '<div style="font-size:11.5px;color:var(--mu);margin-top:8px">Efetivo mobilizado = funcionários ativos da obra (sem demissão). Quem mora numa república mas não está no efetivo não entra nesta conta.</div>', '% sobre o efetivo de cada grupo')}${extra || ''}</div>`;
 }
 // v3.69: hora mínima mensal na cobrança por hora — proporcional aos dias mobilizados no mês
 function _locMinimo(e, mes) {
@@ -17430,6 +17426,33 @@ function _fnCards() {
   const D = IMPORT_DEF.funcionarios; if (D) { D.col = D.col.concat(['Situação (Ativo/Férias/Afastado)', 'Retorno previsto (DD/MM/AAAA)']); const m = D.map;
     D.map = g => { const x = m(g), s = String(g(['situação', 'situacao']) || ''); const t = /f[eé]rias/i.test(s) ? 'Férias' : /afast/i.test(s) ? 'Afastado' : '';
       if (t && !x.demissao) { x.ausTipo = t; x.ausIni = _hojeLocal(); x.ausFim = excelDataParaISO(g(['retorno'])) || ''; } return x; }; }
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.08: DASH DE ALOJADOS — ocupação por república em "casinhas" (cor pela ocupação) e 1ª linha com 3 painéis
+// ═══════════════════════════════════════════════════════════════
+function _alojCasas(at) {
+  const rs = at.map(r => { const o = repMoradores(r).length, v = +r.vagas || 0; return { l: r.nome, o, v, p: v ? o / v : 0 }; }).sort((a, b) => b.p - a.p || b.v - a.v);
+  if (!rs.length) return '<div class="dx-vazio">Sem dados</div>';
+  const cama = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>';
+  return `<div class="ak-grid">${rs.map(r => { const c = _ocupCor(r.o, r.v), pc = Math.round(r.p * 100);
+    return `<div class="ak" style="--c:${c}" title="${_e(r.l)} · ${r.o} de ${r.v} vagas"><svg class="ak-teto" viewBox="0 0 100 34" preserveAspectRatio="none"><path d="M3 33 L50 3 L97 33 Z" fill="${c}" fill-opacity=".13" stroke="${c}" stroke-width="4.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
+      <div class="ak-corpo"><div class="ak-jan"><i></i><i></i><i></i><i></i></div><div class="ak-nome">${_e(r.l)}</div><div class="ak-qt">${cama}<span>${r.o} / ${r.v}</span></div>
+      <div class="ak-bar"><i style="width:${Math.min(100, pc)}%"></i></div><div class="ak-pc">${pc}%</div></div></div>`; }).join('')}</div>`;
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `.ak-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:14px 12px}
+    .ak{position:relative;padding-top:30px;min-width:0}
+    .ak-teto{position:absolute;top:0;left:0;width:100%;height:32px;overflow:visible}
+    .ak-teto path{stroke-width:4.5px}
+    .ak-corpo{border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-top:0;border-radius:0 0 10px 10px;background:color-mix(in srgb,var(--c) 13%,transparent);padding:2px 10px 9px;text-align:center;margin:0 6px}
+    .ak-jan{display:grid;grid-template-columns:6px 6px;gap:2px;justify-content:center;margin:0 auto 5px}.ak-jan i{width:6px;height:6px;background:var(--c);border-radius:1px}
+    .ak-nome{font-weight:800;font-size:12.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ak-qt{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;margin:4px 0 6px;font-variant-numeric:tabular-nums;opacity:.92}
+    .ak-bar{height:7px;border-radius:9px;background:color-mix(in srgb,currentColor 14%,transparent);overflow:hidden}.ak-bar i{display:block;height:100%;background:var(--c);border-radius:9px}
+    .ak-pc{font-size:12px;font-weight:700;margin-top:4px}
+    @media (max-width:1100px){.dx-aloj3{grid-template-columns:1fr!important}}`;
+  document.head.appendChild(css);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
