@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.98 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.99 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -14325,7 +14325,7 @@ function dxRenderEQ2() {
       <div class="dx-grid" style="grid-template-columns:1.25fr 1fr;margin-bottom:12px">
         ${_pn(_ic.chart, 'Horas por equipamento (TAG)', _hstack(Object.entries(byTag).sort((a, b) => (b[1].a + b[1].b) - (a[1].a + a[1].b)).map(([l, x]) => ({ l, ...x })), ['var(--gr)', '#E30613'], r => _n1(r.a) + ' h' + (r.b ? ' · <span style="color:#FF3B45">' + _n1(r.b) + ' h</span>' : '')), leg)}
         ${_pn(_ic.timer, 'Horas paradas por motivo', _hbars(Object.entries(byMot).sort((a, b) => b[1] - a[1]).map(([l, v]) => ({ l, v, t: _h(v) })), '#E30613'))}</div>
-      ${_pn(_ic.check, 'Status por equipamento', equipsObra.length ? `<div class="dx-st">${equipsObra.slice(0, 40).map(e => { const [bg, c] = stCor(e.status); return `<div>${_ic.truck}${_e(e.tag || e.placa)}<br><span class="dx-badge" style="background:${bg};color:${c}">${_e(e.status || '—')}</span></div>`; }).join('')}</div>` : '<div class="dx-vazio">Nenhum equipamento</div>', '', 'margin-bottom:12px')}
+      ${_pn(_ic.check, 'Equipamentos por família', equipsObra.length ? _famGrid(equipsObra) : '<div class="dx-vazio">Nenhum equipamento</div>', '', 'margin-bottom:12px')}
       ${_pn(_ic.chart, 'Produção por frente e serviço – equipamentos', `<div class="dx-scroll">${_tb(['Mês', 'Frente', 'Serviço', 'Executado', 'H. produtivas', 'H. paradas', 'Produtividade', 'Equip.'], linhas, ['', '', '', 'n', 'n', 'n', 'n', 'n'])}</div>`)}`;
   } else {
     const { g: gTag } = _custoAgrupar([], eq, a => tagDe(a)), tags = Object.values(gTag).sort((a, b) => cEQ(b) - cEQ(a));
@@ -17225,6 +17225,48 @@ function _eqCards() {
   const css = document.createElement('style'); css.textContent = 'tr.eq-esc{display:none!important}'; document.head.appendChild(css);
   const oR = window.renderEquipamentos || renderEquipamentos;
   renderEquipamentos = window.renderEquipamentos = function () { const r = oR.apply(this, arguments); try { _eqCards(); } catch (e) {} return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v3.99: DASHBOARD EQUIPAMENTOS — "Equipamentos por família" com a foto da família
+//        e quantos estão mobilizados / em manutenção / desmobilizados (abre a lista de TAGs)
+// ═══════════════════════════════════════════════════════════════
+const _FAM_IMG = ['CA', 'CB', 'CC', 'CCP', 'CCS', 'CH', 'CLA', 'CM', 'CP', 'CR', 'EH', 'GER', 'ME', 'PER', 'RET', 'TS', 'VL'];
+function _famImg(cod, desc) {
+  const c = String(cod || '').toUpperCase(); if (_FAM_IMG.includes(c)) return 'img/fam/' + c + '.webp';
+  const t = String(desc || cod || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const m = [[/compressor/, 'CA'], [/comboio/, 'CC'], [/cabine suplementar/, 'CCS'], [/hidrov|vacuo/, 'CH'], [/clam/, 'CLA'], [/munck|guindauto/, 'CM'], [/pipa/, 'CP'],
+    [/carroceria|plataforma/, 'CCP'], [/basculante|cacamba/, 'CB'], [/carregadeira/, 'CR'], [/mini/, 'ME'], [/retro/, 'RET'], [/escavadeira/, 'EH'], [/gerador/, 'GER'],
+    [/perfuratriz/, 'PER'], [/tunel|shield/, 'TS'], [/veiculo leve|veiculo de apoio|picape|pick.?up|carro|caminhonete/, 'VL']].find(([re]) => re.test(t));
+  return m ? 'img/fam/' + m[1] + '.webp' : '';
+}
+function _famGrid(eqs) {
+  const st = e => { const s = (typeof _stEq === 'function' && _stEq(e.status)) || e.status || 'Mobilizado'; return /desmob/i.test(s) ? 'des' : /manut/i.test(s) ? 'man' : 'mob'; };
+  const g = {}; eqs.forEach(e => { const k = e.familia || e.codFamilia || '—'; (g[k] = g[k] || []).push(e); });
+  const fam = k => (dados.familias || []).find(f => f.cod === k && _mmBanco(f)) || (dados.familias || []).find(f => f.cod === k) || { cod: k, desc: k };
+  const linhas = Object.entries(g).map(([k, l]) => ({ k, f: fam(k), l, mob: l.filter(e => st(e) === 'mob').length, man: l.filter(e => st(e) === 'man').length, des: l.filter(e => st(e) === 'des').length }))
+    .sort((a, b) => b.mob - a.mob || b.l.length - a.l.length);
+  const tot = { mob: linhas.reduce((s, x) => s + x.mob, 0), man: linhas.reduce((s, x) => s + x.man, 0), des: linhas.reduce((s, x) => s + x.des, 0) };
+  return `<div class="fg-res"><span><b style="color:#22C55E">${tot.mob}</b> mobilizados</span>${tot.man ? `<span><b style="color:#F59E0B">${tot.man}</b> em manutenção</span>` : ''}<span><b style="color:#9CA3AF">${tot.des}</b> desmobilizados</span><span>${linhas.length} famílias</span></div>
+    <div class="fg-grid">${linhas.map(x => { const img = _famImg(x.f.cod, x.f.desc); return `<details class="fg-card"><summary>
+      <div class="fg-img">${img ? `<img src="${img}" alt="${_e(x.f.desc || x.k)}" loading="lazy" onerror="this.remove()">` : _ic.truck}</div>
+      <div class="fg-cod">${_e(x.f.cod || x.k)}</div><div class="fg-nome">${_e(x.f.desc || '')}</div>
+      <div class="fg-n"><div><b style="color:#22C55E">${x.mob}</b><span>mobiliz.</span></div>${x.man ? `<div><b style="color:#F59E0B">${x.man}</b><span>manut.</span></div>` : ''}<div><b style="color:#9CA3AF">${x.des}</b><span>desmob.</span></div></div></summary>
+      <div class="fg-tags">${x.l.slice().sort((a, b) => String(a.tag).localeCompare(String(b.tag), 'pt-BR', { numeric: true })).map(e => `<span class="fg-t ${st(e)}">${_e(e.tag || e.placa || '—')}</span>`).join('')}</div></details>`; }).join('')}</div>`;
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `.fg-res{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;opacity:.9;margin:-2px 0 12px}.fg-res b{font-size:15px;margin-right:3px}
+    .fg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;align-items:start}
+    .fg-card{border:1px solid rgba(128,128,128,.28);border-radius:14px;overflow:hidden;background:rgba(128,128,128,.06)}
+    .fg-card summary{list-style:none;cursor:pointer;padding:0 0 10px;text-align:center}.fg-card summary::-webkit-details-marker{display:none}
+    .fg-img{height:104px;background:#121214;display:flex;align-items:center;justify-content:center;border-bottom:2px solid #E30613;color:#9CA3AF}
+    .fg-img img{max-width:100%;max-height:100%;object-fit:contain;display:block}.fg-img svg{width:44px;height:44px;opacity:.6}
+    .fg-cod{font-weight:900;font-size:17px;margin-top:8px;letter-spacing:.02em}.fg-nome{font-size:11px;text-transform:uppercase;opacity:.75;padding:0 8px;min-height:2.6em;line-height:1.3}
+    .fg-n{display:flex;justify-content:center;gap:10px;margin-top:6px;padding:0 6px}.fg-n div{display:flex;flex-direction:column;align-items:center}.fg-n b{font-size:20px;line-height:1.1}.fg-n span{font-size:9.5px;opacity:.7;text-transform:uppercase;letter-spacing:.03em}
+    .fg-tags{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px 12px;border-top:1px solid rgba(128,128,128,.2)}
+    .fg-t{font:600 10.5px var(--mono,monospace);padding:2px 6px;border-radius:6px;background:rgba(34,197,94,.15);color:#22C55E}.fg-t.des{background:rgba(156,163,175,.15);color:#9CA3AF}.fg-t.man{background:rgba(245,158,11,.15);color:#F59E0B}
+    .fg-card[open]{grid-column:span 2}`;
+  document.head.appendChild(css);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
