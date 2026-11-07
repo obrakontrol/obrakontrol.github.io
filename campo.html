@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v2.97</div>
+  <div class="login-versao">ObraKontrol Campo · v2.98</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6294,8 +6294,8 @@ function _alTela() {
     .al-k .j{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:7px 7px;gap:2px}.al-k .j i{width:7px;height:7px;background:var(--c);border-radius:1.5px}
     .al-k .n{font-weight:800;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.al-k .q{font-size:13px;margin:3px 0 6px}.al-k .b{height:7px;border-radius:9px;background:rgba(127,127,127,.25);overflow:hidden}.al-k .b i{display:block;height:100%;background:var(--c)}.al-k .p{font-size:12px;font-weight:700;margin-top:4px}.al-k .l{font-size:11px;color:var(--text3);margin-top:2px}
     .al-sec{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text3);margin:4px 0 8px}
-    .al-m{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)}.al-m:last-child{border-bottom:0}.al-m .x{flex:1;min-width:0}.al-m .x b{display:block;font-size:14px}.al-m .x span{font-size:11.5px;color:var(--text3)}
-    .al-busca{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:10px;margin-top:6px}.al-busca button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--border);padding:9px 12px;color:var(--text);font-size:13.5px}.al-busca button span{display:block;font-size:11.5px;color:var(--text3)}
+    .al-m{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)}.al-m:last-child{border-bottom:0}.al-m .x{flex:1 1 100%;min-width:0}.al-m .x b{display:block;font-size:14px}.al-m .x span{font-size:11.5px;color:var(--text3)}
+    .al-busca{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:10px;margin-top:6px}.al-busca>button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--border);padding:9px 12px;color:var(--text);font-size:13.5px}.al-busca>button span{display:block;font-size:11.5px;color:var(--text3)}
     .al-ck{padding:9px 0;border-bottom:1px solid var(--border)}.al-ck .t{font-size:13.5px;font-weight:700;margin-bottom:6px}.al-op{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.al-op button{border:1px solid var(--border);background:transparent;color:var(--text);border-radius:9px;padding:7px 4px;font-size:12.5px;font-weight:700}
     .al-op button.on.ok{background:#16A34A;border-color:#16A34A;color:#fff}.al-op button.on.pb{background:#DC2626;border-color:#DC2626;color:#fff}.al-op button.on.na{background:#6B7280;border-color:#6B7280;color:#fff}
     .al-ft{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}.al-ft div{position:relative}.al-ft img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}.al-ft button{position:absolute;top:2px;right:2px;border:0;border-radius:50%;width:22px;height:22px;background:rgba(0,0,0,.65);color:#fff;font-size:14px;line-height:1}
@@ -6398,6 +6398,53 @@ async function alVisSalvar() {
   _al.vis = null; alRender(); toast('Vistoria de ' + r.nome + ' salva' + (pb ? ' · ' + pb + ' problema(s)' : ' · tudo OK') + (isOnline ? '' : ' — offline, sincroniza depois'), 'ok');
 }
 (function () { const c = document.getElementById('card-aloj'); if (c) { const s = c.querySelector('.hcard-s'); if (s) s.textContent = 'Moradores e vistoria'; } })();
+// ══════════════════════════════════════════════════════════════
+// v2.98: ALOJAMENTOS — morador que ainda não está no efetivo: entra com nome e CPF (provisório)
+// e é vinculado sozinho ao funcionário quando o efetivo for atualizado (pelo CPF).
+// ══════════════════════════════════════════════════════════════
+function _alVincular() {   // no app também: se o funcionário já chegou no efetivo, liga pelo CPF
+  const fs = dadosCampo.funcionarios || []; let mud = [];
+  _al.reps.forEach(r => { let m1 = false; (r.moradores || []).forEach(m => { if (!m.provisorio || m.func) return; const d = _cpfDig(m.cpf); if (d.length !== 11) return;
+    const f = fs.find(x => _cpfDig(x.cpf) === d && (!r.obra || !x.obra || x.obra === r.obra)); if (!f) return;
+    Object.assign(m, { func: f.id, mat: f.mat || '', nome: f.nome || m.nome, funcao: f.funcao || f.codFuncao || '', provisorio: false, vinculadoEm: new Date().toISOString() }); m1 = true; }); if (m1) mud.push(r); });
+  mud.forEach(r => _alGravar(r));
+}
+function alProvAbrir() {
+  const l = document.getElementById('al-ent-l'), q = document.getElementById('al-ent-q')?.value || ''; if (!l) return;
+  const dig = _cpfDig(q).length >= 11;
+  l.innerHTML = `<div style="padding:10px 12px"><div class="al-sec" style="margin-bottom:6px">Ainda não está no efetivo</div>
+    <input class="form-control" id="al-pv-nome" placeholder="Nome completo *" value="${dig ? '' : _alE(q)}" style="margin-bottom:8px"/>
+    <input class="form-control" id="al-pv-cpf" inputmode="numeric" placeholder="CPF *" value="${dig ? _alE(_cpfFmt(q)) : ''}" oninput="this.value=_cpfFmt(this.value)" style="margin-bottom:8px"/>
+    <div class="al-vz" style="margin-bottom:8px">Fica como <b>provisório</b>. Quando o RH atualizar o efetivo, o sistema liga pelo CPF sozinho.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn btn-outline btn-sm" onclick="alBusca(document.getElementById('al-ent-q').value)">Voltar</button><button type="button" class="btn btn-green btn-sm" onclick="alProvOk()">Dar entrada</button></div></div>`;
+  setTimeout(() => document.getElementById(dig ? 'al-pv-nome' : 'al-pv-cpf')?.focus(), 50);
+}
+async function alProvOk() {
+  const r = _al.rep; if (!r) return;
+  const nome = String(document.getElementById('al-pv-nome')?.value || '').trim().toUpperCase(), cpf = _cpfFmt(document.getElementById('al-pv-cpf')?.value || ''), d = _cpfDig(cpf);
+  if (nome.length < 5 || !/\s/.test(nome)) { toast('Escreva o nome completo.', 'err'); return; }
+  if (!_cpfValido(cpf)) { toast('CPF inválido: confira os números.', 'err'); return; }
+  const f = (dadosCampo.funcionarios || []).find(x => _cpfDig(x.cpf) === d);
+  if (f) { toast('Esse CPF já está no efetivo: ' + f.nome + '. Use a busca.', 'err'); document.getElementById('al-ent-q').value = f.nome; alBusca(f.nome); return; }
+  const outra = _al.reps.find(x => _alMor(x).some(m => _cpfDig(m.cpf) === d)); if (outra) { toast('Esse CPF já mora em ' + outra.nome + '. Dê saída lá primeiro.', 'err'); return; }
+  const ent = document.getElementById('al-ent-d')?.value || _hojeISO();
+  if (_alMor(r).length >= (+r.vagas || 0) && !confirm(r.nome + ' já está com todas as vagas ocupadas. Colocar mesmo assim?')) return;
+  (r.moradores = r.moradores || []).push({ id: 'm' + Date.now().toString(36), func: '', nome, cpf, mat: '', funcao: '', provisorio: true, entrada: ent, entradaPor: usuarioCampo?.nome || '', origem: 'app' });
+  await _alGravar(r); _al.busca = false; _alCasaRender(); toast(nome + ' entrou em ' + r.nome + ' (provisório)', 'ok');
+}
+(function () {
+  // busca: botão "não está na lista" sempre no fim
+  const oB = alBusca; alBusca = function (q) { const r = oB.apply(this, arguments); const l = document.getElementById('al-ent-l');
+    if (l) { l.querySelectorAll('.al-vz').forEach(x => { if (/Ninguém encontrado/.test(x.textContent)) x.textContent = 'Ninguém encontrado no efetivo.'; });
+      l.insertAdjacentHTML('beforeend', '<button type="button" onclick="alProvAbrir()" style="color:#E30613;font-weight:700">+ Não está na lista — entrar com nome e CPF</button>'); } return r; };
+  // morador provisório marcado na casa
+  const oC = _alCasaRender; _alCasaRender = function () { const r = oC.apply(this, arguments);
+    (_al.rep && _alMor(_al.rep) || []).forEach(m => { if (!m.provisorio) return; const b = document.getElementById('al-sai-' + m.id)?.closest('.al-m')?.querySelector('.x span'); if (b) b.innerHTML = `CPF ${_alE(m.cpf || '—')} · desde ${_alBR(m.entrada)} · <b style="color:#B45309">provisório — aguardando efetivo</b>`; });
+    return r; };
+  const oL = _alCarregar; _alCarregar = async function () { const r = await oL.apply(this, arguments); try { _alVincular(); } catch (e) {} return r; };
+  // o funcionário provisório não pode entrar duas vezes pela busca: ocupados por CPF também
+  const oLv = _alLivres; _alLivres = function () { const cpfs = new Set(_al.reps.flatMap(r => _alMor(r).map(m => _cpfDig(m.cpf)).filter(Boolean))); return oLv.apply(this, arguments).filter(f => !cpfs.has(_cpfDig(f.cpf))); };
+})();
 </script>
 </body>
 </html>

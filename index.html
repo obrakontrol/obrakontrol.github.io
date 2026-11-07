@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.11 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.12 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17571,6 +17571,28 @@ function vrRender() {
 (function () {
   const hd = document.querySelector('#page-republicas .page-header .btn-group');
   if (hd && !document.getElementById('btn-vist')) hd.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline" id="btn-vist" onclick="vrAbrir()">📋 Vistorias</button>');
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.12: MORADOR PROVISÓRIO (entrou pelo app com nome e CPF, ainda fora do efetivo) — vinculado sozinho
+// pelo CPF quando o funcionário aparece no efetivo; marcado na lista de moradores e de alojados.
+// ═══════════════════════════════════════════════════════════════
+function _repVincularProv() {
+  if (!usuarioLogado) return 0; const fs = dados.funcionarios || []; let n = 0;
+  (dados.republicas || []).forEach(r => { let mud = false; (r.moradores || []).forEach(m => { if (!m.provisorio || m.func) return; const d = _cpfDig(m.cpf); if (d.length !== 11) return;
+    const f = fs.find(x => _cpfDig(x.cpf) === d && (!r.obra || !x.obra || x.obra === r.obra)); if (!f) return;
+    Object.assign(m, { func: f.id, mat: f.mat || '', nome: f.nome || m.nome, funcao: f.funcao || '', provisorio: false, vinculadoEm: new Date().toISOString() }); mud = true; n++; });
+    if (mud && db && _firebaseReady) fbSave('republicas', r.id, r).catch(() => {}); });
+  return n;
+}
+(function () {
+  const marca = () => { const r = (dados.republicas || []).find(x => x.id === window._repAtual); if (!r) return;
+    document.querySelectorAll('#mor-lista tr').forEach(tr => { const id = tr.querySelector('[id^="sai-"]')?.id.slice(4), m = id && (r.moradores || []).find(x => x.id === id); if (!m || !m.provisorio) return;
+      const d = tr.querySelector('td div'); if (d) d.innerHTML = `CPF ${_e(m.cpf || '—')} · <span class="tag tag-amber" style="font-size:10.5px">provisório — aguardando efetivo</span>`; }); };
+  const oM = window._repMoradoresRender; if (oM) window._repMoradoresRender = _repMoradoresRender = function () { const r = oM.apply(this, arguments); try { marca(); } catch (e) {} return r; };
+  const oR = window.renderRepublicas; if (oR) window.renderRepublicas = renderRepublicas = function () { try { if (_repVincularProv()) toast('Moradores provisórios ligados ao efetivo pelo CPF.'); } catch (e) {} return oR.apply(this, arguments); };
+  const oA = window.renderAlojados; if (oA) window.renderAlojados = renderAlojados = function () { try { _repVincularProv(); } catch (e) {} return oA.apply(this, arguments); };
+  const oF = window.renderFuncionarios; window.renderFuncionarios = renderFuncionarios = function () { try { _repVincularProv(); } catch (e) {} return oF.apply(this, arguments); };
+  setTimeout(() => { try { _repVincularProv(); } catch (e) {} }, 12000);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
