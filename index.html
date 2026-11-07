@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.03 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.04 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17326,6 +17326,16 @@ function mmLimparDup() {
   ligar(); setTimeout(ligar, 1500);
   const oC = window.confirmarImportacao;
   window.confirmarImportacao = async function () { ligar(); const r = await oC.apply(this, arguments); [300, 1500, 4000].forEach(t => setTimeout(garantir, t)); return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.04: PJ não leva encargos — a hora do PJ é o valor do contrato ÷ 220 (sem os encargos da obra)
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const oC = custoMO;
+  custoMO = window.custoMO = function (a) {
+    const f = typeof _funcDe === 'function' ? _funcDe(a) : null;
+    if (!(f && f.vinculo === 'PJ')) return oC.apply(this, arguments);
+    const s = _encObra; _encObra = () => 0; try { return oC.apply(this, arguments); } finally { _encObra = s; } };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
