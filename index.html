@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v3.97 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v3.98 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17196,6 +17196,36 @@ async function tagDesfazer() {
     let mx = 0; fr.forEach(v => { const m = re.exec(String(v.tag || '')); if (m) mx = Math.max(mx, +m[1]); });
     const us = new Set(fr.concat(dados.equipamentos || []).map(v => String(v.tag || '').toUpperCase())); let n = mx + 1, t;
     do { t = pre + '-' + String(n++).padStart(2, '0'); } while (us.has(t)); return t; }; })();
+// ═══════════════════════════════════════════════════════════════
+// v3.98: EQUIPAMENTOS com cards por categoria (Linha amarela · Pesados · Leves · Outros)
+//        e card de situação (Mobilizados · Em manutenção · Desmobilizados) — clicar filtra a lista
+// ═══════════════════════════════════════════════════════════════
+window._eqCat = window._eqCat || ''; window._eqSt = window._eqSt || '';
+function _eqCatDe(e) { const f = (dados.familias || []).find(x => x.cod === e.familia && _mmBanco(x)) || (dados.familias || []).find(x => x.cod === e.familia); return _famCat(f || { desc: e.familia }); }
+function _eqStDe(e) { const s = _stEq(e.status) || e.status || 'Mobilizado'; return /desmob/i.test(s) ? 'Desmobilizado' : /manut/i.test(s) ? 'Em manutenção' : 'Mobilizado'; }
+function eqFiltro(tipo, v) { if (tipo === 'cat') window._eqCat = window._eqCat === v ? '' : v; else window._eqSt = window._eqSt === v ? '' : v; try { renderEquipamentos(); } catch (e) {} }
+function _eqCards() {
+  const card = document.querySelector('#page-equipamentos .card .card-body'); if (!card) return;
+  let bar = card.querySelector('.eq-cards'); if (!bar) { card.insertAdjacentHTML('afterbegin', '<div class="eq-cards"></div>'); bar = card.querySelector('.eq-cards'); }
+  const o = obraAtiva && obraAtiva.id, l = (dados.equipamentos || []).filter(e => !o || o === 'todas' || !e.obra || e.obra === o);
+  const lc = window._eqSt ? l.filter(e => _eqStDe(e) === window._eqSt) : l, ls = window._eqCat ? l.filter(e => _eqCatDe(e) === window._eqCat) : l;
+  const nC = c => lc.filter(e => !c || _eqCatDe(e) === c).length, nS = s => ls.filter(e => _eqStDe(e) === s).length;
+  const ICO = { '': '▦', 'Linha amarela': '🚜', 'Veículos pesados': '🚛', 'Veículos leves': '🚗', 'Outros': '⚙' }, COR = { '': '#6B7280', 'Linha amarela': '#D97706', 'Veículos pesados': '#2563EB', 'Veículos leves': '#16A34A', 'Outros': '#7C3AED' };
+  const cardH = (on, c, ico, t, sub, q, click) => `<div role="button" tabindex="0" onclick="${click}" onkeydown="if(event.key==='Enter')${click}" style="cursor:pointer;border:1px solid ${on ? c : 'var(--border)'};border-left:4px solid ${c};${on ? 'box-shadow:0 0 0 2px ' + c + '33;background:' + c + '0F;' : 'background:var(--surface,#fff);'}border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:22px">${ico}</span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13.5px;line-height:1.25;overflow-wrap:anywhere">${t}</div><div style="font-size:11.5px;color:var(--text-3)">${sub}</div></div><span style="font-size:24px;font-weight:800;color:${c};flex:none">${q}</span></div>`;
+  const cats = [['', 'Todos']].concat(CAT_EQ.map(c => [c, c])).filter(([k]) => !k || nC(k));
+  const STS = [['Mobilizado', 'Mobilizados', '#16A34A', '✅'], ['Em manutenção', 'Em manutenção', '#D97706', '🔧'], ['Desmobilizado', 'Desmobilizados', '#6B7280', '📦']];
+  bar.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:10px">${cats.map(([k, t]) => cardH(window._eqCat === k, COR[k], ICO[k], t, 'equipamento(s)', nC(k), `eqFiltro('cat','${k}')`)).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:14px">${STS.map(([k, t, c, i]) => cardH(window._eqSt === k, c, i, t, 'situação', nS(k), `eqFiltro('st','${k}')`)).join('')}</div>`;
+  const porId = new Map(l.map(e => [e.id, e]));
+  document.querySelectorAll('#tbody-equip tr').forEach(tr => { const cb = tr.querySelector('[data-id]'), e = cb && porId.get(cb.dataset.id); if (!e) return;
+    tr.classList.toggle('eq-esc', (!!window._eqCat && _eqCatDe(e) !== window._eqCat) || (!!window._eqSt && _eqStDe(e) !== window._eqSt)); });
+}
+(function () {
+  const css = document.createElement('style'); css.textContent = 'tr.eq-esc{display:none!important}'; document.head.appendChild(css);
+  const oR = window.renderEquipamentos || renderEquipamentos;
+  renderEquipamentos = window.renderEquipamentos = function () { const r = oR.apply(this, arguments); try { _eqCards(); } catch (e) {} return r; };
+})();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
