@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.04 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.05 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17328,14 +17328,32 @@ function mmLimparDup() {
   window.confirmarImportacao = async function () { ligar(); const r = await oC.apply(this, arguments); [300, 1500, 4000].forEach(t => setTimeout(garantir, t)); return r; };
 })();
 // ═══════════════════════════════════════════════════════════════
-// v4.04: PJ não leva encargos — a hora do PJ é o valor do contrato ÷ 220 (sem os encargos da obra)
+// v4.04/v4.05: PJ usa os encargos de PJ da obra (campo próprio) — a hora do PJ é o valor do contrato ÷ 220 × (1 + encargos PJ)
 // ═══════════════════════════════════════════════════════════════
 (function () {
   const oC = custoMO;
   custoMO = window.custoMO = function (a) {
     const f = typeof _funcDe === 'function' ? _funcDe(a) : null;
     if (!(f && f.vinculo === 'PJ')) return oC.apply(this, arguments);
-    const s = _encObra; _encObra = () => 0; try { return oC.apply(this, arguments); } finally { _encObra = s; } };
+    const s = _encObra; _encObra = id => { const o = (dados.obras || []).find(x => x.id === id); return parseFloat(o && o.encargosPJ) || 0; }; try { return oC.apply(this, arguments); } finally { _encObra = s; } };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.05: ENCARGOS DE PJ na obra (separado dos encargos de CLT)
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const $ = id => document.getElementById(id);
+  const g = $('obra-encargos')?.closest('.form-group');
+  if (g && !$('obra-encargos-pj')) {
+    const l = g.querySelector('.form-label'); if (l) l.innerHTML = 'Taxa de encargos (%) <span style="font-weight:400;color:var(--text-3)">— CLT</span>';
+    g.insertAdjacentHTML('afterend', '<div class="form-group"><label class="form-label" for="obra-encargos-pj">Taxa de encargos (%) <span style="font-weight:400;color:var(--text-3)">— PJ</span></label><input class="form-control" id="obra-encargos-pj" type="number" step="0.01" min="0" placeholder="Ex.: 10"/><div style="font-size:11px;color:var(--text-3);margin-top:3px">Vale para os funcionários PJ da obra. Em branco = 0%.</div></div>');
+  }
+  const oEd = window.editarObra; window.editarObra = function (id) { const r = oEd.apply(this, arguments); const o = (dados.obras || []).find(x => x.id === id) || {}; if ($('obra-encargos-pj')) $('obra-encargos-pj').value = o.encargosPJ ?? ''; return r; };
+  const oSv = window.salvarObra; window.salvarObra = function () {
+    const v = $('obra-encargos-pj')?.value ?? '', cod = ($('obra-cod')?.value || '').trim(), idEd = $('obra-edit-id')?.value || '';
+    const r = oSv.apply(this, arguments); if ($('modal-nova-obra')?.classList.contains('open')) return r;
+    const o = idEd ? (dados.obras || []).find(x => x.id === idEd) : [...(dados.obras || [])].reverse().find(x => (x.cod || '') === cod);
+    if (o) { o.encargosPJ = v === '' ? 0 : (parseFloat(v) || 0); if (db && _firebaseReady) fbSave('obras', o.id, o).catch(() => {}); }
+    if ($('obra-encargos-pj')) $('obra-encargos-pj').value = ''; return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
