@@ -500,6 +500,7 @@ body.amb-dash:not(.dx-full) .dx-nav-sair{display:none}
 .tk .tk-pend{border:2px dashed #B45309;color:#B45309;font-weight:700;text-align:center;padding:4px;margin-top:10px;letter-spacing:.06em}
 .tk .tk-av{color:#B91C1C;font-weight:700;text-align:center;margin-top:6px}
 .tk .tk-rod{text-align:center;color:#666;font-size:10.5px;margin-top:10px}
+.dx-kpi-v2{font-size:.6em;font-weight:600;opacity:.8;white-space:nowrap}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -596,7 +597,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.17 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.18 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -14522,7 +14523,7 @@ function dxRenderAloj() {
     const meses = Object.keys(mov).sort().slice(-12);
     const venc = at.map(r => ({ data: r.fim, t: r.nome + ' · fim do contrato', sub: (r.responsavel ? 'Proprietário: ' + r.responsavel : r.cod) }));
     corpo = `<div class="dx-kpis">
-        ${_kpi(_ic_casa, at.length, 'Repúblicas / alojamentos', todas.length - at.length ? (todas.length - at.length) + ' encerrada(s)' : 'ativos')}
+        ${_kpi(_ic_casa, at.length + '<span class="dx-kpi-v2"> · ' + vagas.toLocaleString('pt-BR') + ' vagas</span>', 'Repúblicas / alojamentos', todas.length - at.length ? (todas.length - at.length) + ' encerrada(s)' : 'ativos')}
         ${_kpi(_ic.users, ocup, 'Pessoas alojadas', 'moradores hoje')}
         ${_kpi(_ic.target, pct(ocup, vagas), 'Ocupação', ocup + ' de ' + vagas + ' vagas', vagas && ocup > vagas ? '#E30613' : vagas && ocup / vagas >= .85 ? '#22C55E' : '#F59E0B')}
         ${_kpi(_ic.box, livres, 'Vagas livres', livres ? 'disponíveis para alojar' : 'tudo ocupado', livres ? '#F59E0B' : '')}</div>
