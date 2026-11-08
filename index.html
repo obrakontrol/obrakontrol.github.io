@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.20 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.21 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17245,11 +17245,11 @@ function _eqCards() {
 // v3.99: DASHBOARD EQUIPAMENTOS — "Equipamentos por família" com a foto da família
 //        e quantos estão mobilizados / em manutenção / desmobilizados (abre a lista de TAGs)
 // ═══════════════════════════════════════════════════════════════
-const _FAM_IMG = ['CA', 'CB', 'CC', 'CCP', 'CCS', 'CH', 'CLA', 'CM', 'CP', 'CR', 'EH', 'GER', 'ME', 'PER', 'RET', 'TS', 'VL'];
+const _FAM_IMG = ['CA', 'CB', 'CC', 'CCP', 'CCS', 'CH', 'CLA', 'CM', 'CP', 'CR', 'EH', 'GER', 'ME', 'PER', 'RET', 'RH', 'TS', 'VL'];
 function _famImg(cod, desc) {
   const c = String(cod || '').toUpperCase(); if (_FAM_IMG.includes(c)) return 'img/fam/' + c + '.webp';
   const t = String(desc || cod || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const m = [[/compressor/, 'CA'], [/comboio/, 'CC'], [/cabine suplementar/, 'CCS'], [/hidrov|vacuo/, 'CH'], [/clam/, 'CLA'], [/munck|guindauto/, 'CM'], [/pipa/, 'CP'],
+  const m = [[/rompedor|martel(o|ete) hidr/, 'RH'], [/compressor/, 'CA'], [/comboio/, 'CC'], [/cabine suplementar/, 'CCS'], [/hidrov|vacuo/, 'CH'], [/clam/, 'CLA'], [/munck|guindauto/, 'CM'], [/pipa/, 'CP'],
     [/carroceria|plataforma/, 'CCP'], [/basculante|cacamba/, 'CB'], [/carregadeira/, 'CR'], [/mini/, 'ME'], [/retro/, 'RET'], [/escavadeira/, 'EH'], [/gerador/, 'GER'],
     [/perfuratriz/, 'PER'], [/tunel|shield/, 'TS'], [/veiculo leve|veiculo de apoio|picape|pick.?up|carro|caminhonete/, 'VL']].find(([re]) => re.test(t));
   return m ? 'img/fam/' + m[1] + '.webp' : '';
