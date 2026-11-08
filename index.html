@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.15 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.16 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17694,6 +17694,41 @@ function repMorExcluir(mid) {
         <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">${ruins.map(x => `<button class="btn btn-outline btn-sm" onclick="editarObra('${x.o.id}')" title="Falta: ${x.f.join(', ')}"><b>${_e(x.o.cod || x.o.nome)}</b> · falta ${_e(x.f.join(', '))}</button>`).join('')}</div></div>` : '';
     } catch (e) {}
     return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.16: ABASTECIMENTO DE VEÍCULOS LEVES — colunas mais bem distribuídas (mesmo ajuste da Frota)
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `#page-frota-abast table{font-size:12.5px}
+    #page-frota-abast table th,#page-frota-abast table td{padding-left:7px;padding-right:7px}
+    #tbody-abv td{vertical-align:middle;line-height:1.3}
+    #tbody-abv td.abc-nw{white-space:nowrap}
+    #tbody-abv td.abc-mod{min-width:120px;max-width:170px;font-size:12px}
+    #tbody-abv td.abc-mot{min-width:150px;max-width:210px}
+    #tbody-abv td.abc-fun{min-width:120px;max-width:170px;font-size:11.5px;color:var(--text-2)}
+    #tbody-abv td.abc-pos{min-width:110px;max-width:160px;font-size:11.5px;color:var(--text-2)}
+    #tbody-abv td.abc-al{min-width:110px;font-size:11.5px}
+    #tbody-abv td.abc-al *{white-space:normal}
+    #page-frota-abast .abc-off{display:none!important}`;
+  document.head.appendChild(css);
+  const CL = { 'obra': 'abc-nw', 'tag': 'abc-nw', 'placa': 'abc-nw', 'modelo': 'abc-mod', 'data': 'abc-nw', 'motorista': 'abc-mot', 'matricula': 'abc-nw', 'funcao': 'abc-fun', 'combustivel': 'abc-nw', 'litros': 'abc-nw', 'r$/l': 'abc-nw', 'valor': 'abc-nw', 'km': 'abc-nw', 'km rodado': 'abc-nw', 'km/l': 'abc-nw', 'r$/km': 'abc-nw', 'posto': 'abc-pos', 'alerta': 'abc-al' };
+  const SOME = ['matricula', 'funcao', 'km rodado', 'km/l', 'r$/km', 'posto', 'alerta'];
+  const nn = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[▼↑↓]/g, '').trim();
+  const curto = s => String(s || '').replace(/\bLTDA\.?$/i, '').replace(/^AUTO POSTO\b/i, 'Posto').trim();
+  const ajusta = () => {
+    const tb = document.getElementById('tbody-abv'); if (!tb) return; const tab = tb.closest('table'), ths = [...tab.querySelectorAll('thead tr:last-child > th')];
+    const nomes = ths.map(th => nn(th.dataset.k || th.textContent)); const linhas = [...tb.querySelectorAll(':scope > tr')].filter(tr => tr.children.length === ths.length);
+    const umaObra = typeof obraAtiva !== 'undefined' && obraAtiva && obraAtiva.id && obraAtiva.id !== 'todas';
+    nomes.forEach((k, i) => {
+      const cls = CL[k]; if (cls) linhas.forEach(tr => tr.children[i].classList.add(cls));
+      if (k === 'posto') linhas.forEach(tr => { const td = tr.children[i]; if (!td.dataset.cur && td.children.length === 0) { td.title = td.textContent.trim(); td.textContent = curto(td.textContent); td.dataset.cur = '1'; } });
+      let off = (k === 'obra' && umaObra) || (SOME.includes(k) && linhas.length && linhas.every(tr => /^[—–\-\s]*$/.test(tr.children[i].innerText || '')));
+      ths[i].classList.toggle('abc-off', off); linhas.forEach(tr => tr.children[i].classList.toggle('abc-off', off));
+    });
+  };
+  const oR = window.renderAbastVeic;
+  window.renderAbastVeic = renderAbastVeic = function () { const r = oR.apply(this, arguments); try { ajusta(); setTimeout(ajusta, 60); } catch (e) {} return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
