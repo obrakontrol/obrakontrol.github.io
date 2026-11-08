@@ -513,6 +513,7 @@ body.amb-dash:not(.dx-full) .dx-nav-sair{display:none}
 .dx.claro .dx-hg-t{background:rgba(0,0,0,.07)}
 .dx-hg-t i{display:block;height:100%;border-radius:7px;background:var(--rd)}
 @media(max-width:700px){.dx-hg{grid-template-columns:1fr}}
+.dx-hg-s.vin .dx-hg-t i{background:var(--am,#F59E0B)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -609,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.19 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.20 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -16253,7 +16254,7 @@ function _alojEfetivo(at, extra) {
   return `<div class="dx-grid dx-aloj3" style="grid-template-columns:1fr 1.15fr 1fr;margin-bottom:12px">
     ${_pn(_ic.pie || _ic.users, 'Efetivo alojado', _donut([{ l: 'Alojados', v: a }, { l: 'Não alojados', v: n - a }], p + '%', 'do efetivo', v => v + ' pessoa(s)'), a + ' de ' + n + ' mobilizados')}
     ${_pn(_ic.users, 'Quanto de cada grupo está alojado', (() => { const sec = (tit, ls) => { ls = ls.filter(Boolean); return ls.length ? `<div class="dx-hg-s"><div class="dx-hg-h">${tit}</div><div class="dx-hg-b">${ls.map(r => `<div class="dx-hg-r"><div class="dx-hg-top"><span>${_e(r.l)}</span><b>${r.x} de ${r.n} · ${Math.round(r.v)}%</b></div><div class="dx-hg-t"><i style="width:${Math.min(100, r.v)}%"></i></div></div>`).join('')}</div></div>` : ''; };
-      return `<div class="dx-hg">${sec('Tipo de custo', [barras2.d, barras2.i])}${sec('Vínculo', [barras2.c, barras2.p])}</div>`; })() + '<div style="font-size:11.5px;color:var(--mu);margin-top:8px">Efetivo mobilizado = funcionários ativos da obra (sem demissão). Quem mora numa república mas não está no efetivo não entra nesta conta.</div>', '% sobre o efetivo de cada grupo')}${extra || ''}</div>`;
+      return `<div class="dx-hg">${sec('Tipo de custo', [barras2.d, barras2.i])}${sec('Vínculo', [barras2.c, barras2.p]).replace('dx-hg-s', 'dx-hg-s vin')}</div>`; })() + '<div style="font-size:11.5px;color:var(--mu);margin-top:8px">Efetivo mobilizado = funcionários ativos da obra (sem demissão). Quem mora numa república mas não está no efetivo não entra nesta conta.</div>', '% sobre o efetivo de cada grupo')}${extra || ''}</div>`;
 }
 // v3.69: hora mínima mensal na cobrança por hora — proporcional aos dias mobilizados no mês
 function _locMinimo(e, mes) {
