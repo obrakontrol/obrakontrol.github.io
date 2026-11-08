@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.21 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.22 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17821,6 +17821,18 @@ function acExcel() { const l = _acLista(); if (!l.length) { toast('Nada para exp
   try { OK_MOD_PAGINAS.frota.push('frota-acerto'); } catch (e) {}
   const oInit = window.pageInit; window.pageInit = function (id) { const r = oInit.apply(this, arguments); if (id === 'frota-acerto') { const m = $('ac-mes'); if (m) m.dataset.ok = ''; renderAcerto(); } return r; };
   const oSel = window.selecionarObra; window.selecionarObra = function () { const r = oSel.apply(this, arguments); try { if ($('page-frota-acerto')?.classList.contains('active')) renderAcerto(); } catch (e) {} return r; };
+})();
+// v4.22: Usuários seguem a obra escolhida no topo (o filtro "Obra" da tela continua podendo mudar)
+(function () {
+  let ult = null;
+  const oR = window.renderUsuarios;
+  window.renderUsuarios = renderUsuarios = function () {
+    try { const sel = document.getElementById('filtro-usr-obra'), id = (typeof obraAtiva !== 'undefined' && obraAtiva && obraAtiva.id) || 'todas';
+      if (sel && id !== ult) { ult = id; const v = id === 'todas' ? '' : id; if (v && ![...sel.options].some(o => o.value === v)) { const o = (dados.obras || []).find(x => x.id === v); if (o) sel.insertAdjacentHTML('beforeend', `<option value="${o.id}">${_e(o.nome)}</option>`); } sel.value = v; } } catch (e) {}
+    return oR.apply(this, arguments);
+  };
+  const oS = window.selecionarObra;
+  if (oS) window.selecionarObra = function () { const r = oS.apply(this, arguments); try { renderUsuarios(); } catch (e) {} return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
