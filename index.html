@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.16 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.17 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17729,6 +17729,81 @@ function repMorExcluir(mid) {
   };
   const oR = window.renderAbastVeic;
   window.renderAbastVeic = renderAbastVeic = function () { const r = oR.apply(this, arguments); try { ajusta(); setTimeout(ajusta, 60); } catch (e) {} return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.17: ACERTO ENTRE OBRAS (combustível de veículos leves)
+//  • o abastecimento é sempre da OBRA DO VEÍCULO (consumo, km/L e custo); "obraPagou" guarda a obra cujo posto/fatura pagou
+//  • importação da fatura do posto: carro de outra obra entra na obra dele, marcado "pago pela obra X"
+//  • Frota → Acerto entre obras: quanto cada obra pagou pela outra, por mês, com os cupons e Excel
+// ═══════════════════════════════════════════════════════════════
+function _abPagou(a) { return a.obraPagou || a.obra || ''; }
+function _obCod(id) { const o = (dados.obras || []).find(x => x.id === id); return o ? (o.sigla || o.cod || o.nome || '') : ''; }
+function _acLista() { const $ = k => document.getElementById(k), mes = $('ac-mes')?.value || '', ob = _okObraAtual();
+  return (dados.abastVeic || []).filter(a => a.obra && _abPagou(a) !== a.obra && (!mes || String(a.data).slice(0, 7) === mes) && (ob === 'todas' || a.obra === ob || _abPagou(a) === ob))
+    .sort((a, b) => String(a.data).localeCompare(String(b.data))); }
+function renderAcerto() {
+  const $ = k => document.getElementById(k), tb = $('tbody-ac'); if (!tb) return;
+  const todos = (dados.abastVeic || []).filter(a => a.obra && _abPagou(a) !== a.obra);
+  const sm = $('ac-mes'); if (sm && !sm.dataset.ok) { const ms = [...new Set(todos.map(a => String(a.data).slice(0, 7)))].sort().reverse(); sm.innerHTML = '<option value="">Todos os meses</option>' + ms.map(m => `<option value="${m}">${_mesTxt(m)}</option>`).join(''); sm.value = ms[0] || ''; sm.dataset.ok = '1'; }
+  const l = _acLista(), par = {};
+  l.forEach(a => { const k = _abPagou(a) + '>' + a.obra; const p = par[k] = par[k] || { pagou: _abPagou(a), deve: a.obra, n: 0, L: 0, V: 0 }; p.n++; p.L += +a.litros || 0; p.V += +a.valor || 0; });
+  const ps = Object.values(par).sort((a, b) => b.V - a.V), mo = v => 'R$ ' + (+v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const lq = {}; ps.forEach(p => { const k = [p.pagou, p.deve].sort().join('|'); const s = p.pagou < p.deve ? 1 : -1; lq[k] = (lq[k] || 0) + s * p.V; });
+  $('ac-res').innerHTML = ps.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin-bottom:12px">${ps.map(p => `<div class="card" style="margin:0"><div class="card-body" style="padding:14px 16px">
+      <div style="font-size:12px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;font-weight:700">${_e(_obCod(p.pagou))} pagou por ${_e(_obCod(p.deve))}</div>
+      <div style="font-size:24px;font-weight:800;margin:4px 0">${mo(p.V)}</div>
+      <div style="font-size:12.5px;color:var(--text-2)">${p.n} abastecimento(s) · ${(p.L).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L · <b>${_e(_obCod(p.deve))} deve ressarcir ${_e(_obCod(p.pagou))}</b></div></div></div>`).join('')}</div>
+    ${Object.entries(lq).filter(([, v]) => Math.abs(v) > .005).map(([k, v]) => { const [a, b] = k.split('|'); const deve = v > 0 ? b : a, rec = v > 0 ? a : b; return `<div style="margin:-2px 0 12px;padding:9px 14px;border-radius:10px;background:rgba(22,163,74,.10);border:1px solid rgba(22,163,74,.35);font-size:13px">⚖ <b>Saldo:</b> ${_e(_obCod(deve))} deve <b>${mo(Math.abs(v))}</b> para ${_e(_obCod(rec))} (já descontando o que uma pagou pela outra).</div>`; }).join('')}`
+    : '<div style="color:var(--text-3);margin-bottom:12px">Nenhum abastecimento pago por outra obra neste período.</div>';
+  tb.innerHTML = l.length ? l.map(a => { const v = (dados.frota || []).find(x => x.id === a.veicId) || {};
+    return `<tr><td class="td-mono" style="white-space:nowrap">${_abFmtD(a.data)}</td><td style="white-space:nowrap"><b>${_e(a.tag || v.tag || '')}</b> ${_e(a.placa || '')}</td><td>${_e(v.modelo || '')}</td><td>${_e(a.motorista || '')}</td><td>${_e(a.combustivel || '')}</td>
+      <td style="text-align:right">${(+a.litros || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td><td style="text-align:right;white-space:nowrap"><b>${mo(a.valor)}</b></td><td style="white-space:nowrap"><span class="tag tag-amber">${_e(_obCod(_abPagou(a)))}</span></td><td style="white-space:nowrap"><span class="tag tag-blue">${_e(_obCod(a.obra))}</span></td>
+      <td style="font-size:11.5px;color:var(--text-2)">${_e(a.posto || '')}${a.fatura ? ' · fatura ' + _e(a.fatura) : ''}</td></tr>`; }).join('')
+    : '<tr><td colspan="10" class="empty-row">Nada para acertar neste período.</td></tr>';
+}
+function acExcel() { const l = _acLista(); if (!l.length) { toast('Nada para exportar.', 'error'); return; }
+  const rows = [['Data', 'TAG', 'Placa', 'Modelo', 'Motorista', 'Combustível', 'Litros', 'Valor (R$)', 'Pago pela obra', 'Obra do veículo (deve)', 'Posto', 'Fatura', 'Observações']].concat(l.map(a => { const v = (dados.frota || []).find(x => x.id === a.veicId) || {};
+    return [_abFmtD(a.data), a.tag || v.tag || '', a.placa || '', v.modelo || '', a.motorista || '', a.combustivel || '', +a.litros || 0, +a.valor || 0, _obCod(_abPagou(a)), _obCod(a.obra), a.posto || '', a.fatura || '', a.obs || '']; }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Acerto entre obras'); XLSX.writeFile(wb, 'Acerto_entre_obras_combustivel.xlsx'); }
+(function () {
+  const $ = id => document.getElementById(id);
+  // ── importação da planilha: carro de outra obra entra na obra dele, pago pela obra da importação
+  const oI = window.abImportarPlanilha;
+  if (oI) window.abImportarPlanilha = abImportarPlanilha = async function (input) {
+    const obra = _okObraAtual(), ant = new Set((dados.abastVeic || []).map(a => a.id)); const r = await oI.apply(this, arguments);
+    const novos = (dados.abastVeic || []).filter(a => !ant.has(a.id)); let n = 0;
+    novos.forEach(a => { const v = (dados.frota || []).find(x => x.id === a.veicId); a.obraPagou = obra; if (v && v.obra && v.obra !== a.obra) { a.obra = v.obra; n++; }
+      const m = /fatura\s*(\d+)/i.exec(a.obs || '') || /fechamento[^·]*·\s*cupom/i.exec(a.obs || ''); if (m && m[1]) a.fatura = m[1]; });
+    if (novos.length && db && _firebaseReady) for (const a of novos) await fbSave('abastVeic', a.id, a).catch(() => {});
+    if (n) { try { renderAbastVeic(); } catch (e) {} toast(n + ' abastecimento(s) de veículos de outra obra entraram na obra do veículo, pagos por ' + _obCod(obra) + ' — veja em Frota → Acerto entre obras.'); }
+    return r; };
+  // ── lançamento manual no painel: "Pago pela obra"
+  const g = $('abv-posto')?.closest('.form-group');
+  if (g && !$('abv-pagou')) g.insertAdjacentHTML('afterend', `<div class="form-group form-full"><label class="form-label" for="abv-pagou">Pago pela obra (posto / fatura)</label><select class="form-control" id="abv-pagou"></select>
+    <div style="font-size:11px;color:var(--text-3);margin-top:3px">Se o posto é de outra obra, escolha ela: o custo continua na obra do veículo e entra no Acerto entre obras.</div></div>`);
+  const oE = window.abEditar; window.abEditar = abEditar = function (id) { const r = oE.apply(this, arguments); const a = id ? (dados.abastVeic || []).find(x => x.id === id) : null, s = $('abv-pagou');
+    if (s) { s.innerHTML = '<option value="">A própria obra do veículo</option>' + (dados.obras || []).filter(o => !/encerr/i.test(o.status || '')).map(o => `<option value="${o.id}">${_e((o.sigla || o.cod || '') + ' · ' + (o.nome || ''))}</option>`).join(''); s.value = a && a.obraPagou && a.obraPagou !== a.obra ? a.obraPagou : ''; } return r; };
+  const oS = window.salvarAbastVeic; window.salvarAbastVeic = salvarAbastVeic = function () { const id = $('abv-id')?.value, pg = $('abv-pagou')?.value || '', ant = new Set((dados.abastVeic || []).map(a => a.id));
+    const r = oS.apply(this, arguments); const a = id ? (dados.abastVeic || []).find(x => x.id === id) : (dados.abastVeic || []).find(x => !ant.has(x.id));
+    if (a) { const v = (dados.frota || []).find(x => x.id === a.veicId); if (v && v.obra) a.obra = v.obra; a.obraPagou = pg || a.obra; if (db && _firebaseReady) fbSave('abastVeic', a.id, a).catch(() => {}); try { renderAbastVeic(); } catch (e) {} }
+    return r; };
+  // ── na lista de abastecimentos: etiqueta "pago por X"
+  const oR = window.renderAbastVeic; window.renderAbastVeic = renderAbastVeic = function () { const r = oR.apply(this, arguments);
+    try { (dados.abastVeic || []).filter(a => _abPagou(a) !== a.obra).forEach(a => { const b = document.querySelector(`#tbody-abv [onclick*="abEditar('${a.id}')"]`), tr = b && b.closest('tr'); if (!tr || tr.querySelector('.ac-tag')) return;
+      const td = [...tr.children].find(x => /\d{2}\/\d{2}\/\d{4}/.test(x.textContent)); if (td) td.insertAdjacentHTML('beforeend', `<div class="ac-tag" style="margin-top:2px"><span class="tag tag-amber" style="font-size:10px" title="O posto/fatura é de outra obra — entra no Acerto entre obras">pago por ${_e(_obCod(_abPagou(a)))}</span></div>`); }); } catch (e) {}
+    return r; };
+  // ── página Acerto entre obras
+  const ref = $('page-frota-abast');
+  if (ref && !$('page-frota-acerto')) ref.insertAdjacentHTML('afterend', `<div class="page" id="page-frota-acerto"><div class="page-header"><div><div class="page-title">Acerto entre obras · combustível</div><div class="page-sub">Abastecimentos que o posto de uma obra pagou para veículos de outra. O custo e o consumo ficam na obra do veículo; aqui sai quanto cada obra deve ressarcir.</div></div>
+      <div class="btn-group"><button class="btn btn-outline btn-sm" onclick="acExcel()">↓ Excel</button></div></div>
+      <div class="card"><div class="card-body"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><select class="form-control" id="ac-mes" onchange="renderAcerto()" style="max-width:200px"></select></div>
+        <div id="ac-res"></div>
+        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Veículo</th><th>Modelo</th><th>Motorista</th><th>Combustível</th><th style="text-align:right">Litros</th><th style="text-align:right">Valor</th><th>Pago por</th><th>Obra do veículo</th><th>Posto</th></tr></thead><tbody id="tbody-ac"></tbody></table></div></div></div></div>`);
+  const nav = document.querySelector(`.nav-item[onclick*="showPage('frota-abast'"]`);
+  if (nav && !document.querySelector(`[onclick*="showPage('frota-acerto'"]`)) nav.insertAdjacentHTML('afterend', `<div class="nav-item" onclick="showPage('frota-acerto',this)" title="Acerto entre obras"><svg viewBox="0 0 24 24"><path d="M7 16V4M7 4L3 8M7 4l4 4M17 8v12M17 20l4-4M17 20l-4-4"/></svg><span>Acerto entre obras</span></div>`);
+  try { OK_MOD_PAGINAS.frota.push('frota-acerto'); } catch (e) {}
+  const oInit = window.pageInit; window.pageInit = function (id) { const r = oInit.apply(this, arguments); if (id === 'frota-acerto') { const m = $('ac-mes'); if (m) m.dataset.ok = ''; renderAcerto(); } return r; };
+  const oSel = window.selecionarObra; window.selecionarObra = function () { const r = oSel.apply(this, arguments); try { if ($('page-frota-acerto')?.classList.contains('active')) renderAcerto(); } catch (e) {} return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);

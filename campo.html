@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.01</div>
+  <div class="login-versao">ObraKontrol Campo · v3.02</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -5401,13 +5401,13 @@ function abvRender() {
   const el = document.getElementById('abv-content'); if (!el || !abv) return; const E = _mobEsc, o = abv.obra || (usuarioCampo && usuarioCampo.obra) || '';
   const sel = (ops, val, ph, on) => `<select class="form-control" onchange="${on}"><option value="">${ph}</option>${ops.map(([v, t]) => `<option value="${E(v)}" ${v === val ? 'selected' : ''}>${E(t)}</option>`).join('')}</select>`;
   const obras = usuarioCampo.obra ? [] : (window._mobObras || []).filter(x => !/encerr/i.test(x.status || ''));
-  const vs = (window._vlFrota || []).filter(v => v.status !== 'Devolvido' && (!o || v.obra === o)).sort((a, b) => String(a.tag || a.placa).localeCompare(String(b.tag || b.placa)));
+  const vs = (window._vlFrota || []).filter(v => v.status !== 'Devolvido').sort((a, b) => ((o && a.obra !== o) - (o && b.obra !== o)) || String(a.tag || a.placa).localeCompare(String(b.tag || b.placa)));
   const v = _abvVeic(), u = v ? _abvUlt(v) : null;
   const postos = [...new Set((window._abvLista || []).filter(a => !o || a.obra === o).map(a => a.posto).filter(Boolean).concat(['Auto Posto Petromoc', 'Auto Posto Vale Azul']))].sort();
-  const funcs = (dadosCampo.funcionarios || []).filter(f => (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && !_fnAus(f) && !(f.demissao && f.demissao <= _hojeISO())).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  const funcs = (dadosCampo.funcionarios || []).filter(f => (!o || !f.obra || f.obra === o || (v && f.obra === v.obra)) && f.status !== 'Desligado' && !_fnAus(f) && !(f.demissao && f.demissao <= _hojeISO())).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   el.innerHTML = (!usuarioCampo.obra ? `<div class="card"><div class="card-body"><div class="form-group"><label class="form-label">Obra *</label>${sel(obras.map(x => [x.id, (x.cod ? x.cod + ' · ' : '') + x.nome]), abv.obra, 'Escolha a obra…', "abvCampo('obra',this.value,1)")}</div></div></div>` : '') + `
     <div class="card"><div class="card-body">
-      <div class="form-group"><label class="form-label">Veículo *</label><div class="vle-row">${sel(vs.map(x => [x.id, (x.tag ? x.tag + ' · ' : '') + x.placa + ' · ' + (x.modelo || '')]), abv.veicId, vs.length ? 'Escolha…' : 'Nenhum veículo nesta obra', "abvCampo('veicId',this.value,1)")}
+      <div class="form-group"><label class="form-label">Veículo *</label><div class="vle-row">${sel(vs.map(x => [x.id, (x.tag ? x.tag + ' · ' : '') + x.placa + ' · ' + (x.modelo || '') + (o && x.obra && x.obra !== o ? ' — outra obra' : '')]), abv.veicId, vs.length ? 'Escolha…' : 'Nenhum veículo nesta obra', "abvCampo('veicId',this.value,1)")}
         <button type="button" class="btn btn-outline" onclick="abrirQR('abvv')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h4v4"/></svg>Ler TAG</button></div></div>
       ${v ? `<div class="vl-info"><b>${E(v.tag || '')}</b> · ${E(v.placa)} · ${E(v.modelo || '')}<br>Último km: <b>${u.kmMax.toLocaleString('pt-BR')}</b>${u.u ? ' · abasteceu em ' + E(String(u.u.data).split('-').reverse().join('/')) : ''}</div>` : ''}
       <div class="form-group"><label class="form-label">Motorista (funcionário) *</label><div class="vle-row">${sel(funcs.map(x => [x.id, x.nome + ' · Mat. ' + (x.mat || '—')]), abv.motoristaId, 'Escolha o funcionário…', "abvCampo('motoristaId',this.value,1)")}<button type="button" class="btn btn-outline" onclick="abrirQR('abvc')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h4v4"/></svg>Ler crachá</button></div></div>
@@ -6546,6 +6546,22 @@ function otDefinir(id) {
   // provisório (nome e CPF) também guarda quem lançou e quando
   const oP = alProvOk; alProvOk = async function () { const antes = new Set(((_al.rep && _al.rep.moradores) || []).map(x => x.id)); const r = await oP.apply(this, arguments);
     const rep = _al.rep, m = rep && (rep.moradores || []).find(x => !antes.has(x.id)); if (m && !m.criadoEm) { m.criadoEm = new Date().toISOString(); m.entradaPorId = usuarioCampo?.id || ''; _alGravar(rep); _alCasaRender(); } return r; };
+})();
+// ══════════════════════════════════════════════════════════════
+// v3.02: ABASTECIMENTO DE VEÍCULO LEVE de OUTRA OBRA — a lista mostra também os veículos das outras obras (no fim);
+// o abastecimento vai para a obra do veículo e guarda a obra que pagou (a obra em que você está lançando) → acerto entre obras
+// ══════════════════════════════════════════════════════════════
+(function () {
+  const oR = abvRender;
+  abvRender = function () { const r = oR.apply(this, arguments);
+    try { const v = _abvVeic(), o = abv.obra || (usuarioCampo && usuarioCampo.obra) || '', el = document.getElementById('abv-content');
+      if (v && o && v.obra && v.obra !== o && el && !el.querySelector('.abv-outra')) { const ob = (window._mobObras || dadosCampo.obras || []).find(x => x.id === v.obra) || {};
+        el.querySelector('.vl-info')?.insertAdjacentHTML('afterend', `<div class="abv-al amb abv-outra" style="margin-top:8px">Veículo da obra <b>${_esc(ob.sigla || ob.cod || ob.nome || 'outra')}</b>. O consumo e o custo ficam nela; como o posto é desta obra, entra no <b>acerto entre obras</b>.</div>`); } } catch (e) {}
+    return r; };
+  const oS = abvSalvar;
+  abvSalvar = async function () { const v = _abvVeic(), pagou = abv.obra || (usuarioCampo && usuarioCampo.obra) || (v && v.obra) || ''; window.__abvPagou = pagou; try { return await oS.apply(this, arguments); } finally { window.__abvPagou = null; } };
+  const oF = fbSalvar;
+  fbSalvar = async function (col, item) { if (col === 'abastVeic' && item && window.__abvPagou && !item.obraPagou) item.obraPagou = window.__abvPagou; return oF.apply(this, arguments); };
 })();
 </script>
 </body>
