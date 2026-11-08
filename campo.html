@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.00</div>
+  <div class="login-versao">ObraKontrol Campo · v3.01</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6509,6 +6509,43 @@ function otDefinir(id) {
   entrarNoCampo = function () { const r = oE.apply(this, arguments); document.getElementById('ot-modal')?.remove();
     const w = document.querySelector('.home-obra'); if (w && w.dataset.ot) { const n = w.cloneNode(true); w.replaceWith(n); n.style.cursor = ''; }
     setTimeout(() => { document.getElementById('ot-modal')?.remove(); _otLabel(); }, 400); setTimeout(() => { document.getElementById('ot-modal')?.remove(); _otLabel(); }, 1500); return r; };
+})();
+// ══════════════════════════════════════════════════════════════
+// v3.01: ALOJAMENTOS — dar entrada pede CONFIRMAÇÃO (tocar no nome só seleciona) e quem lançou errado
+// pode excluir no mesmo dia (botão Excluir no morador que você lançou hoje pelo app)
+// ══════════════════════════════════════════════════════════════
+(function () {
+  const oE = alEntrada;
+  const _alEntradaOk = async function (fid) { _al.selEnt = null; return oE.call(this, fid); };
+  window.alEntradaOk = async function () { const fid = _al.selEnt; if (!fid) return;
+    const r = await _alEntradaOk(fid); const rep = _al.rep, m = rep && _alMor(rep).slice().reverse().find(x => x.func === fid); if (m && !m.criadoEm) { m.criadoEm = new Date().toISOString(); m.entradaPorId = usuarioCampo?.id || ''; _alGravar(rep); _alCasaRender(); } return r; };
+  window.alEntradaCancelar = function () { _al.selEnt = null; alBusca(document.getElementById('al-ent-q')?.value || ''); };
+  alEntrada = function (fid) {
+    const r = _al.rep, f = (dadosCampo.funcionarios || []).find(x => x.id === fid); if (!r || !f) return;
+    _al.selEnt = fid; const l = document.getElementById('al-ent-l'); if (!l) return;
+    const ent = document.getElementById('al-ent-d')?.value || _hojeISO(), lot = _alMor(r).length >= (+r.vagas || 0);
+    l.innerHTML = `<div style="padding:12px"><div class="al-sec" style="margin-bottom:6px">Confirmar entrada</div>
+      <div style="font-size:15px;font-weight:800">${_alE(f.nome)}</div><div class="al-vz" style="margin:2px 0 8px">Mat. ${_alE(f.mat || '—')}${f.funcao ? ' · ' + _alE(f.funcao) : ''}${f.cpf ? ' · CPF ' + _alE(String(f.cpf).replace(/^(\d{3}).*(\d{2})$/, '$1.***.***-$2')) : ''}</div>
+      <div style="font-size:13px;margin-bottom:10px">Entra em <b>${_alE(r.nome)}</b> em <b>${_alBR(ent)}</b>.${lot ? ' <b style="color:#DC2626">A casa já está lotada.</b>' : ''}</div>
+      <div style="display:flex;gap:8px"><button type="button" class="btn btn-outline" style="flex:1" onclick="alEntradaCancelar()">Não é esta pessoa</button><button type="button" class="btn btn-green" style="flex:1" onclick="alEntradaOk()">Confirmar entrada</button></div></div>`;
+    l.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  // o confirm nativo de casa lotada já foi mostrado acima: evita perguntar duas vezes
+  const oConf = window.confirm;
+  const oOk = window.alEntradaOk; window.alEntradaOk = async function () { window.confirm = () => true; try { return await oOk.apply(this, arguments); } finally { window.confirm = oConf; } };
+  // excluir quem você lançou hoje pelo app (lançado errado)
+  window.alMorExcluir = async function (mid) {
+    const r = _al.rep, m = r && (r.moradores || []).find(x => x.id === mid); if (!m) return;
+    if (!confirm('Excluir ' + m.nome + ' de ' + r.nome + '? Use só se foi lançado errado (não é saída).')) return;
+    r.moradores = (r.moradores || []).filter(x => x.id !== mid); await _alGravar(r); _alCasaRender(); toast(m.nome + ' excluído de ' + r.nome, 'ok');
+  };
+  const oC = _alCasaRender; _alCasaRender = function () { const res = oC.apply(this, arguments); const r = _al.rep, hj = _hojeISO(), eu = usuarioCampo?.id || '';
+    (r && _alMor(r) || []).forEach(m => { if (m.origem !== 'app' || !m.criadoEm || _hojeISO(new Date(m.criadoEm)) !== hj || (m.entradaPorId && m.entradaPorId !== eu)) return;
+      const row = document.getElementById('al-sai-' + m.id)?.closest('.al-m'); if (row && !row.querySelector('.al-exc')) row.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-outline btn-sm al-exc" style="color:#DC2626;border-color:#FCA5A5" onclick="alMorExcluir('${m.id}')">Excluir</button>`); });
+    return res; };
+  // provisório (nome e CPF) também guarda quem lançou e quando
+  const oP = alProvOk; alProvOk = async function () { const antes = new Set(((_al.rep && _al.rep.moradores) || []).map(x => x.id)); const r = await oP.apply(this, arguments);
+    const rep = _al.rep, m = rep && (rep.moradores || []).find(x => !antes.has(x.id)); if (m && !m.criadoEm) { m.criadoEm = new Date().toISOString(); m.entradaPorId = usuarioCampo?.id || ''; _alGravar(rep); _alCasaRender(); } return r; };
 })();
 </script>
 </body>

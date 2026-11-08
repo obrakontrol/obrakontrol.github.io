@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.12 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.13 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17593,6 +17593,24 @@ function _repVincularProv() {
   const oA = window.renderAlojados; if (oA) window.renderAlojados = renderAlojados = function () { try { _repVincularProv(); } catch (e) {} return oA.apply(this, arguments); };
   const oF = window.renderFuncionarios; window.renderFuncionarios = renderFuncionarios = function () { try { _repVincularProv(); } catch (e) {} return oF.apply(this, arguments); };
   setTimeout(() => { try { _repVincularProv(); } catch (e) {} }, 12000);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.13: MORADOR LANÇADO ERRADO — botão Excluir na lista de moradores da república (não vira histórico; para quem saiu, use Dar saída)
+// ═══════════════════════════════════════════════════════════════
+function repMorExcluir(mid) {
+  const r = (dados.republicas || []).find(x => x.id === window._repAtual); if (!r) return;
+  const m = (r.moradores || []).find(x => x.id === mid); if (!m) return;
+  if (!confirm('Excluir ' + m.nome + ' de ' + r.nome + '?\n\nUse só para lançamento errado — some da casa sem ficar no histórico. Se a pessoa morou e saiu, use "Dar saída".')) return;
+  r.moradores = (r.moradores || []).filter(x => x.id !== mid);
+  if (db && _firebaseReady) fbSave('republicas', r.id, r).catch(() => {});
+  _repMoradoresRender(); try { renderRepublicas(); renderAlojados(); } catch (e) {} toast(m.nome + ' excluído de ' + r.nome);
+}
+(function () {
+  const oM = window._repMoradoresRender;
+  window._repMoradoresRender = _repMoradoresRender = function () { const res = oM.apply(this, arguments);
+    document.querySelectorAll('#mor-lista button[onclick^="repSaida("]').forEach(b => { if (b.nextElementSibling && b.nextElementSibling.classList.contains('mor-exc')) return; const id = (/repSaida\('([^']+)'\)/.exec(b.getAttribute('onclick')) || [])[1]; if (!id) return;
+      b.insertAdjacentHTML('afterend', ` <button class="btn btn-outline btn-sm mor-exc" style="color:var(--red)" title="Lançado errado: remove sem deixar histórico" onclick="repMorExcluir('${id}')">Excluir</button>`); });
+    return res; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
