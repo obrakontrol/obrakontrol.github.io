@@ -501,6 +501,18 @@ body.amb-dash:not(.dx-full) .dx-nav-sair{display:none}
 .tk .tk-av{color:#B91C1C;font-weight:700;text-align:center;margin-top:6px}
 .tk .tk-rod{text-align:center;color:#666;font-size:10.5px;margin-top:10px}
 .dx-kpi-v2{font-size:.6em;font-weight:600;opacity:.8;white-space:nowrap}
+.dx-aloj3>.dx-pn:has(.dx-hg){display:flex;flex-direction:column}
+.dx-hg{display:grid;grid-template-columns:1fr 1fr;gap:14px 26px;padding-top:4px;flex:1;align-content:stretch}
+.dx-hg-s{display:flex;flex-direction:column;gap:0}
+.dx-hg-b{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;gap:14px;padding:10px 0 4px}
+.dx-hg-r{padding-top:6px}
+.dx-hg-h{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);border-bottom:1px solid rgba(128,128,128,.22);padding-bottom:6px}
+.dx-hg-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px;font-size:14px;font-weight:600}
+.dx-hg-top b{font-family:var(--mono);font-size:12.5px;font-weight:600;white-space:nowrap}
+.dx-hg-t{height:28px;border-radius:7px;background:rgba(255,255,255,.07);overflow:hidden}
+.dx.claro .dx-hg-t{background:rgba(0,0,0,.07)}
+.dx-hg-t i{display:block;height:100%;border-radius:7px;background:var(--rd)}
+@media(max-width:700px){.dx-hg{grid-template-columns:1fr}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -597,7 +609,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.18 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.19 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -16235,10 +16247,13 @@ function _alojEfetivo(at, extra) {
   const al = ef.filter(f => ids.has(f.id)), n = ef.length, a = al.length, p = n ? Math.round(a / n * 100) : 0;
   if (!n) return extra ? `<div class="dx-grid" style="grid-template-columns:1fr;margin-bottom:12px">${extra}</div>` : '';
   const grupo = (nome, fn) => { const t = ef.filter(fn), x = t.filter(f => ids.has(f.id)).length; return t.length ? { l: nome, v: t.length ? x / t.length * 100 : 0, t: `${x} de ${t.length} · ${Math.round(x / t.length * 100)}%` } : null; };
+  const g2 = (nome, fn) => { const t = ef.filter(fn), x = t.filter(f => ids.has(f.id)).length; return t.length ? { l: nome, x, n: t.length, v: x / t.length * 100 } : null; };
+  const barras2 = { d: g2('Diretos', f => f.direto !== 'Não'), i: g2('Indiretos', f => f.direto === 'Não'), c: g2('CLT', f => f.vinculo !== 'PJ'), p: g2('PJ', f => f.vinculo === 'PJ') };
   const barras = [grupo('Diretos', f => f.direto !== 'Não'), grupo('Indiretos', f => f.direto === 'Não'), grupo('CLT', f => f.vinculo !== 'PJ'), grupo('PJ', f => f.vinculo === 'PJ')].filter(Boolean);
   return `<div class="dx-grid dx-aloj3" style="grid-template-columns:1fr 1.15fr 1fr;margin-bottom:12px">
     ${_pn(_ic.pie || _ic.users, 'Efetivo alojado', _donut([{ l: 'Alojados', v: a }, { l: 'Não alojados', v: n - a }], p + '%', 'do efetivo', v => v + ' pessoa(s)'), a + ' de ' + n + ' mobilizados')}
-    ${_pn(_ic.users, 'Quanto de cada grupo está alojado', `<div class="dx-hb">${barras.map(r => `<div class="l">${_e(r.l)}</div><div class="t"><i style="width:${Math.min(100, r.v)}%;background:var(--rd)"></i></div><div class="v">${r.t}</div>`).join('')}</div>` + '<div style="font-size:11.5px;color:var(--mu);margin-top:8px">Efetivo mobilizado = funcionários ativos da obra (sem demissão). Quem mora numa república mas não está no efetivo não entra nesta conta.</div>', '% sobre o efetivo de cada grupo')}${extra || ''}</div>`;
+    ${_pn(_ic.users, 'Quanto de cada grupo está alojado', (() => { const sec = (tit, ls) => { ls = ls.filter(Boolean); return ls.length ? `<div class="dx-hg-s"><div class="dx-hg-h">${tit}</div><div class="dx-hg-b">${ls.map(r => `<div class="dx-hg-r"><div class="dx-hg-top"><span>${_e(r.l)}</span><b>${r.x} de ${r.n} · ${Math.round(r.v)}%</b></div><div class="dx-hg-t"><i style="width:${Math.min(100, r.v)}%"></i></div></div>`).join('')}</div></div>` : ''; };
+      return `<div class="dx-hg">${sec('Tipo de custo', [barras2.d, barras2.i])}${sec('Vínculo', [barras2.c, barras2.p])}</div>`; })() + '<div style="font-size:11.5px;color:var(--mu);margin-top:8px">Efetivo mobilizado = funcionários ativos da obra (sem demissão). Quem mora numa república mas não está no efetivo não entra nesta conta.</div>', '% sobre o efetivo de cada grupo')}${extra || ''}</div>`;
 }
 // v3.69: hora mínima mensal na cobrança por hora — proporcional aos dias mobilizados no mês
 function _locMinimo(e, mes) {
