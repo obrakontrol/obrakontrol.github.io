@@ -596,7 +596,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.14 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.15 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17648,6 +17648,52 @@ function repMorExcluir(mid) {
   };
   const oR = window.renderFrota;
   window.renderFrota = renderFrota = function () { const r = oR.apply(this, arguments); try { ajusta(); setTimeout(ajusta, 60); } catch (e) {} return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.15: CADASTRO DE OBRA COM CAMPOS OBRIGATÓRIOS NO PADRÃO — código (maiúsculas, sem espaço), nome, nome do
+// projeto, sigla de 4 caracteres (vai na TAG: LT19-VL-01), local e encargos de CLT e PJ. Obra sem sigla ganha aviso
+// em Obras; ao gravar a sigla, o Master já pode padronizar as TAGs dos equipamentos e da frota daquela obra.
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const $ = id => document.getElementById(id);
+  const obrig = { 'obra-cod': 'Código', 'obra-nome': 'Nome da obra', 'obra-nomeproj': 'Nome do projeto', 'obra-sigla': 'Sigla (4 caracteres)', 'obra-local': 'Local / Município', 'obra-encargos': 'Taxa de encargos (%) — CLT', 'obra-encargos-pj': 'Taxa de encargos (%) — PJ' };
+  const marca = () => Object.keys(obrig).forEach(id => { const l = $(id)?.closest('.form-group')?.querySelector('.form-label'); if (l && !l.querySelector('.ob-req')) l.insertAdjacentHTML('beforeend', ' <span class="ob-req" style="color:var(--red)">*</span>'); if (l) l.innerHTML = l.innerHTML.replace(/\s\*\s(?=<span class="ob-req")/, ' '); });
+  setTimeout(marca, 500);
+  const cod = $('obra-cod'); if (cod) { cod.placeholder = 'Ex.: LT-19'; cod.style.textTransform = 'uppercase'; const g = cod.closest('.form-group'); if (g && !g.querySelector('.ob-dica')) g.insertAdjacentHTML('beforeend', '<div class="ob-dica" style="font-size:11px;color:var(--text-3);margin-top:3px">Maiúsculas, números e hífen, sem espaço (ex.: LT-15, LT-19, AVBN, LIGGA).</div>'); }
+  const loc = $('obra-local'); if (loc) loc.placeholder = 'Ex.: São Roque/SP';
+  const oS = window.salvarObra;
+  window.salvarObra = salvarObra = function () {
+    marca();
+    const v = id => String($(id)?.value ?? '').trim();
+    const falta = Object.keys(obrig).filter(id => $(id) && v(id) === '');
+    if (falta.length) { toast('Preencha: ' + falta.map(id => obrig[id]).join(', ') + '.', 'error'); $(falta[0])?.focus(); return; }
+    const c = v('obra-cod').toUpperCase().replace(/\s+/g, '-'); if ($('obra-cod')) $('obra-cod').value = c;
+    if (!/^[A-Z0-9][A-Z0-9-]{1,14}$/.test(c)) { toast('Código da obra: só letras maiúsculas, números e hífen, sem espaço (ex.: LT-19).', 'error'); $('obra-cod')?.focus(); return; }
+    const idEd = v('obra-edit-id');
+    const dupC = (dados.obras || []).find(x => x.id !== idEd && String(x.cod || '').toUpperCase() === c); if (dupC) { toast('O código ' + c + ' já é da obra ' + (dupC.nome || '') + '.', 'error'); return; }
+    const sg = v('obra-sigla').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (sg.length !== 4) { toast('A sigla da obra tem exatamente 4 letras ou números (ex.: LT19, AVBN, LIGG).', 'error'); $('obra-sigla')?.focus(); return; }
+    if (!/^[A-Za-zÀ-ú .'-]+\/?[A-Z]{0,2}$/.test(v('obra-local')) && !/\//.test(v('obra-local'))) { /* aceita, só sugere o padrão */ }
+    const antes = idEd ? String(((dados.obras || []).find(x => x.id === idEd) || {}).sigla || '').toUpperCase() : '';
+    const r = oS.apply(this, arguments);
+    if ($('modal-nova-obra')?.classList.contains('open')) return r;
+    const o = idEd ? (dados.obras || []).find(x => x.id === idEd) : (dados.obras || []).find(x => String(x.cod || '').toUpperCase() === c);
+    try { renderObras(); } catch (e) {}
+    if (o && sg !== antes && typeof _ehMaster === 'function' && _ehMaster()) {
+      const nTag = (dados.equipamentos || []).concat(dados.frota || []).filter(x => x.obra === o.id && x.tag && !String(x.tag).toUpperCase().startsWith(sg + '-')).length;
+      if (nTag && confirm('A obra agora tem a sigla ' + sg + '. Há ' + nTag + ' equipamento(s)/veículo(s) com TAG fora do padrão ' + sg + '-FAMÍLIA-NN.\n\nAbrir a padronização das TAGs agora? (dá para desfazer)')) setTimeout(() => { try { if (typeof selecionarObra === 'function' && o.id !== (obraAtiva && obraAtiva.id)) selecionarObra(o.id, o.nome); tagPadronizarAbrir(); const s = $('tp-obra'); if (s) { s.value = o.id; tagPadronizarPrev(); } } catch (e) {} }, 300);
+    }
+    return r;
+  };
+  // aviso em Obras: obra sem sigla / sem os campos do padrão
+  const oR = window.renderObras;
+  window.renderObras = renderObras = function () { const r = oR.apply(this, arguments);
+    try { const pg = $('page-obras'), hd = pg && pg.querySelector('.page-header'); if (!hd) return r;
+      let c = $('ob-pad-av'); if (!c) { hd.insertAdjacentHTML('afterend', '<div id="ob-pad-av"></div>'); c = $('ob-pad-av'); }
+      const ruins = (dados.obras || []).filter(o => !/encerr/i.test(o.status || '')).map(o => ({ o, f: [!o.sigla && 'sigla', !o.nomeProjeto && 'nome do projeto', !o.local && 'local', (o.encargos === undefined || o.encargos === '' || o.encargos === null) && 'encargos CLT', (o.encargosPJ === undefined || o.encargosPJ === '' || o.encargosPJ === null) && 'encargos PJ'].filter(Boolean) })).filter(x => x.f.length);
+      c.innerHTML = ruins.length ? `<div style="margin-bottom:12px;padding:10px 14px;border:1px solid #FCD34D;background:#FFFBEB;color:#92400E;border-radius:10px;font-size:13px">⚠ <b>${ruins.length} obra(s) com cadastro incompleto</b> — sem a sigla as TAGs saem sem o código da obra (ex.: VL-31 em vez de LT15-VL-31).
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">${ruins.map(x => `<button class="btn btn-outline btn-sm" onclick="editarObra('${x.o.id}')" title="Falta: ${x.f.join(', ')}"><b>${_e(x.o.cod || x.o.nome)}</b> · falta ${_e(x.f.join(', '))}</button>`).join('')}</div></div>` : '';
+    } catch (e) {}
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
