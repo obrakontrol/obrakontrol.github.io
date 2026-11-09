@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.25 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.26 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17871,6 +17871,13 @@ function _famIdent(f) { if (f && ID_EQ[f.ident]) return f.ident; const c = _famC
       document.querySelectorAll('#tbody-familias tr').forEach(tr => { const cod = tr.querySelector('td strong')?.textContent.trim(); if (!cod || tr.querySelector('.id-td')) return;
         const f = (dados.familias || []).find(x => x.cod === cod && _mmBanco(x)) || (dados.familias || []).find(x => x.cod === cod), k = _famIdent(f);
         (tr.querySelector('.cat-td') || tr.children[1])?.insertAdjacentHTML('afterend', `<td class="id-td" style="font-size:12px;white-space:nowrap">${k ? { placa: 'Placa', chassi: 'Chassi / série', ambos: 'Placa e chassi' }[k] : '<span style="color:var(--text-3)">Livre</span>'}${f && !f.ident && k ? ' <span style="color:var(--text-3);font-size:10.5px">(auto)</span>' : ''}</td>`); }); } catch (e) {} return r; };
+})();
+// v4.26: atalho "Abastecimentos" também no grupo Combustível
+(function () {
+  const g = document.querySelector('#grp-almoxarifado .nav-group-items'), src = document.querySelector('.sidebar .nav-item[onclick*="showPage(\'apon-diesel\'"]');
+  if (!g || !src || g.querySelector('.nav-item[data-atalho="abs"]')) return;
+  const c = src.cloneNode(true); c.dataset.atalho = 'abs'; c.classList.remove('active'); c.title = 'Abastecimentos de diesel (lista, CSV e tickets)';
+  g.insertBefore(c, g.firstChild);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
