@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.23 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.24 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17844,7 +17844,12 @@ window.imprimirTermoMob = imprimirTermoMob = function () {
     if (!m) return; const img = document.createElement('img'); img.src = m[1]; img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:8px';
     el.style.backgroundImage = 'none'; el.textContent = ''; el.appendChild(img); });
   const w = window.open('', '_blank'); if (!w) { toast('Libere as janelas pop-up para imprimir.', 'error'); return; }
-  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Termo de mobilização</title><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}figure,tr{break-inside:avoid}@media print{body{padding:0}}</style></head><body>' + c.outerHTML + '<script>Promise.all([...document.images].map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>setTimeout(()=>print(),300))<\/script></body></html>');
+  const _ttl = (() => { try { const tit = [...t.querySelectorAll('div')].find(d => !d.children.length && /^TERMO\b/.test((d.textContent || '').trim()));
+      const nome = tit ? tit.textContent.trim().toLowerCase().split(/\s+/).map((p, i) => i && /^(de|do|da|ao|e)$/.test(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)).join(' ') : 'Termo';
+      const tag = tit && tit.nextElementSibling ? tit.nextElementSibling.textContent.trim() : '';
+      const dm = (t.innerText || t.textContent || '').match(/(\d{2})\/(\d{2})\/(\d{4})/), dt = dm ? dm[1] + '-' + dm[2] + '-' + dm[3] : '';
+      return [nome, tag, dt].filter(Boolean).join('-').replace(/[\\/:*?"<>|]+/g, '-'); } catch (e) { return 'Termo'; } })();
+  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + _e(_ttl) + '</title><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}figure,tr{break-inside:avoid}@media print{body{padding:0}}</style></head><body>' + c.outerHTML + '<script>Promise.all([...document.images].map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>setTimeout(()=>print(),300))<\/script></body></html>');
   w.document.close();
 };
 // Apply configs on load
