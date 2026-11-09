@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.06</div>
+  <div class="login-versao">ObraKontrol Campo · v3.07</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6921,9 +6921,9 @@ function _manRenderFim(el, bar, T) {
     <div class="mr-sec" style="margin:14px 18px 6px">Peças e materiais</div>
     <div class="card" style="margin:0 16px 12px"><div class="card-body">
       ${fm.pecas.length ? '<div class="man-pecas">' + fm.pecas.map((p, i) => `<div class="man-peca"><div style="flex:1;min-width:0"><b>${_manE(p.nome)}</b>${p.avulsa ? ' <span class="man-chip">fora do cadastro</span>' : ''}<br><span>${_manE(p.qtd)} ${_manE(p.un || 'un')} × ${_manMoeda(p.preco)}${p.estoque != null ? ' · estoque ' + _manE(p.estoque) : ''}</span></div><b>${_manMoeda((+p.qtd || 0) * (+p.preco || 0))}</b><button type="button" onclick="man.fim.pecas.splice(${i},1);manRender()">×</button></div>`).join('') + '</div>' : '<div style="font-size:12.5px;color:var(--text3);margin-bottom:8px">Nenhuma peça lançada.</div>'}
-      <div style="display:flex;gap:8px;align-items:flex-end"><div style="flex:1;min-width:0"><label class="form-label">Do cadastro de Produtos</label><select class="form-control" onchange="man.fim.prodSel=this.value"><option value="">${prods.length ? 'Escolha a peça…' : 'Nenhum produto cadastrado'}</option>${prods.map(p => `<option value="${_manE(p.id)}" ${p.id === fm.prodSel ? 'selected' : ''}>${_manE((p.cod ? p.cod + ' · ' : '') + p.nome)}${p.estoque != null && p.estoque !== '' ? ' (' + p.estoque + ' ' + (p.unidade || '') + ')' : ''}</option>`).join('')}</select></div>
-        <div style="width:74px"><label class="form-label">Qtd</label><input class="form-control" type="number" inputmode="decimal" value="${_manE(fm.qtd)}" oninput="man.fim.qtd=this.value"/></div>
-        <button type="button" class="btn btn-outline" style="min-height:46px" onclick="manPecaAdd()">+</button></div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><div style="flex:1 1 100%;min-width:0"><label class="form-label">Do cadastro de Produtos</label><select class="form-control" style="width:100%" onchange="man.fim.prodSel=this.value"><option value="">${prods.length ? 'Escolha a peça…' : 'Nenhum produto cadastrado'}</option>${prods.map(p => `<option value="${_manE(p.id)}" ${p.id === fm.prodSel ? 'selected' : ''}>${_manE((p.cod ? p.cod + ' · ' : '') + p.nome)}${p.estoque != null && p.estoque !== '' ? ' (' + p.estoque + ' ' + (p.unidade || '') + ')' : ''}</option>`).join('')}</select></div>
+        <div style="flex:1;min-width:0"><label class="form-label">Quantidade</label><input class="form-control" type="number" inputmode="decimal" value="${_manE(fm.qtd)}" oninput="man.fim.qtd=this.value"/></div>
+        <button type="button" class="btn btn-outline" style="min-height:46px;width:auto;flex:0 0 auto;padding:0 18px" onclick="manPecaAdd()">+ Adicionar</button></div>
       <details class="man-av" ${fm.avNome ? 'open' : ''}><summary>Peça fora do cadastro</summary><div style="display:flex;gap:8px;margin-top:8px"><input class="form-control" style="flex:1" placeholder="Descrição" value="${_manE(fm.avNome)}" oninput="man.fim.avNome=this.value"/><input class="form-control" style="width:96px" type="number" inputmode="decimal" placeholder="R$ un." value="${_manE(fm.avPreco)}" oninput="man.fim.avPreco=this.value"/><button type="button" class="btn btn-outline" onclick="manPecaAvulsa()">+</button></div>
         <div style="font-size:11px;color:var(--text3);margin-top:4px">Usa a quantidade de cima. Peça ao escritório para cadastrar em Produtos.</div></details>
       ${os.executor === 'terceiro' ? `<div class="form-group" style="margin-top:12px"><label class="form-label">Mão de obra do terceiro (R$)</label><input class="form-control" type="number" inputmode="decimal" value="${_manE(fm.custoMO)}" oninput="manCampo('custoMO',this.value);document.getElementById('man-tot').textContent=_manMoeda(${totP}+(_manNum(this.value)||0))"/></div>` : ''}
