@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.04</div>
+  <div class="login-versao">ObraKontrol Campo · v3.05</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -3941,10 +3941,7 @@ function mobRender() {
       <div class="form-group"><label class="form-label">Modelo *</label>${sel('mob-mod', mods.map(m => [m.cod, m.nome || m.cod]).concat([['__novo', '+ Modelo novo (não está na lista)']]), mob.modelo, 'Escolha o modelo…', "mobCampo('modelo',this.value);mobRender()")}
         ${mob.modelo === '__novo' ? `<input class="form-control" style="margin-top:8px" placeholder="Nome do modelo, ex.: Volvo EC220" value="${_mobEsc(mob.modeloNovo)}" oninput="mob.modeloNovo=this.value"/>` : ''}</div>
       <div class="form-group"><label class="form-label">Empresa proprietária *</label>${sel('mob-prop', emps.map(e => [e.cod, (e.cod ? e.cod + ' · ' : '') + (e.fantasia ? e.fantasia + ' — ' : '') + (e.nome || e.razao || '')]), mob.prop, 'Própria ou locadora…', "mob.prop=this.value")}</div>
-      <div class="form-group"><label class="form-label">Placa</label><input class="form-control" value="${_mobEsc(mob.placa)}" oninput="mob.placa=this.value.toUpperCase()" placeholder="Ex.: ABC1D23 (se tiver)" style="text-transform:uppercase"/></div>
-      <div style="font-size:11.5px;color:var(--text3);margin:-6px 0 8px">Preencha <b>placa, chassi ou nº de série</b> — pelo menos um. Máquina sem placa (retro, escavadeira…) vai pelo chassi ou série.</div>
-      <div style="display:flex;gap:10px"><div class="form-group" style="flex:1"><label class="form-label">Chassi</label><input class="form-control" value="${_mobEsc(mob.chassi)}" oninput="mob.chassi=this.value.toUpperCase()" style="text-transform:uppercase"/></div>
-        <div class="form-group" style="flex:1"><label class="form-label">Nº de série</label><input class="form-control" value="${_mobEsc(mob.serie)}" oninput="mob.serie=this.value"/></div></div>
+      ${_mobIdHtml()}
       <div class="form-group"><label class="form-label">Validade do documento (CRLV / licenciamento)</label><input class="form-control" type="date" data-futuro="1" value="${_mobEsc(mob.docVal)}" oninput="mob.docVal=this.value"/></div>
       <div class="form-group"><label class="form-label">Ano de fabricação</label><input class="form-control" type="number" inputmode="numeric" value="${_mobEsc(mob.ano)}" oninput="mob.ano=this.value" placeholder="Ex.: 2021"/></div>
       <div class="form-group"><label class="form-label">Foto da plaqueta ou documento</label>${_mobFotoBtn('placa', 'Foto da plaqueta', mob.fotoPlaca, false)}</div>
@@ -4014,7 +4011,7 @@ async function mobSigNome(k) {
 function mobSigLimpar(k) { mob[k === 'rec' ? 'sigRecTipo' : 'sigEntTipo'] = null; mob[k === 'rec' ? 'sigRec' : 'sigEnt'] = ''; const c = document.getElementById('sig-' + k); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height); }
 function _mobFalta(p) {
   const f = [];
-  if (p === 0) { if (!usuarioCampo.obra && !mob.obra) f.push('a obra'); if (!mob.familia) f.push('a família'); if (!mob.modelo || (mob.modelo === '__novo' && !mob.modeloNovo.trim())) f.push('o modelo'); if (!mob.prop) f.push('a empresa proprietária'); if (!mob.placa.trim() && !String(mob.chassi || '').trim() && !String(mob.serie || '').trim()) f.push('a placa, o chassi ou o nº de série'); }
+  if (p === 0) { if (!usuarioCampo.obra && !mob.obra) f.push('a obra'); if (!mob.familia) f.push('a família'); if (!mob.modelo || (mob.modelo === '__novo' && !mob.modeloNovo.trim())) f.push('o modelo'); if (!mob.prop) f.push('a empresa proprietária'); f.push(..._mobIdFalta()); }
   if (p === 1) { const _mn = _mobMed() === 'hodometro' ? 'hodômetro' : 'horímetro'; if (!String(mob.hor).trim()) f.push('o ' + _mn); if (!mob.fotoHor) f.push('a foto do ' + _mn); if (!mob.comb) f.push('o combustível na chegada'); }
   if (p === 2) { const sem = mob.check.filter(c => !c.st).length; if (sem) f.push(sem + ' item(ns) do checklist'); mob.check.forEach((c, i) => { if (c.st === 'nok' && (!c.obs.trim() || !c.foto)) f.push('observação e foto do item ' + (i + 1)); }); }
   if (p === 3) { MOB_FOTOS.forEach(([k, t]) => { if (!mob.fotos[k]) f.push('foto ' + t.toLowerCase()); }); mob.avarias.forEach((a, i) => { if (!a.desc.trim() || !a.foto) f.push('descrição e foto da avaria ' + (i + 1)); }); }
@@ -6609,6 +6606,56 @@ function otDefinir(id) {
     return r;
   };
 })();
+
+// v3.05: placa, chassi e nº de série com padrão — o que pedir vem da família (Placa / Chassi-série / os dois)
+function _mobIdent() {
+  const f = (dadosCampo.familias || []).find(x => x.cod === mob.familia); if (!f) return '';
+  if (['placa', 'chassi', 'ambos'].includes(f.ident)) return f.ident;
+  const cat = f.categoria || '', t = String(f.desc || f.cod || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (/Veículos/.test(cat) || /veiculo leve|caminhao|onibus|carreta|cavalo|bitrem|truck|toco|\bcarro\b|picape|pick.?up|\bvan\b|utilitario|automovel|caminhonete|\bmoto\b/.test(t)) return 'placa';
+  if (cat === 'Linha amarela' || /escavadeira|retro|carregadeira|motoniveladora|rolo|trator|manipulador|bobcat|perfuratriz|guindaste|empilhadeira|compactador|vibro|fresadora|bulldozer/.test(t)) return 'chassi';
+  return '';
+}
+const _idN = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const _placaOk = v => /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(_idN(v));
+const _chassiOk = (v, veic) => veic ? /^[A-HJ-NPR-Z0-9]{17}$/.test(_idN(v)) : /^[A-Z0-9]{6,17}$/.test(_idN(v));
+const _serieOk = v => _idN(v).length >= 4;
+function _mobIdErros() {
+  const id = _mobIdent(), veic = id === 'placa' || id === 'ambos', e = {};
+  if (mob.placa.trim() && !_placaOk(mob.placa)) e.placa = 'Placa fora do padrão (ABC1234 ou ABC1D23)';
+  if (String(mob.chassi || '').trim() && !_chassiOk(mob.chassi, veic)) e.chassi = veic ? 'Chassi de veículo tem 17 caracteres (sem I, O e Q)' : 'Chassi com 6 a 17 letras e números';
+  if (String(mob.serie || '').trim() && !_serieOk(mob.serie)) e.serie = 'Nº de série com pelo menos 4 letras ou números';
+  return e;
+}
+function _mobIdFalta() {
+  const id = _mobIdent(), e = _mobIdErros(), veic = id === 'placa' || id === 'ambos', tem = k => String(mob[k] || '').trim(), f = [];
+  if (e.placa) f.push('a placa no padrão ABC1234 ou ABC1D23'); if (e.chassi) f.push(veic ? 'o chassi com 17 caracteres' : 'o chassi com 6 a 17 caracteres'); if (e.serie) f.push('o nº de série com 4 ou mais caracteres');
+  if (id === 'placa' && !tem('placa')) f.push('a placa');
+  else if (id === 'ambos') { if (!tem('placa')) f.push('a placa'); if (!tem('chassi')) f.push('o chassi'); }
+  else if (id === 'chassi' && !tem('chassi') && !tem('serie')) f.push('o chassi ou o nº de série');
+  else if (!id && !tem('placa') && !tem('chassi') && !tem('serie')) f.push('a placa, o chassi ou o nº de série');
+  return f;
+}
+function _mobIdChk(el, k) {
+  if (k === 'placa') { const n = _idN(el.value).slice(0, 7); mob.placa = n; if (el.value !== n) el.value = n; }
+  else if (k === 'chassi') { const n = _idN(el.value).slice(0, 17); mob.chassi = n; if (el.value !== n) el.value = n; const c = document.getElementById('mob-ch-n'); if (c) c.textContent = n.length + '/17'; }
+  else mob.serie = el.value.toUpperCase();
+  const e = _mobIdErros(), m = document.getElementById('mob-id-' + k); if (m) { m.textContent = e[k] || ''; }
+  el.style.borderColor = e[k] ? '#DC2626' : '';
+}
+function _mobIdHtml() {
+  const id = _mobIdent(), e = _mobIdErros();
+  const err = k => `<div id="mob-id-${k}" style="font-size:11.5px;color:#DC2626;margin-top:4px">${e[k] || ''}</div>`;
+  const placa = req => `<div class="form-group"><label class="form-label">Placa${req ? ' *' : ''}</label><input class="form-control" value="${_mobEsc(mob.placa)}" oninput="_mobIdChk(this,'placa')" placeholder="ABC1D23 ou ABC1234" maxlength="8" autocapitalize="characters" style="text-transform:uppercase;font-family:monospace;font-size:18px;letter-spacing:.08em${e.placa ? ';border-color:#DC2626' : ''}"/>${err('placa')}</div>`;
+  const chassi = (req, veic) => `<div class="form-group" style="flex:1.4"><label class="form-label">Chassi${req ? ' *' : ''} <span id="mob-ch-n" style="float:right;font-weight:500;color:var(--text3)">${_idN(mob.chassi).length}/17</span></label><input class="form-control" value="${_mobEsc(mob.chassi)}" oninput="_mobIdChk(this,'chassi')" maxlength="20" autocapitalize="characters" placeholder="${veic ? '17 caracteres' : '6 a 17 caracteres'}" style="text-transform:uppercase;font-family:monospace${e.chassi ? ';border-color:#DC2626' : ''}"/>${err('chassi')}</div>`;
+  const serie = () => `<div class="form-group" style="flex:1"><label class="form-label">Nº de série</label><input class="form-control" value="${_mobEsc(mob.serie)}" oninput="_mobIdChk(this,'serie')" autocapitalize="characters" style="text-transform:uppercase${e.serie ? ';border-color:#DC2626' : ''}"/>${err('serie')}</div>`;
+  const dica = t => `<div style="font-size:11.5px;color:var(--text3);margin:-6px 0 8px">${t}</div>`;
+  if (!mob.familia) return dica('Escolha a família para saber se o equipamento vai pela <b>placa</b> ou pelo <b>chassi / nº de série</b>.');
+  if (id === 'placa') return placa(true) + `<div style="display:flex;gap:10px">${chassi(false, true)}${serie()}</div>`;
+  if (id === 'ambos') return placa(true) + `<div style="display:flex;gap:10px">${chassi(true, true)}${serie()}</div>`;
+  if (id === 'chassi') return dica('Máquina: preencha o <b>chassi ou o nº de série</b> (pelo menos um).') + `<div style="display:flex;gap:10px">${chassi(false, false)}${serie()}</div>`;
+  return placa(false) + dica('Preencha <b>placa, chassi ou nº de série</b> — pelo menos um.') + `<div style="display:flex;gap:10px">${chassi(false, false)}${serie()}</div>`;
+}
 </script>
 </body>
 </html>
