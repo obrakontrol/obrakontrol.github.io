@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.27 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.28 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17887,6 +17887,17 @@ function _famIdent(f) { if (f && ID_EQ[f.ident]) return f.ident; const c = _famC
     b.style.display = _ehMaster() ? '' : 'none'; b.textContent = '🏷 Padronizar TAGs' + (ruins ? ' (' + ruins + ' fora do padrão)' : ''); b.classList.toggle('btn-primary', !!ruins); b.classList.toggle('btn-outline', !ruins); };
   setInterval(vis, 2000); vis();
   const oA = window.tagPadronizarAplicar; if (oA) window.tagPadronizarAplicar = tagPadronizarAplicar = async function () { const r = await oA.apply(this, arguments); try { renderFrota(); } catch (e) {} return r; };
+})();
+// v4.28: modelo dos veículos da frota sempre em MAIÚSCULAS (cadastro, importação, app de campo e os que já existem)
+function _frModeloUp() {
+  const up = v => String(v || '').trim().replace(/\s+/g, ' ').toUpperCase(), salvar = (col, x) => { if (db && _firebaseReady && usuarioLogado) fbSave(col, x.id, x).catch(() => {}); };
+  (dados.frota || []).forEach(v => { if (v.modelo && v.modelo !== up(v.modelo)) { v.modelo = up(v.modelo); salvar('frota', v); } });
+  (dados.modelos || []).forEach(m => { const f = (dados.familias || []).find(x => x.cod === m.familia); const veic = /Veículos leves/.test(_famCat(f || { desc: m.familia })) || /^VL$/i.test(m.familia || '') || (dados.frota || []).some(v => v.modeloId === m.id);
+    if (veic && m.nome && m.nome !== up(m.nome)) { m.nome = up(m.nome); salvar('modelos', m); } });
+}
+(function () {
+  const oR = window.renderFrota; if (!oR) return;
+  window.renderFrota = renderFrota = function () { try { _frModeloUp(); } catch (e) {} return oR.apply(this, arguments); };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
