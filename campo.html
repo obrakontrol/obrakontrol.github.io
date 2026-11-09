@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.05</div>
+  <div class="login-versao">ObraKontrol Campo · v3.06</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6656,6 +6656,468 @@ function _mobIdHtml() {
   if (id === 'chassi') return dica('Máquina: preencha o <b>chassi ou o nº de série</b> (pelo menos um).') + `<div style="display:flex;gap:10px">${chassi(false, false)}${serie()}</div>`;
   return placa(false) + dica('Preencha <b>placa, chassi ou nº de série</b> — pelo menos um.') + `<div style="display:flex;gap:10px">${chassi(false, false)}${serie()}</div>`;
 }
+
+// ══════════════════════════════════════════════════════════════
+// v3.06: MANUTENÇÃO — ORDENS DE SERVIÇO (OS) no mesmo app
+// Chave "Operação | Manutenção" na tela inicial (perfis de manutenção e Admin).
+// OS de equipamento ou veículo leve: abre (parado ou não), finaliza com peças do cadastro de Produtos,
+// conta o tempo parado e avisa as preventivas por horímetro / km / dias.
+// Coleções: ordensServico, planosPrev, produtos.
+// ══════════════════════════════════════════════════════════════
+const MAN_TIPOS = [['Preventiva', '🛠'], ['Corretiva', '⚠️'], ['Troca de peça', '⚙️'], ['Pneu / esteira', '🛞'], ['Elétrica', '⚡'], ['Hidráulica', '💧'], ['Outros', '•']];
+let man = null;
+function _manPode() {
+  const u = usuarioCampo; if (!u) return false; if (u.perfil === 'Admin') return true;
+  if (/manuten/i.test(u.perfil || '')) return true;
+  try { if (podeModulo('manutencao')) return true; } catch (e) {}
+  return false;
+}
+const _manE = t => _esc(t);
+function _manObra() { return (usuarioCampo && usuarioCampo.obra) || ''; }
+function _manLS(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem('campo_cache_' + k) || '[]'); localStorage.setItem('campo_cache_' + k, JSON.stringify(v)); } catch (e) { return []; } }
+// OS: servidor + o que está pendente neste celular (o pendente vale mais)
+function _manOSs() {
+  const m = new Map(); (dadosCampo.ordensServico || []).forEach(o => m.set(o.id, o));
+  (pendentes || []).forEach(p => { if (p.colecao === 'ordensServico') m.set(p.item.id, { ...(m.get(p.item.id) || {}), ...p.item }); });
+  const ob = _manObra(); return [...m.values()].filter(o => !ob || !o.obra || o.obra === ob);
+}
+function _manAbertas() { return _manOSs().filter(o => o.status === 'aberta'); }
+function _manOSAberta(alvoId) { return _manAbertas().find(o => o.equipId === alvoId); }
+function _manGuardarOS(os) {
+  const l = dadosCampo.ordensServico || (dadosCampo.ordensServico = []); const i = l.findIndex(x => x.id === os.id);
+  if (i >= 0) l[i] = { ...l[i], ...os }; else l.push(os); _manLS('ordensServico', l.slice(-400));
+}
+async function _manCarregar() {
+  const [os, pl, pr] = await Promise.all(['ordensServico', 'planosPrev', 'produtos'].map(c => fbCarregar(c).catch(() => null)));
+  const ob = _manObra(), daObra = l => !ob ? l : l.filter(x => !x.obra || x.obra === ob);
+  if (os) { dadosCampo.ordensServico = daObra(os); _manLS('ordensServico', dadosCampo.ordensServico.slice(-400)); } else dadosCampo.ordensServico = _manLS('ordensServico');
+  if (pl) { dadosCampo.planosPrev = daObra(pl); _manLS('planosPrev', dadosCampo.planosPrev); } else dadosCampo.planosPrev = _manLS('planosPrev');
+  if (pr) { dadosCampo.produtos = daObra(pr); _manLS('produtos', dadosCampo.produtos); } else dadosCampo.produtos = _manLS('produtos');
+  if (!window._vlFrota || !window._vlFrota.length) { try { const fr = await fbCarregar('frota'); if (fr) { window._vlFrota = fr; _manLS('frota', fr); } else window._vlFrota = _manLS('frota'); } catch (e) {} }
+  try { _manHome(); } catch (e) {}
+}
+function _manEqs() { return _daObraCampo(dadosCampo.equipamentos || []).filter(e => !/desmob|inativ|baixad/i.test(e.status || '')); }
+function _manVls() { const ob = _manObra(); return (window._vlFrota || []).filter(v => (!ob || !v.obra || v.obra === ob) && !/devolv|inativ|baixad/i.test(v.status || '')); }
+function _manAlvo(os) {
+  if (!os || !os.equipId) return null;
+  if (os.alvo === 'vl') { const v = (window._vlFrota || []).find(x => x.id === os.equipId); return v ? { id: v.id, tag: v.tag || v.placa, placa: v.placa || '', modelo: v.modelo || '', familia: 'Veículo leve', km: true, base: +v.kmMob || null, dataBase: v.dataMob || '' } : null; }
+  const e = (dadosCampo.equipamentos || []).find(x => x.id === os.equipId); if (!e) return null;
+  const fam = (dadosCampo.familias || []).find(f => f.cod === (e.codFamilia || e.familia));
+  return { id: e.id, tag: e.tag || e.placa, placa: e.placa || '', modelo: e.modelo || e.codModelo || '', familia: (fam && (fam.desc || fam.cod)) || e.familia || e.codFamilia || '', famCod: (fam && fam.cod) || e.codFamilia || e.familia || '', km: e.medidor === 'hodometro', base: parseFloat(e.horMob), dataBase: e.dataMob || '' };
+}
+function _manAgoraLocal() { const d = new Date(); return _hojeISO(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function _manDH(s) { if (!s) return '—'; const [d, h] = String(s).split('T'); return d.split('-').reverse().join('/') + (h ? ' ' + h.slice(0, 5) : ''); }
+function _manHoras(a, b) { const ta = new Date(a).getTime(), tb = b ? new Date(b).getTime() : Date.now(); return isNaN(ta) || isNaN(tb) ? 0 : Math.max(0, (tb - ta) / 36e5); }
+function _manDur(h) { if (h < 1) return Math.round(h * 60) + ' min'; if (h < 48) return Math.floor(h) + 'h' + String(Math.round((h % 1) * 60)).padStart(2, '0'); return Math.floor(h / 24) + 'd ' + Math.round(h % 24) + 'h'; }
+function _manMoeda(v) { return (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function _manNum(v) { const n = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(n) ? null : n; }
+function _manSigla() { const o = (dadosCampo.obras || []).concat(window._mobObras || []).find(x => x.id === _manObra()); return o && (o.sigla || o.cod) ? String(o.sigla || o.cod).toUpperCase().replace(/\s+/g, '') : 'OB'; }
+function _manProxNum() {
+  const pre = 'OS-' + _manSigla() + '-', re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$');
+  let mx = 0; _manOSs().forEach(o => { const m = re.exec(o.num || ''); if (m) mx = Math.max(mx, +m[1]); });
+  return pre + String(mx + 1).padStart(4, '0');
+}
+
+// ── tela inicial: chave Operação | Manutenção ──
+function _manModo() { let m = ''; try { m = localStorage.getItem('campo_modo') || ''; } catch (e) {} if (!m) m = /manuten/i.test((usuarioCampo && usuarioCampo.perfil) || '') ? 'man' : 'op'; return m; }
+function manModo(m) { try { localStorage.setItem('campo_modo', m); } catch (e) {} _manHome(); }
+function _manHome() {
+  const home = document.getElementById('screen-home'), grid = home && home.querySelector('.hgrid:not(#hgrid-man)'); if (!grid) return;
+  let sw = document.getElementById('modo-sw'), gm = document.getElementById('hgrid-man');
+  const pode = _manPode();
+  if (!pode) { if (sw) sw.style.display = 'none'; if (gm) gm.style.display = 'none'; grid.style.display = ''; return; }
+  if (!sw) {
+    grid.insertAdjacentHTML('beforebegin', `<div class="modo-sw" id="modo-sw"><button type="button" data-m="op" onclick="manModo('op')">Operação</button><button type="button" data-m="man" onclick="manModo('man')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>Manutenção</button></div>`);
+    sw = document.getElementById('modo-sw');
+  }
+  if (!gm) {
+    const ch = '<svg class="hchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+    grid.insertAdjacentHTML('afterend', `<div class="hgrid" id="hgrid-man">
+      <div class="hcard man" onclick="manNova()"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg><div class="hcard-t">Abrir OS</div><div class="hcard-s">Equipamento ou veículo</div>${ch}</div>
+      <div class="hcard" onclick="manAbrir('lista')"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg><div class="hcard-t">OS abertas</div><div class="hcard-s" id="man-s-ab">—</div><div class="module-card-badge" id="man-b-ab" style="display:none"></div></div>
+      <div class="hcard" onclick="manAbrir('prev')"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 14.5 15"/><line x1="9" y1="2" x2="15" y2="2"/></svg><div class="hcard-t">Preventivas</div><div class="hcard-s" id="man-s-pv">Por horímetro, km ou dias</div><div class="module-card-badge" id="man-b-pv" style="display:none"></div></div>
+      <div class="hcard" onclick="manAbrir('hist')"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 16 14"/></svg><div class="hcard-t">Histórico</div><div class="hcard-s">OS finalizadas</div>${ch}</div>
+      <div class="hcard" onclick="sincronizarPendentes()"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><div class="hcard-t">Pendentes</div><div class="hcard-s" id="man-s-pend">0 offline</div></div>
+      <div class="hcard" onclick="abrirMeuResumo()"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="13"/><line x1="12" y1="20" x2="12" y2="8"/><line x1="18" y1="20" x2="18" y2="4"/></svg><div class="hcard-t">Meu Resumo</div><div class="hcard-s">Termos e OS do dia</div></div>
+    </div>`);
+    gm = document.getElementById('hgrid-man');
+  }
+  const m = _manModo();
+  sw.style.display = ''; sw.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  grid.style.display = m === 'man' ? 'none' : ''; gm.style.display = m === 'man' ? '' : 'none';
+  const ab = _manAbertas(), par = ab.filter(o => o.parado);
+  const s = document.getElementById('man-s-ab'); if (s) s.textContent = ab.length ? par.length + ' parado(s) agora' : 'Nenhuma aberta';
+  const b = document.getElementById('man-b-ab'); if (b) { b.style.display = ab.length ? '' : 'none'; b.textContent = ab.length + ' aberta(s)'; }
+  const pv = _manPrevLista(), venc = pv.filter(x => x.st === 'venc').length, prox = pv.filter(x => x.st === 'prox').length;
+  const bp = document.getElementById('man-b-pv'); if (bp) { bp.style.display = venc + prox ? '' : 'none'; bp.textContent = (venc ? venc + ' vencida(s)' : '') + (venc && prox ? ' · ' : '') + (prox ? prox + ' perto' : ''); bp.classList.toggle('alerta', !!venc); }
+  const sp = document.getElementById('man-s-pend'), pl = document.getElementById('pendentes-label'); if (sp && pl) sp.textContent = pl.textContent;
+}
+
+// ── tela da manutenção ──
+function _manTela() {
+  if (document.getElementById('screen-man')) return;
+  const voltar = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
+  document.getElementById('screen-home').insertAdjacentHTML('afterend', `<div class="screen" id="screen-man">
+    <div class="topbar"><div class="topbar-row"><div class="tb-left"><button class="tb-back" onclick="manVoltar()" aria-label="Voltar">${voltar}</button><div><div class="topbar-title" id="man-tit">Manutenção</div><div class="topbar-sub" id="man-sub"></div></div></div>
+      <button class="btn btn-sm tb-qr" id="man-btn-qr" style="margin-left:auto;background:#1D4ED8;color:#fff;border:none;display:none" onclick="abrirQR('manq')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>QR Code</button></div></div>
+    <div class="content" id="man-content"></div>
+    <div class="mob-bar" id="man-bar" style="display:none"></div></div>`);
+}
+function manVoltar() {
+  if (man && (man.view === 'nova' || man.view === 'fim') && man.sujo && !confirm('Sair? O que foi preenchido será perdido.')) return;
+  if (man && man.view === 'fim' && man.de) return manAbrir(man.de);
+  man = null; showScreen('home'); _manHome();
+}
+function manAbrir(view) { _manTela(); man = { view }; showScreen('man'); manRender(); }
+function manNova(pre) {
+  _manTela();
+  man = { view: 'nova', sujo: false, os: Object.assign({ alvo: 'eq', equipId: '', tipo: '', planoId: '', parado: true, inicio: _manAgoraLocal(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioCampo && usuarioCampo.nome) || '', fotos: [] }, pre || {}) };
+  showScreen('man'); manRender(); if (man.os.equipId) _manUltLeitura();
+}
+function manFinalizar(id, de) {
+  const os = _manOSs().find(o => o.id === id); if (!os) return toast('OS não encontrada.', 'err');
+  _manTela();
+  man = { view: 'fim', de: de || 'lista', sujo: false, os: JSON.parse(JSON.stringify(os)), fim: { fim: _manAgoraLocal(), horFim: '', servico: '', pecas: [], custoMO: '', fotos: [], prodSel: '', qtd: '1', avNome: '', avPreco: '' } };
+  showScreen('man'); manRender();
+}
+function manCampo(k, v, re) { if (!man) return; (man.view === 'fim' && k in man.fim ? man.fim : man.os)[k] = v; man.sujo = true; if (re) manRender(); }
+
+function manRender() {
+  if (!man) return;
+  const el = document.getElementById('man-content'), bar = document.getElementById('man-bar'), qr = document.getElementById('man-btn-qr');
+  const T = (t, s) => { document.getElementById('man-tit').textContent = t; document.getElementById('man-sub').textContent = s || ''; };
+  qr.style.display = man.view === 'nova' ? '' : 'none';
+  bar.style.display = 'none'; bar.innerHTML = '';
+  if (man.view === 'lista') {
+    const l = _manAbertas().sort((a, b) => (b.parado - a.parado) || String(a.inicio).localeCompare(String(b.inicio)));
+    T('OS abertas', l.length + ' aberta(s) · ' + l.filter(o => o.parado).length + ' parado(s)');
+    el.innerHTML = (l.length ? l.map(o => _manCardOS(o, true)).join('') : '<div class="ap-vazio">Nenhuma OS aberta 👍</div>') + `<div style="padding:4px 16px 20px"><button class="btn btn-outline" style="width:100%" onclick="manNova()">+ Abrir nova OS</button></div>`;
+    clearInterval(window._manTick); window._manTick = setInterval(() => { if (man && man.view === 'lista' && document.getElementById('screen-man').classList.contains('active')) document.querySelectorAll('[data-man-ini]').forEach(x => x.textContent = _manDur(_manHoras(x.dataset.manIni))); else clearInterval(window._manTick); }, 30000);
+    return;
+  }
+  if (man.view === 'hist') {
+    const q = (man.q || '').toLowerCase();
+    let l = _manOSs().filter(o => o.status !== 'aberta').sort((a, b) => String(b.fim || b.canceladaEm || '').localeCompare(String(a.fim || a.canceladaEm || '')));
+    if (q) l = l.filter(o => [o.num, o.tag, o.placa, o.tipo, o.problema].some(x => String(x || '').toLowerCase().includes(q)));
+    T('Histórico de OS', l.length + ' OS');
+    el.innerHTML = `<div style="padding:12px 16px 0"><input class="form-control" placeholder="Buscar TAG, placa, nº da OS…" value="${_manE(man.q || '')}" oninput="man.q=this.value;clearTimeout(window._manQ);window._manQ=setTimeout(manRender,300)"/></div>` +
+      (l.length ? l.slice(0, 80).map(o => _manCardOS(o, false)).join('') : '<div class="ap-vazio">Nenhuma OS finalizada ainda</div>');
+    return;
+  }
+  if (man.view === 'prev') {
+    const l = _manPrevLista();
+    T('Preventivas', l.filter(x => x.st === 'venc').length + ' vencida(s) · ' + l.filter(x => x.st === 'prox').length + ' perto');
+    const nPl = (dadosCampo.planosPrev || []).filter(p => p.ativo !== false).length;
+    el.innerHTML = !nPl ? '<div class="ap-vazio">Nenhum plano de preventiva cadastrado.<br><small>O escritório cadastra no painel: Manutenção → Planos de preventiva.</small></div>'
+      : !l.length ? '<div class="ap-vazio">Nenhum equipamento nos planos desta obra.</div>'
+      : '<div class="card" style="padding:0;overflow:hidden;margin:12px 16px">' + l.map(x => {
+        const ab = _manOSAberta(x.alvo.id);
+        return `<div class="man-pv ${x.st}" onclick="${ab ? `manFinalizar('${_manE(ab.id)}','prev')` : `manNova({alvo:'${x.tipoAlvo}',equipId:'${_manE(x.alvo.id)}',tipo:'Preventiva',planoId:'${_manE(x.plano.id)}',parado:true})`}">
+          <div class="man-pv-st"></div><div style="flex:1;min-width:0"><div class="list-name">${_manE(x.alvo.tag)} <span class="man-chip">${_manE(x.plano.nome || 'Preventiva')}</span></div>
+          <div class="list-sub">${x.txt}</div>${ab ? `<div class="list-sub" style="color:#1D4ED8;font-weight:700">🔧 ${_manE(ab.num)} aberta — toque para finalizar</div>` : ''}</div>
+          <div class="man-pv-r">${x.st === 'venc' ? 'VENCIDA' : x.st === 'prox' ? 'PERTO' : 'OK'}</div></div>`; }).join('') + '</div>' +
+        '<div style="padding:0 16px 20px;font-size:11.5px;color:var(--text3)">Conta a partir da última OS preventiva finalizada do plano (ou da leitura de mobilização). Toque no equipamento para abrir a OS.</div>';
+    return;
+  }
+  if (man.view === 'nova') return _manRenderNova(el, bar, T);
+  if (man.view === 'fim') return _manRenderFim(el, bar, T);
+}
+function _manCardOS(o, aberta) {
+  const h = o.parado ? (aberta ? _manHoras(o.inicio) : (+o.horasParado || 0)) : 0;
+  const tipo = (MAN_TIPOS.find(t => t[0] === o.tipo) || ['', '•'])[1] + ' ' + _manE(o.tipo || '—');
+  return `<div class="man-os ${aberta && o.parado ? 'parado' : ''} ${o.status === 'cancelada' ? 'canc' : ''}">
+    <div class="man-os-h"><b>${_manE(o.tag || '—')}</b><span class="man-chip">${tipo}</span><span class="man-num">${_manE(o.num || '')}</span></div>
+    <div class="man-os-p">${_manE(o.problema || '')}</div>
+    <div class="man-os-m">${aberta ? 'Aberta ' + _manDH(o.inicio) : (o.status === 'cancelada' ? 'Cancelada' : 'Finalizada ' + _manDH(o.fim))} · ${o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ': ' + _manE(o.fornecedor) : '') : 'Equipe própria'}${!aberta && o.custoTotal ? ' · <b>' + _manMoeda(o.custoTotal) + '</b>' : ''}</div>
+    <div class="man-os-f">${o.parado ? `<span class="man-parado">⏸ ${aberta ? 'Parado há ' : 'Ficou parado '}<b ${aberta ? `data-man-ini="${_manE(o.inicio)}"` : ''}>${_manDur(h)}</b></span>` : '<span class="man-rodando">▶ Trabalhando durante o serviço</span>'}
+      ${aberta ? `<button class="btn btn-sm" style="margin-left:auto;background:#1D4ED8;color:#fff;border:none" onclick="manFinalizar('${_manE(o.id)}')">Finalizar</button>` : `<button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="manVerOS('${_manE(o.id)}')">Ver OS</button>`}</div></div>`;
+}
+function _manRenderNova(el, bar, T) {
+  const os = man.os, alvo = _manAlvo(os), ab = os.equipId ? _manOSAberta(os.equipId) : null;
+  T('Abrir OS', alvo ? alvo.tag : 'Equipamento ou veículo leve');
+  const lista = os.alvo === 'vl' ? _manVls().map(v => [v.id, (v.tag || v.placa) + (v.placa && v.tag ? ' · ' + v.placa : '') + (v.modelo ? ' — ' + v.modelo : '')])
+    : _manEqs().map(e => [e.id, (e.tag || e.placa) + (e.familia || e.codFamilia ? ' — ' + (e.familia || e.codFamilia) : '')]);
+  lista.sort((a, b) => a[1].localeCompare(b[1]));
+  const planos = _manPlanosDo(os.alvo, os.equipId);
+  const emps = _daObraCampo(dadosCampo.empresas || []);
+  const med = alvo && alvo.km ? 'Hodômetro (km)' : 'Horímetro (h)';
+  el.innerHTML = `<div class="card" style="margin:12px 16px"><div class="card-body">
+    <div class="form-group"><label class="form-label">O que vai para manutenção *</label><div class="mob-seg">${[['eq', 'Equipamento'], ['vl', 'Veículo leve']].map(([k, t]) => `<button type="button" class="${os.alvo === k ? 'on' : ''}" onclick="man.os.alvo='${k}';man.os.equipId='';man.os.planoId='';man.os.horIni='';manRender()">${t}</button>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">${os.alvo === 'vl' ? 'Veículo' : 'Equipamento'} *</label>
+      <select class="form-control" onchange="man.os.equipId=this.value;man.os.planoId='';man.os.horIni='';man.sujo=true;manRender();_manUltLeitura()"><option value="">Escolha ou leia o QR Code…</option>${lista.map(([v, t]) => `<option value="${_manE(v)}" ${v === os.equipId ? 'selected' : ''}>${_manE(t)}</option>`).join('')}</select>
+      ${alvo ? `<div class="man-alvo"><b>${_manE(alvo.tag)}</b>${alvo.placa && alvo.placa !== alvo.tag ? ' · ' + _manE(alvo.placa) : ''}${alvo.modelo ? ' · ' + _manE(alvo.modelo) : ''}${alvo.familia ? '<br><span>' + _manE(alvo.familia) + '</span>' : ''}</div>` : ''}
+      ${ab ? `<div class="man-aviso">Este ${os.alvo === 'vl' ? 'veículo' : 'equipamento'} já tem a <b>${_manE(ab.num)}</b> aberta (${_manE(ab.tipo)}). <button type="button" class="mob-link" onclick="manFinalizar('${_manE(ab.id)}')">Finalizar ela</button></div>` : ''}</div>
+    <div class="form-group"><label class="form-label">Tipo de manutenção *</label><div class="man-tipos">${MAN_TIPOS.map(([t, ic]) => `<button type="button" class="${os.tipo === t ? 'on' : ''}" onclick="man.os.tipo='${t}';man.sujo=true;manRender()"><span>${ic}</span>${t}</button>`).join('')}</div></div>
+    ${os.tipo === 'Preventiva' ? `<div class="form-group"><label class="form-label">Plano de preventiva</label><select class="form-control" onchange="manCampo('planoId',this.value)"><option value="">${planos.length ? 'Escolha o plano…' : 'Nenhum plano para este item'}</option>${planos.map(p => `<option value="${_manE(p.id)}" ${p.id === os.planoId ? 'selected' : ''}>${_manE(p.nome)} — a cada ${_manE(p.intervalo)} ${p.unidade === 'dias' ? 'dias' : p.unidade}</option>`).join('')}</select>
+      ${os.planoId ? (() => { const p = planos.find(x => x.id === os.planoId); return p && p.itens ? `<div class="man-itens"><b>O que fazer:</b><br>${_manE(p.itens).replace(/\n/g, '<br>')}</div>` : ''; })() : ''}</div>` : ''}
+    <div class="form-group"><label class="form-label">Ficou parado? *</label><div class="mob-seg">${[[true, 'Sim, parado'], [false, 'Não, segue trabalhando']].map(([k, t]) => `<button type="button" class="${os.parado === k ? 'on' + (k ? ' nok' : '') : ''}" onclick="man.os.parado=${k};man.sujo=true;manRender()">${t}</button>`).join('')}</div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:4px">${os.parado ? 'O tempo parado conta desde o início até a finalização. Na apropriação ele entra parado (MP/MNP).' : 'Serviço feito sem parar o equipamento (não conta tempo parado).'}</div></div>
+    <div class="form-group"><label class="form-label">Início *</label><input class="form-control" type="datetime-local" value="${_manE(os.inicio)}" oninput="manCampo('inicio',this.value)"/></div>
+    <div class="form-group"><label class="form-label">${med} no início</label><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(os.horIni)}" oninput="manCampo('horIni',this.value)" placeholder="${man._ult != null ? 'Última leitura: ' + _fmtHor(man._ult) : 'Ex.: 1245,5'}"/></div>
+    <div class="form-group"><label class="form-label">Problema / serviço a fazer *</label><textarea class="form-control" rows="3" oninput="manCampo('problema',this.value)" placeholder="Ex.: vazamento no cilindro do braço">${_manE(os.problema)}</textarea></div>
+    <div class="form-group"><label class="form-label">Quem executa</label><div class="mob-seg">${[['propria', 'Equipe própria'], ['terceiro', 'Terceiro / oficina']].map(([k, t]) => `<button type="button" class="${os.executor === k ? 'on' : ''}" onclick="man.os.executor='${k}';man.sujo=true;manRender()">${t}</button>`).join('')}</div></div>
+    ${os.executor === 'terceiro' ? `<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-control" list="man-forn" value="${_manE(os.fornecedor)}" oninput="manCampo('fornecedor',this.value)" placeholder="Oficina / locadora"/><datalist id="man-forn">${emps.map(e => `<option value="${_manE(e.fantasia || e.nome || e.razao || e.cod)}">`).join('')}</datalist></div>` : ''}
+    <div class="form-group"><label class="form-label">Mecânico / responsável</label><input class="form-control" value="${_manE(os.mecanico)}" oninput="manCampo('mecanico',this.value)"/></div>
+    <div class="form-group"><label class="form-label">Fotos (opcional)</label>${_manFotosHtml(os.fotos, 'os')}</div>
+  </div></div>`;
+  bar.style.display = ''; bar.innerHTML = `<button class="btn btn-outline" onclick="manVoltar()">Cancelar</button><button class="btn" style="background:#1D4ED8;color:#fff;border:none" id="man-salvar" onclick="manSalvarNova()">Abrir OS</button>`;
+}
+function _manFotosHtml(l, onde) {
+  return `<div class="man-fotos">${(l || []).map((f, i) => `<div class="man-ft"><img src="${f.img}"/><button type="button" onclick="manFotoTirar('${onde}',${i})">×</button></div>`).join('')}
+    ${(l || []).length < 4 ? `<label class="man-ft-add">📷<span>Foto</span><input type="file" accept="image/*" capture="environment" style="display:none" onchange="manFotoAdd('${onde}',this)"/></label>` : ''}</div>`;
+}
+async function manFotoAdd(onde, inp) {
+  const f = inp.files && inp.files[0]; if (!f || !man) return;
+  try { const img = await _reduzirFoto(f); (onde === 'os' ? man.os.fotos : man.fim.fotos).push({ img, em: new Date().toISOString() }); man.sujo = true; manRender(); } catch (e) { toast('Não consegui ler a foto.', 'err'); }
+}
+function manFotoTirar(onde, i) { (onde === 'os' ? man.os.fotos : man.fim.fotos).splice(i, 1); manRender(); }
+async function _manUltLeitura() {
+  if (!man || !man.os || !man.os.equipId) return; const id = man.os.equipId; man._ult = null;
+  let u = null;
+  if (man.os.alvo === 'vl') { const v = (window._vlFrota || []).find(x => x.id === id); const ks = [_manNum(v && v.kmMob)]; _manOSs().filter(o => o.equipId === id).forEach(o => ks.push(_manNum(o.horFim), _manNum(o.horIni))); ks.filter(x => x != null).forEach(k => { if (u == null || k > u) u = k; }); }
+  else { try { const r = await ultimoHorimetro(id); if (r) u = r.hor; } catch (e) {} _manOSs().filter(o => o.equipId === id).forEach(o => [_manNum(o.horFim), _manNum(o.horIni)].forEach(k => { if (k != null && (u == null || k > u)) u = k; })); }
+  if (man && man.os && man.os.equipId === id) { man._ult = u; if (man.view === 'nova' && !man.os.horIni && u != null) man.os.horIni = String(u); manRender(); }
+}
+async function _manSalvarFotos(l, base) {
+  const ids = [];
+  for (const [i, f] of (l || []).entries()) { const id = base + '-f' + i + '-' + Date.now().toString(36); try { await fbSalvar('fotos', { id, tipo: 'manutencao', os: base, tiradaEm: f.em || '', img: f.img, lancadoPor: usuarioCampo.nome, obra: _manObra() }); ids.push(id); } catch (e) {} }
+  return ids;
+}
+async function manSalvarNova() {
+  const os = man.os, alvo = _manAlvo(os), f = [];
+  if (!alvo) f.push(os.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!os.tipo) f.push('o tipo'); if (!os.inicio) f.push('o início'); if (!String(os.problema).trim()) f.push('o problema');
+  if (f.length) return toast('Falta informar ' + f.join(', ') + '.', 'err');
+  if (_manOSAberta(os.equipId) && !confirm('Já existe OS aberta para ' + alvo.tag + '. Abrir outra mesmo assim?')) return;
+  const hi = _manNum(os.horIni); if (hi != null && man._ult != null && hi < man._ult && !confirm('A leitura (' + _fmtHor(hi) + ') é menor que a última conhecida (' + _fmtHor(man._ult) + '). Salvar assim?')) return;
+  const b = document.getElementById('man-salvar'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
+  try {
+    const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _manProxNum();
+    const pl = (dadosCampo.planosPrev || []).find(p => p.id === os.planoId);
+    const fotos = await _manSalvarFotos(os.fotos, id);
+    const reg = { id, num, obra: _manObra(), alvo: os.alvo, equipId: alvo.id, tag: alvo.tag, placa: alvo.placa, modelo: alvo.modelo, familia: alvo.familia, famCod: alvo.famCod || '', medidor: alvo.km ? 'km' : 'h',
+      tipo: os.tipo, planoId: os.tipo === 'Preventiva' ? (os.planoId || '') : '', planoNome: os.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!os.parado, inicio: os.inicio, horIni: hi == null ? '' : hi,
+      problema: String(os.problema).trim(), executor: os.executor, fornecedor: os.executor === 'terceiro' ? os.fornecedor : '', mecanico: os.mecanico, fotosAbertura: fotos,
+      status: 'aberta', abertaPor: usuarioCampo.nome, abertaPorId: usuarioCampo.id, abertaEm: new Date().toISOString() };
+    await fbSalvar('ordensServico', reg); _manGuardarOS(reg);
+    man.sujo = false;
+    _tkModal(_manTermo(reg), `<button class="btn" style="flex:1;background:#1D4ED8;color:#fff;border:none" onclick="document.getElementById('tk-ov').remove();manAbrir('lista')">Ver OS abertas</button><button class="btn btn-green" style="flex:1" onclick="document.getElementById('tk-ov').remove();man=null;showScreen('home');_manHome()">Concluir</button>`);
+    toast('✓ ' + num + ' aberta', 'ok'); if (typeof atualizarBadgePendentes === "function") atualizarBadgePendentes();
+  } catch (e) { toast('Não consegui salvar: ' + (e.message || e), 'err'); if (b) { b.disabled = false; b.textContent = 'Abrir OS'; } }
+}
+function _manRenderFim(el, bar, T) {
+  const os = man.os, fm = man.fim, km = os.medidor === 'km';
+  T('Finalizar ' + (os.num || 'OS'), os.tag || '');
+  const prods = (dadosCampo.produtos || []).filter(p => p.ativo !== false && !/combust/i.test(p.categoria || '')).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+  const totP = fm.pecas.reduce((s, p) => s + (+p.qtd || 0) * (+p.preco || 0), 0), mo = _manNum(fm.custoMO) || 0;
+  const hp = os.parado ? _manHoras(os.inicio, fm.fim) : 0;
+  el.innerHTML = `<div class="man-os ${os.parado ? 'parado' : ''}" style="margin-top:12px"><div class="man-os-h"><b>${_manE(os.tag)}</b><span class="man-chip">${_manE(os.tipo)}</span><span class="man-num">${_manE(os.num)}</span></div>
+      <div class="man-os-p">${_manE(os.problema)}</div><div class="man-os-m">Aberta ${_manDH(os.inicio)} por ${_manE(os.abertaPor || '')}${os.horIni !== '' && os.horIni != null ? ' · ' + (km ? 'km ' : 'horímetro ') + _fmtHor(os.horIni) : ''}</div></div>
+    <div class="card" style="margin:12px 16px"><div class="card-body">
+    <div class="form-group"><label class="form-label">Término *</label><input class="form-control" type="datetime-local" value="${_manE(fm.fim)}" oninput="manCampo('fim',this.value,1)"/>
+      ${os.parado ? `<div class="man-tot">Tempo parado: <b>${_manDur(hp)}</b> (${hp.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h)</div>` : ''}</div>
+    <div class="form-group"><label class="form-label">${km ? 'Hodômetro (km)' : 'Horímetro (h)'} no término</label><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(fm.horFim)}" oninput="manCampo('horFim',this.value)" placeholder="${os.horIni !== '' && os.horIni != null ? 'Início: ' + _fmtHor(os.horIni) : ''}"/></div>
+    <div class="form-group"><label class="form-label">Serviço executado *</label><textarea class="form-control" rows="3" oninput="manCampo('servico',this.value)" placeholder="O que foi feito">${_manE(fm.servico)}</textarea></div>
+    </div></div>
+    <div class="mr-sec" style="margin:14px 18px 6px">Peças e materiais</div>
+    <div class="card" style="margin:0 16px 12px"><div class="card-body">
+      ${fm.pecas.length ? '<div class="man-pecas">' + fm.pecas.map((p, i) => `<div class="man-peca"><div style="flex:1;min-width:0"><b>${_manE(p.nome)}</b>${p.avulsa ? ' <span class="man-chip">fora do cadastro</span>' : ''}<br><span>${_manE(p.qtd)} ${_manE(p.un || 'un')} × ${_manMoeda(p.preco)}${p.estoque != null ? ' · estoque ' + _manE(p.estoque) : ''}</span></div><b>${_manMoeda((+p.qtd || 0) * (+p.preco || 0))}</b><button type="button" onclick="man.fim.pecas.splice(${i},1);manRender()">×</button></div>`).join('') + '</div>' : '<div style="font-size:12.5px;color:var(--text3);margin-bottom:8px">Nenhuma peça lançada.</div>'}
+      <div style="display:flex;gap:8px;align-items:flex-end"><div style="flex:1;min-width:0"><label class="form-label">Do cadastro de Produtos</label><select class="form-control" onchange="man.fim.prodSel=this.value"><option value="">${prods.length ? 'Escolha a peça…' : 'Nenhum produto cadastrado'}</option>${prods.map(p => `<option value="${_manE(p.id)}" ${p.id === fm.prodSel ? 'selected' : ''}>${_manE((p.cod ? p.cod + ' · ' : '') + p.nome)}${p.estoque != null && p.estoque !== '' ? ' (' + p.estoque + ' ' + (p.unidade || '') + ')' : ''}</option>`).join('')}</select></div>
+        <div style="width:74px"><label class="form-label">Qtd</label><input class="form-control" type="number" inputmode="decimal" value="${_manE(fm.qtd)}" oninput="man.fim.qtd=this.value"/></div>
+        <button type="button" class="btn btn-outline" style="min-height:46px" onclick="manPecaAdd()">+</button></div>
+      <details class="man-av" ${fm.avNome ? 'open' : ''}><summary>Peça fora do cadastro</summary><div style="display:flex;gap:8px;margin-top:8px"><input class="form-control" style="flex:1" placeholder="Descrição" value="${_manE(fm.avNome)}" oninput="man.fim.avNome=this.value"/><input class="form-control" style="width:96px" type="number" inputmode="decimal" placeholder="R$ un." value="${_manE(fm.avPreco)}" oninput="man.fim.avPreco=this.value"/><button type="button" class="btn btn-outline" onclick="manPecaAvulsa()">+</button></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Usa a quantidade de cima. Peça ao escritório para cadastrar em Produtos.</div></details>
+      ${os.executor === 'terceiro' ? `<div class="form-group" style="margin-top:12px"><label class="form-label">Mão de obra do terceiro (R$)</label><input class="form-control" type="number" inputmode="decimal" value="${_manE(fm.custoMO)}" oninput="manCampo('custoMO',this.value);document.getElementById('man-tot').textContent=_manMoeda(${totP}+(_manNum(this.value)||0))"/></div>` : ''}
+      <div class="man-tot" style="margin-top:10px">Custo da OS: <b id="man-tot">${_manMoeda(totP + mo)}</b></div>
+    </div></div>
+    <div class="card" style="margin:0 16px 16px"><div class="card-body"><div class="form-group"><label class="form-label">Fotos do serviço (opcional)</label>${_manFotosHtml(fm.fotos, 'fim')}</div>
+      <button type="button" class="mob-link" style="color:var(--red)" onclick="manCancelar()">Cancelar esta OS (aberta por engano)</button></div></div>`;
+  bar.style.display = ''; bar.innerHTML = `<button class="btn btn-outline" onclick="manVoltar()">Voltar</button><button class="btn btn-green" id="man-salvar" onclick="manSalvarFim()">✓ Finalizar OS</button>`;
+}
+function manPecaAdd() {
+  const fm = man.fim, p = (dadosCampo.produtos || []).find(x => x.id === fm.prodSel), q = _manNum(fm.qtd);
+  if (!p) return toast('Escolha a peça.', 'err'); if (!q || q <= 0) return toast('Informe a quantidade.', 'err');
+  const ja = fm.pecas.find(x => x.prodId === p.id); if (ja) ja.qtd = (+ja.qtd || 0) + q;
+  else fm.pecas.push({ prodId: p.id, cod: p.cod || '', nome: p.nome, un: p.unidade || 'un', qtd: q, preco: +p.preco || 0, estoque: p.estoque === '' || p.estoque == null ? null : +p.estoque });
+  const tot = (fm.pecas.find(x => x.prodId === p.id) || {}).qtd; if (p.estoque !== '' && p.estoque != null && tot > +p.estoque) toast('Atenção: estoque de ' + p.nome + ' é ' + p.estoque + '.', 'err');
+  fm.prodSel = ''; fm.qtd = '1'; man.sujo = true; manRender();
+}
+function manPecaAvulsa() {
+  const fm = man.fim, q = _manNum(fm.qtd); if (!String(fm.avNome).trim()) return toast('Descreva a peça.', 'err'); if (!q || q <= 0) return toast('Informe a quantidade.', 'err');
+  fm.pecas.push({ prodId: '', avulsa: true, nome: String(fm.avNome).trim(), un: 'un', qtd: q, preco: _manNum(fm.avPreco) || 0 }); fm.avNome = ''; fm.avPreco = ''; fm.qtd = '1'; man.sujo = true; manRender();
+}
+async function manSalvarFim() {
+  const os = man.os, fm = man.fim;
+  if (!fm.fim) return toast('Informe o término.', 'err'); if (!String(fm.servico).trim()) return toast('Descreva o serviço executado.', 'err');
+  if (new Date(fm.fim) < new Date(os.inicio)) return toast('O término está antes do início (' + _manDH(os.inicio) + ').', 'err');
+  const hf = _manNum(fm.horFim), hi = _manNum(os.horIni); if (hf != null && hi != null && hf < hi) return toast('A leitura do término é menor que a do início (' + _fmtHor(hi) + ').', 'err');
+  const b = document.getElementById('man-salvar'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
+  try {
+    const pecas = fm.pecas.map(p => ({ prodId: p.prodId || '', cod: p.cod || '', nome: p.nome, un: p.un || 'un', qtd: +p.qtd || 0, preco: +p.preco || 0, total: Math.round((+p.qtd || 0) * (+p.preco || 0) * 100) / 100, avulsa: !!p.avulsa }));
+    const custoPecas = pecas.reduce((s, p) => s + p.total, 0), custoMO = os.executor === 'terceiro' ? (_manNum(fm.custoMO) || 0) : 0;
+    const fotos = await _manSalvarFotos(fm.fotos, os.id);
+    const reg = { id: os.id, status: 'finalizada', fim: fm.fim, horFim: hf == null ? '' : hf, servico: String(fm.servico).trim(), pecas, custoPecas: Math.round(custoPecas * 100) / 100, custoMO, custoTotal: Math.round((custoPecas + custoMO) * 100) / 100,
+      horasParado: os.parado ? Math.round(_manHoras(os.inicio, fm.fim) * 100) / 100 : 0, fotosFim: fotos, finalizadaPor: usuarioCampo.nome, finalizadaPorId: usuarioCampo.id, finalizadaEm: new Date().toISOString() };
+    await fbSalvar('ordensServico', reg); const full = { ...os, ...reg }; _manGuardarOS(full);
+    // baixa no estoque dos produtos usados
+    for (const p of pecas) { if (!p.prodId) continue; const pr = (dadosCampo.produtos || []).find(x => x.id === p.prodId); if (!pr || pr.estoque === '' || pr.estoque == null) continue;
+      pr.estoque = Math.round(((+pr.estoque || 0) - p.qtd) * 1000) / 1000; try { await fbSalvar('produtos', { id: pr.id, estoque: pr.estoque, estoqueAtualizadoEm: new Date().toISOString() }); } catch (e) {} }
+    _manLS('produtos', dadosCampo.produtos || []);
+    man.sujo = false;
+    _tkModal(_manTermo(full), `<button class="btn btn-green" style="flex:1" onclick="document.getElementById('tk-ov').remove();man=null;showScreen('home');_manHome()">Concluir</button>`);
+    toast('✓ ' + (os.num || 'OS') + ' finalizada', 'ok');
+  } catch (e) { toast('Não consegui salvar: ' + (e.message || e), 'err'); if (b) { b.disabled = false; b.textContent = '✓ Finalizar OS'; } }
+}
+async function manCancelar() {
+  const os = man.os; const mot = prompt('Por que cancelar a ' + (os.num || 'OS') + '?'); if (mot === null) return;
+  const reg = { id: os.id, status: 'cancelada', motivoCanc: mot, canceladaPor: usuarioCampo.nome, canceladaEm: new Date().toISOString(), horasParado: 0 };
+  await fbSalvar('ordensServico', reg); _manGuardarOS({ ...os, ...reg }); man.sujo = false; toast((os.num || 'OS') + ' cancelada', 'ok'); manAbrir('lista');
+}
+function manVerOS(id) { const o = _manOSs().find(x => x.id === id); if (o) _tkModal(_manTermo(o), `<button class="btn btn-outline" style="flex:1;background:#fff" onclick="document.getElementById('tk-ov').remove()">Fechar</button>`); }
+function _manTermo(o) {
+  const L = (k, v) => v === '' || v == null ? '' : `<div class="tk-l"><span>${k}</span><b>${_manE(v)}</b></div>`;
+  let cliente = 'TENCO'; try { cliente = localStorage.getItem('ok_cliente_nome') || cliente; } catch (e) {}
+  const km = o.medidor === 'km', fmtM = v => v === '' || v == null ? '' : _fmtHor(v) + (km ? ' km' : ' h');
+  const fin = o.status === 'finalizada';
+  return `<div class="tk" style="width:330px">
+    <img class="tk-logo" src="${typeof _TK_LOGO !== 'undefined' ? _TK_LOGO : ''}" alt="ObraKontrol">
+    <div class="tk-c" style="font-size:11px;color:#555">${_manE(cliente)}</div>
+    <div class="tk-t">ORDEM DE SERVIÇO</div>
+    <div class="tk-big" style="font-size:28px">${_manE(o.tag)}</div>
+    <div class="tk-c" style="font-weight:800">${_manE(o.num)} · ${_manE(o.tipo)}</div><hr>
+    ${L(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', [o.placa && o.placa !== o.tag ? o.placa : '', o.modelo].filter(Boolean).join(' · '))}${L('Família', o.familia)}${L('Plano', o.planoNome)}
+    ${L('Início', _manDH(o.inicio))}${L(km ? 'Km início' : 'Horímetro início', fmtM(o.horIni))}${L('Parado', o.parado ? 'Sim' : 'Não')}
+    ${L('Executor', o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ' · ' + o.fornecedor : '') : 'Equipe própria')}${L('Responsável', o.mecanico)}
+    <hr><div style="color:#555;font-size:11px">PROBLEMA</div><div style="margin-bottom:4px">${_manE(o.problema)}</div>
+    ${fin ? `<hr>${L('Término', _manDH(o.fim))}${L(km ? 'Km término' : 'Horímetro término', fmtM(o.horFim))}${o.parado ? L('Tempo parado', _manDur(+o.horasParado || 0)) : ''}
+      <div style="color:#555;font-size:11px;margin-top:4px">SERVIÇO EXECUTADO</div><div>${_manE(o.servico)}</div>
+      ${(o.pecas || []).length ? '<hr><div style="color:#555;font-size:11px">PEÇAS</div>' + o.pecas.map(p => `<div class="tk-l"><span>${_manE(p.qtd)}× ${_manE(p.nome)}</span><b>${_manMoeda(p.total ?? p.qtd * p.preco)}</b></div>`).join('') : ''}
+      ${o.custoMO ? L('Mão de obra terceiro', _manMoeda(o.custoMO)) : ''}${o.custoTotal ? `<div class="tk-l" style="font-size:14px"><span><b>Custo total</b></span><b>${_manMoeda(o.custoTotal)}</b></div>` : ''}
+      ${L('Finalizada por', o.finalizadaPor)}` : L('Aberta por', o.abertaPor)}
+    ${o.status === 'cancelada' ? `<div class="tk-pend">CANCELADA${o.motivoCanc ? ' · ' + _manE(o.motivoCanc) : ''}</div>` : `<div class="tk-ok">✓ ${fin ? 'OS FINALIZADA' : 'OS ABERTA'} · ${_manE(_manDH(fin ? o.fim : o.inicio))}</div>`}
+    <div class="tk-rod">ObraKontrol · Gestão operacional de obras</div></div>`;
+}
+
+// ── preventivas ──
+function _manPlanosDo(alvo, equipId) {
+  const pls = (dadosCampo.planosPrev || []).filter(p => p.ativo !== false);
+  if (!equipId) return pls.filter(p => alvo === 'vl' ? p.aplica === 'vl' : p.aplica !== 'vl');
+  const a = _manAlvo({ alvo, equipId }); if (!a) return [];
+  return pls.filter(p => alvo === 'vl' ? p.aplica === 'vl' || (p.aplica === 'equip' && p.equipId === equipId) : (p.aplica === 'equip' ? p.equipId === equipId : p.aplica === 'familia' && p.familia && String(p.familia) === String(a.famCod)));
+}
+function _manLeituraAtual(a) {
+  let v = null; const ups = x => { const n = _manNum(x); if (n != null && (v == null || n > v)) v = n; };
+  ups(a.base); try { const m = _ultHorMapa()[a.id]; if (m) ups(m.hor); } catch (e) {}
+  _manOSs().filter(o => o.equipId === a.id).forEach(o => { ups(o.horFim); ups(o.horIni); });
+  (window._manLeit || {})[a.id] != null && ups(window._manLeit[a.id]);
+  return v;
+}
+function _manPrevLista() {
+  const out = [], pls = (dadosCampo.planosPrev || []).filter(p => p.ativo !== false); if (!pls.length) return out;
+  const hoje = Date.now();
+  pls.forEach(p => {
+    const int = _manNum(p.intervalo), av = _manNum(p.aviso) || 0; if (!int) return;
+    let alvos = [];
+    if (p.aplica === 'vl') alvos = _manVls().map(v => ['vl', v.id]);
+    else if (p.aplica === 'equip') alvos = [[(window._vlFrota || []).some(v => v.id === p.equipId) ? 'vl' : 'eq', p.equipId]];
+    else alvos = _manEqs().filter(e => String(e.codFamilia || e.familia) === String(p.familia)).map(e => ['eq', e.id]);
+    alvos.forEach(([ta, id]) => {
+      const a = _manAlvo({ alvo: ta, equipId: id }); if (!a) return;
+      const ult = _manOSs().filter(o => o.status === 'finalizada' && o.equipId === id && o.planoId === p.id).sort((x, y) => String(y.fim).localeCompare(String(x.fim)))[0];
+      let st = 'ok', txt = '';
+      if (p.unidade === 'dias') {
+        const base = ult ? new Date(ult.fim) : (a.dataBase ? new Date(a.dataBase + 'T08:00') : null);
+        if (!base || isNaN(base)) { txt = 'Sem data de referência — abra a primeira preventiva'; st = 'prox'; }
+        else { const falta = Math.round(int - (hoje - base.getTime()) / 864e5); st = falta <= 0 ? 'venc' : falta <= av ? 'prox' : 'ok'; txt = (falta <= 0 ? 'Venceu há ' + (-falta) + ' dia(s)' : 'Faltam ' + falta + ' dia(s)') + ' · última ' + (ult ? _manDH(ult.fim).slice(0, 10) : 'mobilização'); }
+      } else {
+        const atual = _manLeituraAtual(a), un = p.unidade === 'km' ? ' km' : ' h';
+        let base = ult ? (_manNum(ult.horFim) ?? _manNum(ult.horIni)) : _manNum(a.base);
+        if (base == null && !ult) _manOSs().filter(o => o.equipId === a.id).forEach(o => { const n = _manNum(o.horIni); if (n != null && (base == null || n < base)) base = n; });
+        if (atual == null || base == null) { txt = 'Sem leitura de referência — abra a primeira preventiva'; st = 'prox'; }
+        else { const prox = base + int, falta = Math.round((prox - atual) * 10) / 10; st = falta <= 0 ? 'venc' : falta <= av ? 'prox' : 'ok';
+          txt = (falta <= 0 ? 'Passou ' + _fmtHor(-falta) + un : 'Faltam ' + _fmtHor(falta) + un) + ' · atual ' + _fmtHor(atual) + ' · próxima em ' + _fmtHor(prox) + un; }
+      }
+      out.push({ plano: p, alvo: a, tipoAlvo: ta, st, txt });
+    });
+  });
+  const ord = { venc: 0, prox: 1, ok: 2 }; return out.sort((x, y) => ord[x.st] - ord[y.st] || String(x.alvo.tag).localeCompare(String(y.alvo.tag)));
+}
+
+// ── QR Code na abertura ──
+(function () {
+  const oQR = processarQR;
+  processarQR = function (texto, contexto) {
+    if (contexto !== 'manq') return oQR.apply(this, arguments);
+    let t = String(texto || '').trim(); try { const o = JSON.parse(t); t = o.tag || o.equip || o.placa || t; } catch (er) { if (/^tag:/i.test(t)) t = t.slice(4).trim(); }
+    const n = _normId(t), bate = x => x.tag === t || x.placa === t || x.id === t || (n && (_normId(x.tag) === n || _normId(x.placa) === n));
+    const e = _manEqs().find(bate), v = !e && _manVls().find(bate);
+    if (!e && !v) { toast('Não achei ' + t + ' nesta obra.', 'err'); return { ok: false }; }
+    if (man && man.view === 'nova') { man.os.alvo = e ? 'eq' : 'vl'; man.os.equipId = (e || v).id; man.os.planoId = ''; man.os.horIni = ''; man.sujo = true; manRender(); _manUltLeitura(); }
+    toast('✓ ' + ((e || v).tag || (e || v).placa), 'ok'); return { ok: true };
+  };
+})();
+
+// ── apropriação: equipamento com OS aberta e parado entra parado ──
+(function () {
+  const oT = apToggleEQ;
+  apToggleEQ = function (id) {
+    const ja = ap.eq.has(id); const r = oT.apply(this, arguments);
+    try { const os = !ja && ap.eq.has(id) && _manOSAberta(id);
+      if (os && os.parado) { const v = ap.eq.get(id), hn = parseFloat(document.getElementById('ap-hn')?.value) || 0;
+        Object.assign(v, { hp: 0, hpAuto: false, hpar: hn, motivo: os.tipo === 'Preventiva' ? 'MP' : 'MNP' }); apRenderEQ(); apGuardar();
+        toast((os.tag || '') + ' está em manutenção (' + os.num + ') — lançado como parado', 'err'); } } catch (e) {}
+    return r;
+  };
+  const oR = apRenderEQ;
+  apRenderEQ = function () {
+    const r = oR.apply(this, arguments);
+    try { const ab = _manAbertas(); if (ab.length) document.querySelectorAll('#ap-eq-lista .list-item').forEach(el => {
+      const m = (el.getAttribute('onclick') || '').match(/'([^']+)'/); const os = m && ab.find(o => o.equipId === m[1]);
+      if (os && !el.querySelector('.man-ap-tag')) el.querySelector('.list-name')?.insertAdjacentHTML('beforeend', `<span class="man-ap-tag">🔧 ${_esc(os.num)}${os.parado ? ' · parado' : ''}</span>`); }); } catch (e) {}
+    return r;
+  };
+})();
+
+// ── carregar e mostrar ──
+(function () {
+  const oC = carregarDadosCampo;
+  carregarDadosCampo = async function () { const r = await oC.apply(this, arguments); try { if (_manPode() || (usuarioCampo && podeModulo('apontamentos'))) await _manCarregar(); } catch (e) {} return r; };
+  const oE = entrarNoCampo;
+  entrarNoCampo = function () { const r = oE.apply(this, arguments); try { if (!dadosCampo.ordensServico) { dadosCampo.ordensServico = _manLS('ordensServico'); dadosCampo.planosPrev = _manLS('planosPrev'); dadosCampo.produtos = _manLS('produtos'); } _manHome(); } catch (e) {} return r; };
+  const oS = showScreen;
+  showScreen = function (id) { const r = oS.apply(this, arguments); if (id === 'home') { try { _manHome(); } catch (e) {} } return r; };
+  const css = document.createElement('style'); css.textContent = `
+    .modo-sw{display:flex;gap:4px;margin:4px 16px 12px;padding:4px;border-radius:14px;background:rgba(22,23,27,.72);border:1px solid rgba(255,255,255,.14);position:relative;z-index:1}
+    .modo-sw button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;border:0;border-radius:10px;background:transparent;color:rgba(255,255,255,.7);font-weight:800;font-size:14.5px;cursor:pointer}
+    .modo-sw button svg{width:17px;height:17px}.modo-sw button.on{background:#fff;color:#16171B}.modo-sw button.on[data-m=man]{background:#1D4ED8;color:#fff}
+    .hcard.man{background:linear-gradient(155deg,#2563EB,#1E3A8A);border-color:transparent;box-shadow:0 12px 28px rgba(37,99,235,.3)}
+    .hcard .module-card-badge.alerta{background:#DC2626}
+    #hgrid-man .module-card-badge{background:rgba(96,165,250,.25)}
+    .man-os{background:#fff;border-radius:14px;margin:10px 16px;padding:12px 14px;border:1px solid rgba(0,0,0,.06);border-left:4px solid #94A3B8}
+    .man-os.parado{border-left-color:#DC2626}.man-os.canc{opacity:.55}
+    .man-os-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.man-os-h b{font-size:16px}
+    .man-num{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--text3);font-family:ui-monospace,monospace}
+    .man-chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:#EFF6FF;color:#1D4ED8;vertical-align:middle}
+    .man-os-p{font-size:13.5px;margin-top:6px;color:var(--text)}.man-os-m{font-size:12px;color:var(--text2);margin-top:4px}
+    .man-os-f{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}
+    .man-parado{color:#B91C1C;font-weight:600}.man-rodando{color:#15803D;font-weight:600}
+    .man-tipos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.man-tipos button{display:flex;align-items:center;gap:8px;min-height:44px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:700;font-size:13.5px;color:var(--text);padding:0 10px;text-align:left}
+    .man-tipos button span{font-size:16px}.man-tipos button.on{border-color:#1D4ED8;background:#EFF6FF;color:#1D4ED8}
+    .man-alvo{margin-top:8px;background:#F1F5F9;border-radius:10px;padding:8px 12px;font-size:13px}.man-alvo span{font-size:12px;color:var(--text2)}
+    .man-aviso{margin-top:8px;background:#FEF3C7;color:#92400E;border-radius:10px;padding:8px 12px;font-size:12.5px}
+    .man-itens{margin-top:8px;background:#F0FDF4;color:#166534;border-radius:10px;padding:8px 12px;font-size:12.5px}
+    .man-tot{font-size:13px;color:var(--text2);margin-top:6px}.man-tot b{color:var(--text);font-size:15px}
+    .man-fotos{display:flex;gap:8px;flex-wrap:wrap}.man-ft{position:relative}.man-ft img{width:74px;height:74px;object-fit:cover;border-radius:10px;display:block}
+    .man-ft button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:0;background:#111;color:#fff;font-size:15px;line-height:1}
+    .man-ft-add{width:74px;height:74px;border-radius:10px;border:1.5px dashed #94A3B8;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;color:var(--text2);cursor:pointer}.man-ft-add span{font-size:11px;font-weight:700}
+    .man-pecas{margin-bottom:10px}.man-peca{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}.man-peca span{font-size:12px;color:var(--text2)}
+    .man-peca button{width:28px;height:28px;border-radius:50%;border:0;background:#F1F5F9;font-size:16px;flex-shrink:0}
+    .man-av{margin-top:10px;font-size:13px}.man-av summary{color:#1D4ED8;font-weight:700;cursor:pointer}
+    .man-pv{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer}.man-pv:last-child{border-bottom:0}
+    .man-pv-st{width:10px;height:10px;border-radius:50%;background:#16A34A;flex-shrink:0}.man-pv.prox .man-pv-st{background:#F59E0B}.man-pv.venc .man-pv-st{background:#DC2626}
+    .man-pv-r{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:#15803D}.man-pv.prox .man-pv-r{color:#B45309}.man-pv.venc .man-pv-r{color:#DC2626}
+    .man-ap-tag{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;background:#DBEAFE;color:#1D4ED8;vertical-align:middle}`;
+  document.head.appendChild(css);
+})();
 </script>
 </body>
 </html>
