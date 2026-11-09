@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.29 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.30 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -10050,7 +10050,7 @@ function dxRenderEQ() {
   const { mo, eq, pe } = _dxBase('eq');
   const HT = eq.reduce((s, a) => s + (+a.hp||0), 0), HPAR = eq.reduce((s, a) => s + (+a.hpar||0), 0), TG = HT + HPAR || 1;
   const soma = re => pe.filter(p => re.test(String(p.motivo || ''))).reduce((s, p) => s + (+p.horas||0), 0);
-  const HM = soma(/manuten|mec[aâ]nic|MNP/i), HG = soma(/chuva|aguard|falta de frente|paralis|adm/i), HO = soma(/extern|clima/i);
+  const HM = soma(/manuten|mec[aâ]nic|MNP/i) + _hmApon(eq), HG = soma(/chuva|aguard|falta de frente|paralis|adm/i), HO = soma(/extern|clima/i);
   const EG = HT / TG * 100, EM = (TG - HM) / TG * 100, EGer = HT ? HT / (HT + HG) * 100 : 100, Prat = (TG - HO) / TG * 100;
   const byTag = {}; eq.forEach(a => { const e = (dados.equipamentos||[]).find(x => x.id === a.equipId || x.tag === a.equip || x.placa === a.equip); const t = e?.tag || a.equip || '—'; byTag[t] = byTag[t] || { a:0, b:0 }; byTag[t].a += +a.hp||0; byTag[t].b += +a.hpar||0; });
   const equipsObra = (dados.equipamentos||[]).filter(e => (!_dx.obra || !e.obra || e.obra === _dx.obra) && (!_dx.familia || (e.familia||e.codFamilia) === _dx.familia));
@@ -10084,7 +10084,7 @@ function dxRenderEQ() {
 function _eqEficiencia(eq, pe) {
   const HT = eq.reduce((s, a) => s + (+a.hp||0), 0), HPAR = eq.reduce((s, a) => s + (+a.hpar||0), 0), TG = HT + HPAR || 1;
   const soma = re => pe.filter(p => re.test(String(p.motivo || ''))).reduce((s, p) => s + (+p.horas||0), 0);
-  const HM = soma(/manuten|mec[aâ]nic|MNP/i), HG = soma(/chuva|aguard|falta de frente|paralis|adm/i), HO = soma(/extern|clima/i);
+  const HM = soma(/manuten|mec[aâ]nic|MNP/i) + _hmApon(eq), HG = soma(/chuva|aguard|falta de frente|paralis|adm/i), HO = soma(/extern|clima/i);
   return { EG: HT / TG * 100, EM: (TG - HM) / TG * 100, EGer: HT ? HT / (HT + HG) * 100 : 100, Prat: (TG - HO) / TG * 100 };
 }
 function _gMini(tit, v, meta) {
@@ -14312,7 +14312,7 @@ function dxRenderEQ2() {
   const { mo, eq, pe } = _dxBase('eq'), custo = _dx.modo === 'custo';
   const HT = eq.reduce((s, a) => s + (+a.hp || 0), 0), HPAR = eq.reduce((s, a) => s + (+a.hpar || 0), 0), tem = HT + HPAR > 0, TG = HT + HPAR || 1;
   const soma = re => pe.filter(p => re.test(String(p.motivo || ''))).reduce((s, p) => s + (+p.horas || 0), 0);
-  const HM = soma(/manuten|mec[aâ]nic|MNP/i), HG = soma(/chuva|aguard|falta de frente|paralis|adm/i), HO = soma(/extern|clima/i);
+  const HM = soma(/manuten|mec[aâ]nic|MNP/i) + _hmApon(eq), HG = soma(/chuva|aguard|falta de frente|paralis|adm/i), HO = soma(/extern|clima/i);
   const tagDe = a => { const e = (dados.equipamentos || []).find(x => x.id === a.equipId || x.tag === a.equip || x.placa === a.equip); return e?.tag || a.equip || '—'; };
   const equipsObra = (dados.equipamentos || []).filter(e => (!_dx.obra || !e.obra || e.obra === _dx.obra) && (!_dx.familia || (e.familia || e.codFamilia) === _dx.familia));
   const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
@@ -18175,6 +18175,170 @@ salvarProduto = window.salvarProduto = async function () {
     .mn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px}.mn-l span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.mn-l b{font-size:13.5px;font-weight:600}
     .mn-tx{margin-top:12px;font-size:13.5px}.mn-tx b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:2px}
     .mn-fotos{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.mn-fotos figure{margin:0}.mn-fotos img{width:120px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;display:block}.mn-fotos figcaption{font-size:11px;color:var(--text-3)}`;
+  document.head.appendChild(css);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// v4.30: MANUTENÇÃO no painel — abrir e finalizar OS pelo escritório + OS nos indicadores
+// - Eficiência Mecânica passa a contar também as horas paradas da apropriação com motivo MP/MNP
+// - Dashboard de Equipamentos ganha o painel "Manutenção (OS)": disponibilidade física, MTTR, MTBF, custo
+// ═══════════════════════════════════════════════════════════════
+function _hmApon(eq) { return (eq || []).filter(a => /^(MP|MNP)$/i.test(String(a.motivo || '').trim())).reduce((s, a) => s + (+a.hpar || 0), 0); }
+function _mnSigla(obra) { const o = (dados.obras || []).find(x => x.id === obra); return o && (o.sigla || o.cod) ? String(o.sigla || o.cod).toUpperCase().replace(/\s+/g, '') : 'OB'; }
+function _mnProxNum(obra) {
+  const pre = 'OS-' + _mnSigla(obra) + '-', re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$'); let mx = 0;
+  (dados.ordensServico || []).forEach(o => { const m = re.exec(o.num || ''); if (m) mx = Math.max(mx, +m[1]); }); return pre + String(mx + 1).padStart(4, '0');
+}
+function _mnAgora() { const d = new Date(); return _hojeLocal(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function _mnAlvoDe(alvo, id) {
+  if (alvo === 'vl') { const v = (dados.frota || []).find(x => x.id === id); return v ? { id: v.id, tag: v.tag || v.placa, placa: v.placa || '', modelo: v.modelo || '', familia: 'Veículo leve', famCod: '', km: true } : null; }
+  const e = (dados.equipamentos || []).find(x => x.id === id); if (!e) return null; const fc = e.codFamilia || e.familia || '', f = (dados.familias || []).find(x => x.cod === fc);
+  return { id: e.id, tag: e.tag || e.placa, placa: e.placa || '', modelo: e.modelo || e.codModelo || '', familia: (f && (f.desc || f.cod)) || fc, famCod: fc, km: e.medidor === 'hodometro' };
+}
+function _mnModal() {
+  if (!document.getElementById('modal-mnf')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-mnf"><div class="modal" style="max-width:720px;width:96vw"><div class="modal-header"><div class="modal-title" id="mnf-tit"></div><button class="modal-close" onclick="closeModal('modal-mnf')">×</button></div><div class="modal-body" id="mnf-body"></div><div class="modal-footer" id="mnf-rod"></div></div></div>`);
+}
+// ── abrir OS ──
+function mnNova() {
+  const o = _okObraAtual();
+  window._mnF = { modo: 'nova', obra: o === 'todas' ? '' : o, alvo: 'eq', equipId: '', tipo: '', planoId: '', parado: true, inicio: _mnAgora(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioLogado && usuarioLogado.nome) || '' };
+  _mnModal(); document.getElementById('mnf-tit').textContent = 'Abrir ordem de serviço'; _mnFormNova(); openModal('modal-mnf');
+}
+function _mnFormNova() {
+  const f = window._mnF, ob = f.obra, v = k => _e(f[k] ?? '');
+  const eqs = (dados.equipamentos || []).filter(e => (!ob || !e.obra || e.obra === ob) && !/desmob|inativ|baixad/i.test(e.status || '')).sort((a, b) => String(a.tag).localeCompare(String(b.tag)));
+  const vls = (dados.frota || []).filter(e => (!ob || !e.obra || e.obra === ob) && !/devolv|inativ|baixad/i.test(e.status || '')).sort((a, b) => String(a.tag).localeCompare(String(b.tag)));
+  const a = _mnAlvoDe(f.alvo, f.equipId), ab = f.equipId && (dados.ordensServico || []).find(o => o.status === 'aberta' && o.equipId === f.equipId);
+  const pls = (dados.planosPrev || []).filter(p => p.ativo !== false && (!p.obra || !ob || p.obra === ob) && (f.alvo === 'vl' ? p.aplica === 'vl' || p.equipId === f.equipId : p.aplica === 'equip' ? p.equipId === f.equipId : p.aplica === 'familia' && (!a || String(p.familia) === String(a.famCod))));
+  const emps = (dados.empresas || []).filter(e => !ob || !e.obra || e.obra === ob);
+  const seg = (k, ops, re) => `<div class="mn-seg">${ops.map(([val, t]) => `<button type="button" class="${String(f[k]) === String(val) ? 'on' : ''}" onclick="_mnF.${k}=${typeof val === 'string' ? `'${val}'` : val};${re || ''}_mnFormNova()">${t}</button>`).join('')}</div>`;
+  document.getElementById('mnf-body').innerHTML = `<div class="form-grid">
+    ${_okObraAtual() === 'todas' ? `<div class="form-group form-full"><label class="form-label">Obra *</label><select class="form-control" onchange="_mnF.obra=this.value;_mnF.equipId='';_mnFormNova()"><option value="">Escolha…</option>${(dados.obras || []).map(x => `<option value="${x.id}" ${x.id === ob ? 'selected' : ''}>${_e(x.nome)}</option>`).join('')}</select></div>` : ''}
+    <div class="form-group"><label class="form-label">O que vai para manutenção *</label>${seg('alvo', [['eq', 'Equipamento'], ['vl', 'Veículo leve']], "_mnF.equipId='';_mnF.planoId='';")}</div>
+    <div class="form-group"><label class="form-label">${f.alvo === 'vl' ? 'Veículo' : 'Equipamento'} *</label><select class="form-control" onchange="_mnF.equipId=this.value;_mnF.planoId='';_mnFormNova()"><option value="">Escolha…</option>${(f.alvo === 'vl' ? vls : eqs).map(e => `<option value="${e.id}" ${e.id === f.equipId ? 'selected' : ''}>${_e((e.tag || e.placa) + (f.alvo === 'vl' ? (e.placa ? ' · ' + e.placa : '') + (e.modelo ? ' — ' + e.modelo : '') : (e.familia || e.codFamilia ? ' — ' + (e.familia || e.codFamilia) : '')))}</option>`).join('')}</select>
+      ${ab ? `<div class="alert alert-warning" style="margin-top:6px;font-size:12.5px">Já tem a <b>${_e(ab.num)}</b> aberta para ${_e(ab.tag)}.</div>` : ''}</div>
+    <div class="form-group form-full"><label class="form-label">Tipo *</label>${seg('tipo', MAN_TIPOS_P.map(t => [t, t]))}</div>
+    ${f.tipo === 'Preventiva' ? `<div class="form-group form-full"><label class="form-label">Plano de preventiva</label><select class="form-control" onchange="_mnF.planoId=this.value"><option value="">${pls.length ? 'Escolha…' : 'Nenhum plano para este item'}</option>${pls.map(p => `<option value="${p.id}" ${p.id === f.planoId ? 'selected' : ''}>${_e(p.nome)}</option>`).join('')}</select></div>` : ''}
+    <div class="form-group"><label class="form-label">Ficou parado? *</label>${seg('parado', [[true, 'Sim, parado'], [false, 'Não']])}</div>
+    <div class="form-group"><label class="form-label">Início *</label><input class="form-control" type="datetime-local" value="${v('inicio')}" oninput="_mnF.inicio=this.value"/></div>
+    <div class="form-group"><label class="form-label">${a && a.km ? 'Hodômetro (km)' : 'Horímetro (h)'} no início</label><input class="form-control" type="number" step="0.1" value="${v('horIni')}" oninput="_mnF.horIni=this.value"/></div>
+    <div class="form-group"><label class="form-label">Quem executa</label>${seg('executor', [['propria', 'Equipe própria'], ['terceiro', 'Terceiro']])}</div>
+    ${f.executor === 'terceiro' ? `<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-control" list="mnf-forn" value="${v('fornecedor')}" oninput="_mnF.fornecedor=this.value"/><datalist id="mnf-forn">${emps.map(e => `<option value="${_e(e.fantasia || e.nome || e.razao || e.cod)}">`).join('')}</datalist></div>` : ''}
+    <div class="form-group"><label class="form-label">Responsável</label><input class="form-control" value="${v('mecanico')}" oninput="_mnF.mecanico=this.value"/></div>
+    <div class="form-group form-full"><label class="form-label">Problema / serviço a fazer *</label><textarea class="form-control" rows="3" oninput="_mnF.problema=this.value">${v('problema')}</textarea></div></div>`;
+  document.getElementById('mnf-rod').innerHTML = `<button class="btn btn-outline" onclick="closeModal('modal-mnf')">Cancelar</button><button class="btn btn-primary" onclick="mnSalvarNova()">Abrir OS</button>`;
+}
+async function mnSalvarNova() {
+  const f = window._mnF, a = _mnAlvoDe(f.alvo, f.equipId), falta = [];
+  if (!f.obra) falta.push('a obra'); if (!a) falta.push(f.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!f.tipo) falta.push('o tipo'); if (!f.inicio) falta.push('o início'); if (!String(f.problema).trim()) falta.push('o problema');
+  if (falta.length) return toast('Falta informar ' + falta.join(', ') + '.', 'error');
+  const pl = (dados.planosPrev || []).find(p => p.id === f.planoId), hi = f.horIni === '' ? '' : +f.horIni;
+  const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _mnProxNum(f.obra);
+  const reg = { id, num, obra: f.obra, alvo: f.alvo, equipId: a.id, tag: a.tag, placa: a.placa, modelo: a.modelo, familia: a.familia, famCod: a.famCod, medidor: a.km ? 'km' : 'h', tipo: f.tipo,
+    planoId: f.tipo === 'Preventiva' ? f.planoId || '' : '', planoNome: f.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!f.parado, inicio: f.inicio, horIni: hi, problema: String(f.problema).trim(),
+    executor: f.executor, fornecedor: f.executor === 'terceiro' ? f.fornecedor : '', mecanico: f.mecanico, fotosAbertura: [], status: 'aberta', abertaPor: (usuarioLogado && usuarioLogado.nome) || 'Escritório', abertaEm: new Date().toISOString(), origem: 'painel' };
+  await fbSave('ordensServico', id, reg); (dados.ordensServico = dados.ordensServico || []).push(reg);
+  closeModal('modal-mnf'); renderManut(); toast(num + ' aberta.');
+}
+// ── finalizar OS ──
+function mnFinalizar(id) {
+  const o = (dados.ordensServico || []).find(x => x.id === id); if (!o) return;
+  window._mnF = { modo: 'fim', id, fim: _mnAgora(), horFim: '', servico: '', pecas: [], custoMO: '', prodSel: '', qtd: '1', avNome: '', avPreco: '' };
+  try { closeModal('modal-mn'); } catch (e) {}
+  _mnModal(); document.getElementById('mnf-tit').textContent = 'Finalizar ' + (o.num || 'OS') + ' · ' + (o.tag || ''); _mnFormFim(); openModal('modal-mnf');
+}
+function _mnFormFim() {
+  const f = window._mnF, o = (dados.ordensServico || []).find(x => x.id === f.id), km = o.medidor === 'km', v = k => _e(f[k] ?? '');
+  const prods = (dados.produtos || []).filter(p => p.ativo !== false && !/combust/i.test(p.categoria || '') && (!p.obra || !o.obra || p.obra === o.obra)).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+  const totP = f.pecas.reduce((s, p) => s + p.qtd * p.preco, 0), hp = o.parado ? _mnH(o.inicio, f.fim) : 0;
+  document.getElementById('mnf-body').innerHTML = `<div class="mn-tx" style="margin:0 0 12px"><b>${_e(o.tipo)} · aberta ${_mnDH(o.inicio)} por ${_e(o.abertaPor || '')}</b><div>${_e(o.problema)}</div></div><div class="form-grid">
+    <div class="form-group"><label class="form-label">Término *</label><input class="form-control" type="datetime-local" value="${v('fim')}" onchange="_mnF.fim=this.value;_mnFormFim()"/>${o.parado ? `<div style="font-size:12px;color:var(--text-3);margin-top:4px">Tempo parado: <b>${_mnHtxt(hp)}</b></div>` : ''}</div>
+    <div class="form-group"><label class="form-label">${km ? 'Hodômetro (km)' : 'Horímetro (h)'} no término</label><input class="form-control" type="number" step="0.1" value="${v('horFim')}" oninput="_mnF.horFim=this.value" placeholder="${o.horIni !== '' && o.horIni != null ? 'início ' + o.horIni : ''}"/></div>
+    <div class="form-group form-full"><label class="form-label">Serviço executado *</label><textarea class="form-control" rows="3" oninput="_mnF.servico=this.value">${v('servico')}</textarea></div></div>
+    <div class="mn-h" style="margin-top:6px">Peças e materiais</div>
+    ${f.pecas.length ? `<table style="margin-bottom:8px"><tbody>${f.pecas.map((p, i) => `<tr><td>${_e(p.nome)}${p.avulsa ? ' ' + tag('fora do cadastro', 'amber') : ''}</td><td style="text-align:right">${p.qtd} ${_e(p.un)}</td><td style="text-align:right">${_moeda(p.preco)}</td><td style="text-align:right"><b>${_moeda(p.qtd * p.preco)}</b></td><td><button class="btn btn-outline btn-sm" onclick="_mnF.pecas.splice(${i},1);_mnFormFim()">×</button></td></tr>`).join('')}</tbody></table>` : ''}
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><div style="flex:1;min-width:220px"><label class="form-label">Do cadastro de Produtos</label><select class="form-control" onchange="_mnF.prodSel=this.value"><option value="">${prods.length ? 'Escolha…' : 'Nenhum produto cadastrado'}</option>${prods.map(p => `<option value="${p.id}" ${p.id === f.prodSel ? 'selected' : ''}>${_e((p.cod ? p.cod + ' · ' : '') + p.nome)}${p.estoque !== '' && p.estoque != null ? ' (' + p.estoque + ' ' + (p.unidade || '') + ')' : ''}</option>`).join('')}</select></div>
+      <div style="width:90px"><label class="form-label">Qtd</label><input class="form-control" type="number" value="${v('qtd')}" oninput="_mnF.qtd=this.value"/></div><button class="btn btn-outline" onclick="mnPeca()">+ Adicionar</button></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px"><div style="flex:1;min-width:220px"><label class="form-label">Ou peça fora do cadastro</label><input class="form-control" value="${v('avNome')}" oninput="_mnF.avNome=this.value" placeholder="Descrição"/></div>
+      <div style="width:120px"><label class="form-label">R$ unitário</label><input class="form-control" type="number" value="${v('avPreco')}" oninput="_mnF.avPreco=this.value"/></div><button class="btn btn-outline" onclick="mnPeca(1)">+ Adicionar</button></div>
+    ${o.executor === 'terceiro' ? `<div class="form-group" style="margin-top:10px;max-width:240px"><label class="form-label">Mão de obra do terceiro (R$)</label><input class="form-control" type="number" value="${v('custoMO')}" oninput="_mnF.custoMO=this.value"/></div>` : ''}
+    <div style="margin-top:10px;font-size:13px">Peças: <b>${_moeda(totP)}</b>${o.executor === 'terceiro' ? ' + mão de obra do terceiro' : ''}</div>`;
+  document.getElementById('mnf-rod').innerHTML = `<button class="btn btn-outline" style="margin-right:auto;color:var(--red)" onclick="mnCancelar('${o.id}')">Cancelar OS</button><button class="btn btn-outline" onclick="closeModal('modal-mnf')">Voltar</button><button class="btn btn-primary" onclick="mnSalvarFim()">✓ Finalizar OS</button>`;
+}
+function mnPeca(avulsa) {
+  const f = window._mnF, q = parseFloat(String(f.qtd).replace(',', '.')); if (!(q > 0)) return toast('Informe a quantidade.', 'error');
+  if (avulsa) { if (!String(f.avNome).trim()) return toast('Descreva a peça.', 'error'); f.pecas.push({ prodId: '', avulsa: true, nome: String(f.avNome).trim(), un: 'un', qtd: q, preco: +f.avPreco || 0 }); f.avNome = ''; f.avPreco = ''; }
+  else { const p = (dados.produtos || []).find(x => x.id === f.prodSel); if (!p) return toast('Escolha a peça.', 'error'); const ja = f.pecas.find(x => x.prodId === p.id);
+    if (ja) ja.qtd += q; else f.pecas.push({ prodId: p.id, cod: p.cod || '', nome: p.nome, un: p.unidade || 'un', qtd: q, preco: +p.preco || 0 }); f.prodSel = ''; }
+  f.qtd = '1'; _mnFormFim();
+}
+async function mnSalvarFim() {
+  const f = window._mnF, o = (dados.ordensServico || []).find(x => x.id === f.id); if (!o) return;
+  if (!f.fim) return toast('Informe o término.', 'error'); if (!String(f.servico).trim()) return toast('Descreva o serviço executado.', 'error');
+  if (new Date(f.fim) < new Date(o.inicio)) return toast('O término está antes do início.', 'error');
+  if (f.horFim !== '' && o.horIni !== '' && o.horIni != null && +f.horFim < +o.horIni) return toast('A leitura do término é menor que a do início.', 'error');
+  const pecas = f.pecas.map(p => ({ ...p, total: Math.round(p.qtd * p.preco * 100) / 100 })), cp = pecas.reduce((s, p) => s + p.total, 0), mo = o.executor === 'terceiro' ? (+f.custoMO || 0) : 0;
+  const reg = { status: 'finalizada', fim: f.fim, horFim: f.horFim === '' ? '' : +f.horFim, servico: String(f.servico).trim(), pecas, custoPecas: Math.round(cp * 100) / 100, custoMO: mo, custoTotal: Math.round((cp + mo) * 100) / 100,
+    horasParado: o.parado ? Math.round(_mnH(o.inicio, f.fim) * 100) / 100 : 0, fotosFim: o.fotosFim || [], finalizadaPor: (usuarioLogado && usuarioLogado.nome) || 'Escritório', finalizadaEm: new Date().toISOString() };
+  await fbSave('ordensServico', o.id, reg); Object.assign(o, reg);
+  for (const p of pecas) { if (!p.prodId) continue; const pr = (dados.produtos || []).find(x => x.id === p.prodId); if (!pr || pr.estoque === '' || pr.estoque == null) continue;
+    pr.estoque = Math.round(((+pr.estoque || 0) - p.qtd) * 1000) / 1000; await fbSave('produtos', pr.id, { estoque: pr.estoque, estoqueAtualizadoEm: new Date().toISOString() }); }
+  closeModal('modal-mnf'); renderManut(); toast((o.num || 'OS') + ' finalizada.');
+}
+async function mnCancelar(id) {
+  const o = (dados.ordensServico || []).find(x => x.id === id); if (!o) return; const mot = prompt('Por que cancelar a ' + (o.num || 'OS') + '?'); if (mot === null) return;
+  const reg = { status: 'cancelada', motivoCanc: mot, canceladaPor: (usuarioLogado && usuarioLogado.nome) || '', canceladaEm: new Date().toISOString(), horasParado: 0 };
+  await fbSave('ordensServico', id, reg); Object.assign(o, reg); closeModal('modal-mnf'); renderManut(); toast('OS cancelada.');
+}
+
+// ── OS nos indicadores do dashboard de equipamentos ──
+function _mnIndicadores(obra, mes, familia) {
+  const ini = mes ? new Date(mes + '-01T00:00') : null, fimM = mes ? new Date(new Date(ini).setMonth(ini.getMonth() + 1)) : null, agora = new Date();
+  const fimP = fimM && fimM < agora ? fimM : agora;
+  const eqs = (dados.equipamentos || []).filter(e => (!obra || !e.obra || e.obra === obra) && (!familia || (e.familia || e.codFamilia) === familia) && (e.status === 'Mobilizado' || /manut/i.test(e.status || '')));
+  const ids = new Set(eqs.map(e => e.id));
+  const os = (dados.ordensServico || []).filter(o => o.status !== 'cancelada' && (o.alvo || 'eq') === 'eq' && ids.has(o.equipId));
+  const corte = (a, b) => { const s = Math.max(new Date(a).getTime(), ini ? ini.getTime() : -Infinity), t = Math.min(b ? new Date(b).getTime() : agora.getTime(), fimP.getTime()); return t > s ? (t - s) / 36e5 : 0; };
+  // horas-calendário: de cada equipamento, desde a mobilização (ou início do mês) até o fim do mês (ou agora)
+  let HC = 0; if (ini) eqs.forEach(e => { const m = e.dataMob ? new Date(e.dataMob + 'T00:00') : ini; const s = Math.max(ini.getTime(), m.getTime()); if (fimP.getTime() > s) HC += (fimP.getTime() - s) / 36e5; });
+  const doPer = os.filter(o => !mes || String(o.inicio).slice(0, 7) <= mes && (!o.fim || String(o.fim).slice(0, 7) >= mes));
+  const HMos = doPer.filter(o => o.parado).reduce((s, o) => s + (mes ? corte(o.inicio, o.status === 'aberta' ? null : o.fim) : _mnHorasParado(o)), 0);
+  const fin = doPer.filter(o => o.status === 'finalizada' && (!mes || String(o.fim).slice(0, 7) === mes)), corr = fin.filter(o => o.parado && o.tipo !== 'Preventiva');
+  const MTTR = corr.length ? corr.reduce((s, o) => s + (+o.horasParado || 0), 0) / corr.length : null;
+  const nFalhas = doPer.filter(o => o.tipo !== 'Preventiva' && (!mes || String(o.inicio).slice(0, 7) === mes)).length;
+  const MTBF = nFalhas && HC ? (HC - HMos) / nFalhas : null;
+  const custo = fin.reduce((s, o) => s + (+o.custoTotal || 0), 0), prev = fin.filter(o => o.tipo === 'Preventiva').length;
+  const porTipo = {}; doPer.filter(o => o.parado).forEach(o => { porTipo[o.tipo] = (porTipo[o.tipo] || 0) + (mes ? corte(o.inicio, o.status === 'aberta' ? null : o.fim) : _mnHorasParado(o)); });
+  return { HC, HMos, DF: HC ? (HC - HMos) / HC * 100 : null, MTTR, MTBF, custo, n: doPer.length, abertas: doPer.filter(o => o.status === 'aberta').length, prev, nCorr: nFalhas, porTipo, nEq: eqs.length };
+}
+(function () {
+  const oR = window.dxRenderEQ;
+  if (typeof oR === 'function') dxRenderEQ = window.dxRenderEQ = function () {
+    const r = oR.apply(this, arguments);
+    try {
+      if (_dx.modo === 'custo') return r;
+      const pg = document.getElementById('page-dash-eq'), gs = pg && pg.querySelectorAll('.dx-gauge'); if (!gs || !gs.length) return r;
+      const ref = gs[gs.length - 1].parentElement; if (!ref || pg.querySelector('#dx-mn')) return r;
+      const k = _mnIndicadores(_dx.obra, _dx.mes, _dx.familia), h = v => v == null ? '—' : _h(v);
+      const tps = Object.entries(k.porTipo).sort((a, b) => b[1] - a[1]);
+      const corpo = `<div class="dx-kpis" style="margin-bottom:${tps.length ? 12 : 0}px">
+          ${_kpi(_ic.gear, k.DF == null ? '—' : Math.round(k.DF) + '%', 'Disponibilidade física', _dx.mes ? h(k.HMos) + ' parado em OS de ' + h(k.HC) : 'escolha um mês', k.DF != null && k.DF < (CFG['meta-df'] || 85) ? '#E30613' : '')}
+          ${_kpi(_ic.timer, h(k.MTTR), 'Tempo médio de reparo', 'MTTR · corretivas paradas')}
+          ${_kpi(_ic.clock, h(k.MTBF), 'Tempo médio entre falhas', 'MTBF · ' + k.nCorr + ' falha(s)')}
+          ${_kpi(_ic.coin, _moeda(k.custo), 'Custo das OS', k.n + ' OS · ' + k.prev + ' preventiva(s)' + (k.abertas ? ' · ' + k.abertas + ' aberta(s)' : ''))}</div>
+        ${tps.length ? _hbars(tps.map(([l, v]) => ({ l, v, t: _h(v) })), '#F59E0B') : ''}`;
+      ref.insertAdjacentHTML('afterend', `<div id="dx-mn" style="margin-bottom:12px">${_pn(_ic.gear, 'Manutenção — ordens de serviço', corpo, `<a href="#" onclick="showPage('manut');return false" style="color:inherit">ver OS →</a>`)}</div>`);
+    } catch (e) { console.warn('dx-mn', e); }
+    return r;
+  };
+  // botões no painel de OS
+  const hd = document.querySelector('#page-manut .page-header .btn-group');
+  if (hd && !document.getElementById('mn-nova')) hd.insertAdjacentHTML('beforeend', '<button class="btn btn-primary btn-sm" id="mn-nova" onclick="mnNova()">+ Abrir OS</button>');
+  const oV = mnVer; mnVer = window.mnVer = async function (id) {
+    const r = oV.apply(this, arguments); const o = (dados.ordensServico || []).find(x => x.id === id);
+    if (o && o.status === 'aberta') { const rod = document.getElementById('mn-v-rod'); if (rod && !rod.querySelector('.mn-fin')) rod.insertAdjacentHTML('beforeend', `<button class="btn btn-primary mn-fin" style="background:#16A34A;border-color:#16A34A" onclick="mnFinalizar('${o.id}')">✓ Finalizar</button>`); }
+    return r; };
+  const css = document.createElement('style'); css.textContent = `#mnf-body .form-label{display:block}.mn-seg{display:flex;gap:6px;flex-wrap:wrap}.mn-seg button{flex:1;min-width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface,transparent);color:var(--text);font-weight:600;font-size:13px;cursor:pointer}.mn-seg button.on{border-color:#2563EB;background:rgba(37,99,235,.1);color:#2563EB}`;
   document.head.appendChild(css);
 })();
 // Apply configs on load
