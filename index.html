@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.26 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.27 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17878,6 +17878,15 @@ function _famIdent(f) { if (f && ID_EQ[f.ident]) return f.ident; const c = _famC
   if (!g || !src || g.querySelector('.nav-item[data-atalho="abs"]')) return;
   const c = src.cloneNode(true); c.dataset.atalho = 'abs'; c.classList.remove('active'); c.title = 'Abastecimentos de diesel (lista, CSV e tickets)';
   g.insertBefore(c, g.firstChild);
+})();
+// v4.27: "Padronizar TAGs" também na Frota (veículos importados antes da sigla ficaram VL-NN seguidos entre obras)
+(function () {
+  const bg = document.querySelector('#page-frota .page-header .btn-group');
+  if (bg && !document.getElementById('btn-tagpad-fr')) bg.insertAdjacentHTML('afterbegin', `<button class="btn btn-outline btn-sm" id="btn-tagpad-fr" style="display:none" onclick="tagPadronizarAbrir()" title="Troca VL-NN pela TAG da obra (SIGLA-VL-NN), com numeração própria de cada obra">🏷 Padronizar TAGs</button>`);
+  const vis = () => { const b = document.getElementById('btn-tagpad-fr'); if (!b) return; const ruins = (dados.frota || []).filter(v => { const sg = _obraSigla(v.obra); return sg && !new RegExp('^' + sg + '-VL-\\d+$', 'i').test(String(v.tag || '')); }).length;
+    b.style.display = _ehMaster() ? '' : 'none'; b.textContent = '🏷 Padronizar TAGs' + (ruins ? ' (' + ruins + ' fora do padrão)' : ''); b.classList.toggle('btn-primary', !!ruins); b.classList.toggle('btn-outline', !ruins); };
+  setInterval(vis, 2000); vis();
+  const oA = window.tagPadronizarAplicar; if (oA) window.tagPadronizarAplicar = tagPadronizarAplicar = async function () { const r = await oA.apply(this, arguments); try { renderFrota(); } catch (e) {} return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
