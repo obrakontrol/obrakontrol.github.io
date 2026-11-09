@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.03</div>
+  <div class="login-versao">ObraKontrol Campo · v3.04</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6562,6 +6562,52 @@ function otDefinir(id) {
   abvSalvar = async function () { const v = _abvVeic(), pagou = abv.obra || (usuarioCampo && usuarioCampo.obra) || (v && v.obra) || ''; window.__abvPagou = pagou; try { return await oS.apply(this, arguments); } finally { window.__abvPagou = null; } };
   const oF = fbSalvar;
   fbSalvar = async function (col, item) { if (col === 'abastVeic' && item && window.__abvPagou && !item.obraPagou) item.obraPagou = window.__abvPagou; return oF.apply(this, arguments); };
+})();
+
+// v3.04: termos completos no "Meu resumo" (mobilização, recebimento/devolução de veículo, entrega ao condutor)
+(function () {
+  const K = 'campo_termos', DIAS = 7;
+  const ler = () => { try { return JSON.parse(localStorage.getItem(K) || '[]'); } catch (e) { return []; } };
+  const limpar = l => { const lim = new Date(Date.now() - DIAS * 864e5).toISOString(); return l.filter(x => x.em >= lim).slice(-30); };
+  const gravar = l => { l = limpar(l); while (l.length) { try { localStorage.setItem(K, JSON.stringify(l)); return; } catch (e) { l.shift(); } } try { localStorage.removeItem(K); } catch (e) {} };
+  const txt = (h, cls) => { const m = h.match(new RegExp('class="' + cls + '"[^>]*>([^<]*)<')); return m ? m[1].trim() : ''; };
+  const oM = _tkModal;
+  _tkModal = function (html, botoes) {
+    try {
+      const tit = txt(html, 'tk-t');
+      if (/tk-ok/.test(html) && tit && !/TICKET/i.test(tit)) {
+        const tag = txt(html, 'tk-big'), selo = txt(html, 'tk-ok'), l = ler();
+        if (!l.some(x => x.tit === tit && x.tag === tag && x.selo === selo)) { l.push({ id: Date.now().toString(36), em: new Date().toISOString(), tit, tag, selo, html }); gravar(l); }
+      }
+    } catch (e) {}
+    return oM.apply(this, arguments);
+  };
+  window.mrTermoAbrir = function (id) {
+    const t = ler().find(x => x.id === id); if (!t) { toast('Termo não encontrado neste celular.', 'err'); return; }
+    window._mrTermo = t;
+    _tkModal(t.html, `<button class="btn btn-outline" style="flex:1;background:#fff" onclick="document.getElementById('tk-ov').remove();abrirMeuResumo()">Voltar</button><button class="btn btn-green" style="flex:1.3" onclick="mrTermoPdf()">Salvar / imprimir PDF</button>`);
+  };
+  window.mrTermoPdf = function () {
+    const t = window._mrTermo; if (!t) return;
+    let css = ''; try { [...document.styleSheets].forEach(ss => { try { [...ss.cssRules].forEach(r => { if (/\.tk\b/.test(r.cssText)) css += r.cssText + '\n'; }); } catch (e) {} }); } catch (e) {}
+    const w = window.open('', '_blank'); if (!w) { toast('Libere as janelas pop-up para salvar o PDF.', 'err'); return; }
+    w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + _mobEsc(t.tit + ' ' + t.tag) + '</title><style>body{margin:0;padding:16px;background:#fff;font-family:Arial,sans-serif;display:flex;justify-content:center}' + css + '@media print{body{padding:0}}</style></head><body>' + t.html + '<script>setTimeout(function(){window.print()},400)<\/script></body></html>');
+    w.document.close();
+  };
+  const oR = abrirMeuResumo;
+  abrirMeuResumo = function () {
+    const r = oR.apply(this, arguments);
+    try {
+      const l = limpar(ler()).slice().reverse(); if (!l.length) return r;
+      const body = document.getElementById('meu-resumo-body'); if (!body) return r;
+      const hoje = _hojeISO(), fd = iso => { const d = new Date(iso); return (_hojeISO(d) === hoje ? 'hoje' : d.toLocaleDateString('pt-BR').slice(0, 5)) + ' ' + d.toTimeString().slice(0, 5); };
+      body.querySelector('.ap-vazio')?.remove();
+      const h = '<div class="mr-sec">Termos (últimos ' + DIAS + ' dias)</div>' + l.map(t => `<div class="mr-item" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px" onclick="mrTermoAbrir('${t.id}')"><div><b>${_mobEsc(t.tag)}</b> · ${_mobEsc(t.tit.toLowerCase().replace(/^./, c => c.toUpperCase()))}<br><span style="color:var(--text3)">${fd(t.em)}</span></div><span style="color:var(--red);font-weight:700;white-space:nowrap">Ver termo ›</span></div>`).join('');
+      const nota = [...body.children].pop();
+      if (nota && /neste celular/.test(nota.textContent)) nota.insertAdjacentHTML('beforebegin', h); else body.insertAdjacentHTML('beforeend', h);
+    } catch (e) { console.warn('termos no resumo:', e); }
+    return r;
+  };
 })();
 </script>
 </body>
