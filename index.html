@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.22 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.23 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17834,6 +17834,19 @@ function acExcel() { const l = _acLista(); if (!l.length) { toast('Nada para exp
   const oS = window.selecionarObra;
   if (oS) window.selecionarObra = function () { const r = oS.apply(this, arguments); try { renderUsuarios(); } catch (e) {} return r; };
 })();
+// v4.23: termo impresso com as fotos (fundos CSS não saem na impressão → viram <img>)
+window.imprimirTermoMob = imprimirTermoMob = function () {
+  const t = document.getElementById('mob-termo'); if (!t) return;
+  const pend = [...t.querySelectorAll('.mob-foto')].filter(el => !/url\(/.test(el.style.backgroundImage || ''));
+  if (pend.length) { toast('Aguarde as fotos terminarem de carregar e tente de novo.', 'error'); return; }
+  const c = t.cloneNode(true);
+  c.querySelectorAll('*').forEach(el => { const bg = el.style && el.style.backgroundImage; const m = bg && bg.match(/url\(["']?(.*?)["']?\)$/);
+    if (!m) return; const img = document.createElement('img'); img.src = m[1]; img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:8px';
+    el.style.backgroundImage = 'none'; el.textContent = ''; el.appendChild(img); });
+  const w = window.open('', '_blank'); if (!w) { toast('Libere as janelas pop-up para imprimir.', 'error'); return; }
+  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Termo de mobilização</title><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}figure,tr{break-inside:avoid}@media print{body{padding:0}}</style></head><body>' + c.outerHTML + '<script>Promise.all([...document.images].map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>setTimeout(()=>print(),300))<\/script></body></html>');
+  w.document.close();
+};
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
