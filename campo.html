@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.11</div>
+  <div class="login-versao">ObraKontrol Campo · v3.12</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6808,8 +6808,8 @@ function _manTela() {
     <div class="mob-bar" id="man-bar" style="display:none"></div></div>`);
 }
 function manVoltar() {
-  if (man && (man.view === 'nova' || man.view === 'fim') && man.sujo && !confirm('Sair? O que foi preenchido será perdido.')) return;
-  if (man && man.view === 'fim' && man.de) return manAbrir(man.de);
+  if (man && (man.view === 'nova' || man.view === 'fim' || man.view === 'edit') && man.sujo && !confirm('Sair? O que foi preenchido será perdido.')) return;
+  if (man && (man.view === 'fim' || man.view === 'edit') && man.de) return manAbrir(man.de);
   man = null; showScreen('home'); _manHome();
 }
 function manAbrir(view) { _manTela(); man = { view }; showScreen('man'); manRender(); }
@@ -6865,16 +6865,71 @@ function manRender() {
   }
   if (man.view === 'nova') return _manRenderNova(el, bar, T);
   if (man.view === 'fim') return _manRenderFim(el, bar, T);
+  if (man.view === 'edit') return _manRenderEdit(el, bar, T);
 }
 function _manCardOS(o, aberta) {
   const h = o.parado ? (aberta ? _manHoras(o.inicio) : (+o.horasParado || 0)) : 0;
   const tn = _manTN(o), tipo = (tn.tipo ? _manSig(tn.tipo) + ' · ' : '') + _manE(tn.nat || (tn.tipo === 'Preventiva' && o.ciclo ? 'Ciclo ' + _fmtHor(o.ciclo) : tn.tipo) || '—') + (tn.comp ? '</span><span class="man-chip comp">' + _manE(tn.comp) : '');
   return `<div class="man-os ${aberta && o.parado ? 'parado' : ''} ${o.status === 'cancelada' ? 'canc' : ''}">
     <div class="man-os-h"><b>${_manE(o.tag || '—')}</b><span class="man-chip">${tipo}</span><span class="man-num">${_manE(o.num || '')}</span></div>
-    <div class="man-os-p">${_manE(o.problema || '')}</div>
+    ${aberta ? _manEtapaHtml(o) : ''}<div class="man-os-p">${_manE(o.problema || '')}</div>
     <div class="man-os-m">${aberta ? 'Aberta ' + _manDH(o.inicio) : (o.status === 'cancelada' ? 'Cancelada' : 'Finalizada ' + _manDH(o.fim))} · ${o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ': ' + _manE(o.fornecedor) : '') : 'Equipe própria'}${!aberta && o.custoTotal ? ' · <b>' + _manMoeda(o.custoTotal) + '</b>' : ''}</div>
     <div class="man-os-f">${o.parado ? `<span class="man-parado">⏸ ${aberta ? 'Parado há ' : 'Ficou parado '}<b ${aberta ? `data-man-ini="${_manE(o.inicio)}"` : ''}>${_manDur(h)}</b></span>` : '<span class="man-rodando">▶ Trabalhando durante o serviço</span>'}
-      ${aberta ? `<button class="btn btn-sm" style="margin-left:auto;background:#1D4ED8;color:#fff;border:none" onclick="manFinalizar('${_manE(o.id)}')">Finalizar</button>` : `<button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="manVerOS('${_manE(o.id)}')">Ver OS</button>`}</div></div>`;
+      ${aberta ? `<button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="manEditar('${_manE(o.id)}')">Atualizar</button><button class="btn btn-sm" style="background:#1D4ED8;color:#fff;border:none" onclick="manFinalizar('${_manE(o.id)}')">Finalizar</button>` : `<button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="manVerOS('${_manE(o.id)}')">Ver OS</button>`}</div></div>`;
+}
+// v3.12: andamento da OS (etapas) e edição pela equipe de manutenção
+const MAN_ETAPAS = [['Aberta', '#64748B'], ['Em diagnóstico', '#7C3AED'], ['Em manutenção', '#1D4ED8'], ['Na oficina', '#0E7490'], ['Aguardando peças', '#D97706'], ['Aguardando terceiro', '#B45309'], ['Aguardando aprovação', '#BE185D'], ['Em teste', '#15803D']];
+const _manEtCor = e => (MAN_ETAPAS.find(x => x[0] === e) || ['', '#64748B'])[1];
+function _manEtapaHtml(o) {
+  const e = o.etapa || 'Aberta', c = _manEtCor(e), ul = (o.etapas || []).slice(-1)[0];
+  return `<div class="man-et"><span class="man-et-b" style="background:${c}1A;color:${c};border-color:${c}55">● ${_manE(e)}</span><span class="man-et-s">${o.etapaEm ? 'há ' + _manDur(_manHoras(o.etapaEm)) : ''}${ul && ul.obs ? ' · ' + _manE(ul.obs) : ''}</span></div>`;
+}
+function _manLoc(iso) { const d = new Date(iso); if (isNaN(d)) return ''; return _hojeISO(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function manEditar(id) {
+  const o = _manOSs().find(x => x.id === id); if (!o) return; _manTela();
+  const os = JSON.parse(JSON.stringify(o)), tn = _manTN(o); os.tipo = tn.tipo; os.compartimento = tn.comp; os.natureza = tn.nat || os.natureza || '';
+  man = { view: 'edit', de: man && man.view === 'lista' ? 'lista' : 'lista', sujo: false, os, ed: { etapa: o.etapa || 'Aberta', obs: '', fotos: [] } };
+  showScreen('man'); manRender();
+}
+function _manRenderEdit(el, bar, T) {
+  const os = man.os, ed = man.ed, emps = _daObraCampo(dadosCampo.empresas || []);
+  T('Atualizar ' + (os.num || 'OS'), os.tag || '');
+  const hist = (os.etapas || []).slice().reverse();
+  el.innerHTML = `<div class="card" style="margin:12px 16px"><div class="card-body">
+    <div class="form-group"><label class="form-label">Andamento *</label><div class="man-ets">${MAN_ETAPAS.map(([e, c]) => `<button type="button" class="${ed.etapa === e ? 'on' : ''}" style="--c:${c}" onclick="man.ed.etapa='${e}';man.sujo=true;manRender()">${e}</button>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">Observação do andamento</label><textarea class="form-control" rows="2" oninput="man.ed.obs=this.value;man.sujo=true" placeholder="Ex.: peça pedida ao fornecedor, previsão sexta">${_manE(ed.obs)}</textarea></div>
+    <div class="form-group"><label class="form-label">Fotos (opcional)</label>${_manFotosHtml(ed.fotos, 'ed')}</div>
+  </div></div>
+  <div class="mr-sec" style="margin:14px 18px 6px">Dados da ordem</div>
+  <div class="card" style="margin:0 16px 12px"><div class="card-body">
+    <div class="form-group"><label class="form-label">Tipo</label><div class="mob-seg man-tp">${[['Corretiva', 'OMC'], ['Preventiva', 'OMP']].map(([t, sg]) => `<button type="button" class="${os.tipo === t ? 'on' : ''}" onclick="man.os.tipo='${t}';man.sujo=true;manRender()"><b>${sg}</b>&nbsp;· ${t}</button>`).join('')}</div></div>
+    ${os.tipo === 'Corretiva' ? `<div class="form-group"><label class="form-label">Natureza</label><div class="mob-seg">${MAN_NAT.map(n => `<button type="button" class="${os.natureza === n ? 'on' + (n === 'Falha operacional' ? ' nok' : '') : ''}" onclick="man.os.natureza='${n}';man.sujo=true;manRender()">${n}</button>`).join('')}</div></div>` : ''}
+    <div class="form-group"><label class="form-label">Compartimento</label><div class="man-tipos man-comp">${MAN_COMP.map(([t, ic]) => `<button type="button" class="${os.compartimento === t ? 'on' : ''}" onclick="man.os.compartimento='${t}';man.sujo=true;manRender()"><span>${ic}</span>${t}</button>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">Ficou parado?</label><div class="mob-seg">${[[true, 'Sim, parado'], [false, 'Não']].map(([k, t]) => `<button type="button" class="${os.parado === k ? 'on' + (k ? ' nok' : '') : ''}" onclick="man.os.parado=${k};man.sujo=true;manRender()">${t}</button>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">Sintoma</label><textarea class="form-control" rows="3" oninput="man.os.problema=this.value;man.sujo=true">${_manE(os.problema)}</textarea></div>
+    <div class="form-group"><label class="form-label">Quem executa</label><div class="mob-seg">${[['propria', 'Equipe própria'], ['terceiro', 'Terceiro / oficina']].map(([k, t]) => `<button type="button" class="${os.executor === k ? 'on' : ''}" onclick="man.os.executor='${k}';if('${k}'==='terceiro'&&!man.os.fornecedor){const a=_manAlvo(man.os);if(a&&a.forn&&!/pr[óo]pri|tenco/i.test(a.forn))man.os.fornecedor=a.forn}man.sujo=true;manRender()">${t}</button>`).join('')}</div></div>
+    ${os.executor === 'terceiro' ? `<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-control" list="man-forn2" value="${_manE(os.fornecedor)}" oninput="man.os.fornecedor=this.value;man.sujo=true"/><datalist id="man-forn2">${emps.map(e => `<option value="${_manE(e.fantasia || e.nome || e.razao || e.cod)}">`).join('')}</datalist></div>` : ''}
+    <div class="form-group"><label class="form-label">Mecânico / responsável</label><input class="form-control" value="${_manE(os.mecanico)}" oninput="man.os.mecanico=this.value;man.sujo=true"/></div>
+  </div></div>
+  ${hist.length ? `<div class="mr-sec" style="margin:14px 18px 6px">Histórico</div><div class="card" style="margin:0 16px 20px"><div class="card-body man-hist">${hist.map(h => `<div class="man-hi"><i style="background:${_manEtCor(h.etapa)}"></i><div><b>${_manE(h.etapa)}</b> <span>${_manDH(_manLoc(h.em))} · ${_manE(h.por || '')}</span>${h.obs ? `<div>${_manE(h.obs)}</div>` : ''}</div></div>`).join('')}</div></div>` : ''}`;
+  bar.style.display = ''; bar.innerHTML = `<button class="btn btn-outline" onclick="manVoltar()">Voltar</button><button class="btn" style="background:#1D4ED8;color:#fff;border:none" id="man-salvar" onclick="manSalvarEdit()">Salvar</button>`;
+}
+async function manSalvarEdit() {
+  const os = man.os, ed = man.ed, ant = _manOSs().find(x => x.id === os.id) || {};
+  if (!String(os.problema).trim()) return toast('Informe o sintoma.', 'err');
+  if (os.tipo === 'Corretiva' && !os.natureza) return toast('Escolha a natureza da corretiva.', 'err');
+  const b = document.getElementById('man-salvar'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
+  try {
+    const agora = new Date().toISOString(), mudou = ed.etapa !== (ant.etapa || 'Aberta') || String(ed.obs).trim();
+    const etapas = (ant.etapas || []).slice(); if (!etapas.length) etapas.push({ etapa: 'Aberta', em: ant.abertaEm || (ant.inicio ? new Date(ant.inicio).toISOString() : agora), por: ant.abertaPor || '', obs: '' }); if (mudou) etapas.push({ etapa: ed.etapa, em: agora, por: usuarioCampo.nome, obs: String(ed.obs).trim() });
+    const novas = await _manSalvarFotos(ed.fotos, os.id);
+    const reg = { id: os.id, tipo: os.tipo, natureza: os.tipo === 'Corretiva' ? os.natureza : '', compartimento: os.compartimento, parado: !!os.parado, problema: String(os.problema).trim(),
+      executor: os.executor, fornecedor: os.executor === 'terceiro' ? os.fornecedor : '', mecanico: os.mecanico, etapa: ed.etapa, etapas,
+      fotosAbertura: (ant.fotosAbertura || []).concat(novas), editadaPor: usuarioCampo.nome, editadaEm: agora };
+    if (mudou) reg.etapaEm = agora;
+    await fbSalvar('ordensServico', reg); _manGuardarOS({ ...ant, ...reg }); man.sujo = false;
+    toast('✓ ' + (os.num || 'OS') + ' atualizada' + (mudou ? ' · ' + ed.etapa : ''), 'ok'); manAbrir('lista');
+  } catch (e) { toast('Não consegui salvar: ' + (e.message || e), 'err'); if (b) { b.disabled = false; b.textContent = 'Salvar'; } }
 }
 function _manRenderNova(el, bar, T) {
   const os = man.os, alvo = _manAlvo(os), ab = os.equipId ? _manOSAberta(os.equipId) : null;
@@ -6937,9 +6992,9 @@ function _manFotosHtml(l, onde) {
 }
 async function manFotoAdd(onde, inp) {
   const f = inp.files && inp.files[0]; if (!f || !man) return;
-  try { const img = await _reduzirFoto(f); (onde === 'os' ? man.os.fotos : man.fim.fotos).push({ img, em: new Date().toISOString() }); man.sujo = true; manRender(); } catch (e) { toast('Não consegui ler a foto.', 'err'); }
+  try { const img = await _reduzirFoto(f); (onde === 'os' ? man.os.fotos : onde === 'ed' ? man.ed.fotos : man.fim.fotos).push({ img, em: new Date().toISOString() }); man.sujo = true; manRender(); } catch (e) { toast('Não consegui ler a foto.', 'err'); }
 }
-function manFotoTirar(onde, i) { (onde === 'os' ? man.os.fotos : man.fim.fotos).splice(i, 1); manRender(); }
+function manFotoTirar(onde, i) { (onde === 'os' ? man.os.fotos : onde === 'ed' ? man.ed.fotos : man.fim.fotos).splice(i, 1); manRender(); }
 async function _manUltLeitura() {
   if (!man || !man.os || !man.os.equipId) return; const id = man.os.equipId; man._ult = null;
   let u = null;
@@ -6966,7 +7021,7 @@ async function manSalvarNova() {
     const reg = { id, num, obra: _manObra(), alvo: os.alvo, equipId: alvo.id, tag: alvo.tag, placa: alvo.placa, modelo: alvo.modelo, familia: alvo.familia, famCod: alvo.famCod || '', medidor: alvo.km ? 'km' : 'h',
       tipo: os.tipo, natureza: os.tipo === 'Corretiva' ? os.natureza : '', ciclo: os.tipo === 'Preventiva' ? (_manNum(os.ciclo) ?? '') : '', horCiclo: os.tipo === 'Preventiva' ? (_manNum(os.horCiclo) ?? '') : '', compartimento: os.compartimento, planoId: os.tipo === 'Preventiva' ? (os.planoId || '') : '', planoNome: os.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!os.parado, inicio: os.inicio, horIni: hi == null ? '' : hi,
       problema: String(os.problema).trim(), executor: os.executor, fornecedor: os.executor === 'terceiro' ? os.fornecedor : '', mecanico: os.mecanico, fotosAbertura: fotos, fotoHorIni,
-      status: 'aberta', abertaPor: usuarioCampo.nome, abertaPorId: usuarioCampo.id, abertaEm: new Date().toISOString() };
+      status: 'aberta', etapa: 'Aberta', etapaEm: new Date().toISOString(), etapas: [{ etapa: 'Aberta', em: new Date().toISOString(), por: usuarioCampo.nome, obs: '' }], abertaPor: usuarioCampo.nome, abertaPorId: usuarioCampo.id, abertaEm: new Date().toISOString() };
     await fbSalvar('ordensServico', reg); _manGuardarOS(reg);
     man.sujo = false;
     _tkModal(_manTermo(reg), `<button class="btn" style="flex:1;background:#1D4ED8;color:#fff;border:none" onclick="document.getElementById('tk-ov').remove();manAbrir('lista')">Ver OS abertas</button><button class="btn btn-green" style="flex:1" onclick="document.getElementById('tk-ov').remove();man=null;showScreen('home');_manHome()">Concluir</button>`);
@@ -7057,7 +7112,7 @@ function _manTermo(o) {
     <div class="tk-c" style="font-weight:800">${_manE(o.num)} · ${_manE(_manTN(o).tipo)}</div><hr>
     ${L(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', [o.placa && o.placa !== o.tag ? o.placa : '', o.modelo].filter(Boolean).join(' · '))}${L('Família', o.familia)}${L('Compartimento', _manTN(o).comp)}${L('Natureza', _manTN(o).nat)}${L('Plano', o.planoNome)}${o.ciclo ? L('Ciclo', _fmtHor(o.ciclo) + (o.medidor === 'km' ? ' km' : ' h') + (o.horCiclo ? ' · revisão das ' + _fmtHor(o.horCiclo) : '')) : ''}
     ${L('Início', _manDH(o.inicio))}${L(km ? 'Km início' : 'Horímetro início', fmtM(o.horIni))}${L('Parado', o.parado ? 'Sim' : 'Não')}
-    ${L('Executor', o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ' · ' + o.fornecedor : '') : 'Equipe própria')}${L('Responsável', o.mecanico)}
+    ${o.status === 'aberta' ? L('Andamento', o.etapa || 'Aberta') : ''}${L('Executor', o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ' · ' + o.fornecedor : '') : 'Equipe própria')}${L('Responsável', o.mecanico)}
     <hr><div style="color:#555;font-size:11px">SINTOMA</div><div style="margin-bottom:4px">${_manE(o.problema)}</div>
     ${fin ? `<hr>${L('Término', _manDH(o.fim))}${L(km ? 'Km término' : 'Horímetro término', fmtM(o.horFim))}${o.parado ? L('Tempo parado', _manDur(+o.horasParado || 0)) : ''}
       <div style="color:#555;font-size:11px;margin-top:4px">SERVIÇO EXECUTADO</div><div>${_manE(o.servico)}</div>
@@ -7173,6 +7228,11 @@ function _manPrevLista() {
     .man-parado{color:#B91C1C;font-weight:600}.man-rodando{color:#15803D;font-weight:600}
     .man-tipos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.man-tipos button{display:flex;align-items:center;gap:8px;min-height:44px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:700;font-size:13.5px;color:var(--text);padding:0 10px;text-align:left}
     .man-tipos button span{display:flex;color:#1D4ED8}.man-tp button{font-size:15px}.man-comp{grid-template-columns:1fr}
+    .man-et{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}.man-et-b{font-size:12px;font-weight:800;padding:3px 10px;border-radius:20px;border:1px solid}.man-et-s{font-size:11.5px;color:var(--text3)}
+    .man-ets{display:grid;grid-template-columns:1fr 1fr;gap:6px}.man-ets button{min-height:42px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:700;font-size:13px;color:var(--text);padding:0 8px}
+    .man-ets button.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,#fff);color:var(--c)}
+    .man-hist .man-hi{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.man-hist .man-hi:last-child{border-bottom:0}.man-hi i{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}.man-hi span{font-size:11.5px;color:var(--text3)}.man-hi div div{font-size:12.5px;color:var(--text2);margin-top:2px}
+    .man-os-f .btn + .btn{margin-left:6px}.man-os-f .btn{padding:7px 12px;min-height:0;font-size:13px;width:auto;flex:0 0 auto}.man-parado{white-space:nowrap}
     .man-busca #man-res{margin-top:6px;max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff}.man-res-i{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer}.man-res-i:last-child{border-bottom:0}.man-res-i:active{background:#EFF6FF}
     .man-res-t{font-size:14px}.man-res-t span{font-size:12px;color:var(--text2)}.man-res-f{font-size:12px;color:#1D4ED8;margin-top:2px}.man-res-f em{font-style:normal;color:var(--text2)}.man-res-h,.man-res-v{padding:8px 12px;font-size:11.5px;color:var(--text3)}
     .man-alvo2{border:1.5px solid #1D4ED8;background:#EFF6FF}.man-ai{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;margin-top:6px}.man-ai span{color:var(--text2)}.man-ai b{text-align:right}.man-hor{display:flex;gap:8px;align-items:stretch}.man-hor .form-control{flex:1;min-width:0}

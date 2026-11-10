@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.33 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.34 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17956,7 +17956,7 @@ function renderManut() {
   const pe = {}; l.filter(o => o.status !== 'cancelada').forEach(o => { const t = pe[o.tag] || (pe[o.tag] = { n: 0, h: 0, c: 0 }); t.n++; t.h += _mnHorasParado(o); t.c += +o.custoTotal || 0; });
   const mxe = Math.max(1, ...Object.values(pe).map(t => t.h));
   $('mn-eqs').innerHTML = Object.keys(pe).length ? Object.entries(pe).sort((a, b) => b[1].h - a[1].h).slice(0, 8).map(([t, v]) => `<div class="mn-bar"><span>${_e(t)}</span><div><i style="width:${(v.h / mxe * 100).toFixed(1)}%;background:#DC2626"></i></div><b>${_mnHtxt(v.h)}</b><small>${v.n} OS · ${_moeda(v.c)}</small></div>`).join('') : '<div style="color:var(--text-3);font-size:13px">—</div>';
-  const stt = o => o.status === 'aberta' ? (o.parado ? tag('Aberta · parado', 'red') : tag('Aberta', 'blue')) : o.status === 'finalizada' ? tag('Finalizada', 'green') : tag('Cancelada', 'gray');
+  const stt = o => o.status === 'aberta' ? (o.parado ? tag('Aberta · parado', 'red') : tag('Aberta', 'blue')) + `<div style="font-size:11.5px;font-weight:700;color:${_mnEtCor(o.etapa)};margin-top:3px">● ${_e(o.etapa || 'Aberta')}</div>` : o.status === 'finalizada' ? tag('Finalizada', 'green') : tag('Cancelada', 'gray');
   $('mn-tbody').innerHTML = l.length ? l.map(o => `<tr style="cursor:pointer" onclick="mnVer('${o.id}')"><td class="td-mono">${_e(o.num || '')}</td><td>${stt(o)}</td><td><b>${_e(o.tag || '')}</b><div style="font-size:11.5px;color:var(--text-3)">${o.alvo === 'vl' ? 'Veículo leve' : _e(o.familia || '')}</div></td>
       <td>${_e(_mnTipoTxt(o))}<div style="font-size:11.5px;color:var(--text-3)">${_e(_mnTN(o).comp)}</div>${o.planoNome ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(o.planoNome)}</div>` : ''}</td><td style="max-width:260px">${_e(o.problema || '')}</td><td class="td-mono">${_mnDH(o.inicio)}</td><td class="td-mono">${o.status === 'finalizada' ? _mnDH(o.fim) : '—'}</td>
       <td style="text-align:right" class="td-mono">${o.parado ? _mnHtxt(_mnHorasParado(o)) : '—'}</td><td>${o.executor === 'terceiro' ? _e(o.fornecedor || 'Terceiro') : 'Própria'}</td><td style="text-align:right" class="td-mono">${o.custoTotal ? _moeda(o.custoTotal) : '—'}</td></tr>`).join('')
@@ -17975,12 +17975,24 @@ async function mnVer(id) {
     <div class="mn-tx"><b>Sintoma</b><div>${_e(o.problema || '—')}</div></div>${o.servico ? `<div class="mn-tx"><b>Serviço executado</b><div>${_e(o.servico)}</div></div>` : ''}
     ${(o.pecas || []).length ? `<table style="margin-top:10px"><thead><tr><th>Peça / material</th><th style="text-align:right">Qtd</th><th style="text-align:right">Unitário</th><th style="text-align:right">Total</th></tr></thead><tbody>${o.pecas.map(p => `<tr><td>${_e((p.cod ? p.cod + ' · ' : '') + p.nome)}${p.avulsa ? ' ' + tag('fora do cadastro', 'amber') : ''}</td><td style="text-align:right">${_e(p.qtd)} ${_e(p.un || '')}</td><td style="text-align:right">${_moeda(p.preco)}</td><td style="text-align:right">${_moeda(p.total ?? p.qtd * p.preco)}</td></tr>`).join('')}
       ${o.custoMO ? `<tr><td colspan="3">Mão de obra do terceiro</td><td style="text-align:right">${_moeda(o.custoMO)}</td></tr>` : ''}<tr><td colspan="3"><b>Custo total</b></td><td style="text-align:right"><b>${_moeda(o.custoTotal)}</b></td></tr></tbody></table>` : o.custoTotal ? `<div class="mn-tx"><b>Custo total:</b> ${_moeda(o.custoTotal)}</div>` : ''}
+    ${(o.etapas || []).length ? `<div class="mn-tx"><b>Andamento</b>${o.etapas.slice().reverse().map(h => `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:${_mnEtCor(h.etapa)};font-weight:700;min-width:150px">● ${_e(h.etapa)}</span><span style="color:var(--text-3);min-width:150px">${(() => { const d = new Date(h.em); return isNaN(d) ? '' : _mnDH(_hojeLocal(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')); })()} · ${_e(h.por || '')}</span><span>${_e(h.obs || '')}</span></div>`).join('')}</div>` : ''}
+    ${o.status === 'aberta' ? `<div class="mn-tx" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><b>Atualizar andamento</b><select class="form-control" id="mn-et" style="min-width:200px">${MAN_ETAPAS_P.map(([e]) => `<option ${e === (o.etapa || 'Aberta') ? 'selected' : ''}>${e}</option>`).join('')}</select></div><input class="form-control" id="mn-et-obs" placeholder="Observação (ex.: peça pedida, previsão sexta)" style="flex:1;min-width:220px"/><button class="btn btn-outline" onclick="mnEtapa('${o.id}')">Salvar andamento</button></div>` : ''}
     <div id="mn-v-fotos" class="mn-fotos"></div>`;
   document.getElementById('mn-v-rod').innerHTML = `${_ehMaster() ? `<button class="btn btn-outline" style="margin-right:auto;color:var(--red)" onclick="mnExcluir('${o.id}')">Excluir</button>` : ''}<button class="btn btn-outline" onclick="closeModal('modal-mn')">Fechar</button><button class="btn btn-primary" onclick="mnImprimir('${o.id}')">🖨 Imprimir / PDF</button>`;
   openModal('modal-mn');
   const ids = [...(o.fotoHorIni ? [[o.fotoHorIni, (o.medidor === 'km' ? 'Hodômetro' : 'Horímetro') + ' início']] : []), ...(o.fotosAbertura || []).map(i => [i, 'Abertura']), ...(o.fotoHorFim ? [[o.fotoHorFim, (o.medidor === 'km' ? 'Hodômetro' : 'Horímetro') + ' término']] : []), ...(o.fotosFim || []).map(i => [i, 'Serviço'])];
   if (ids.length) { const el = document.getElementById('mn-v-fotos'); el.innerHTML = '<div style="color:var(--text-3);font-size:12px">Carregando fotos…</div>';
     const imgs = await Promise.all(ids.map(([i]) => _mobFotoImg(i))); el.innerHTML = imgs.map((s, k) => s ? `<figure><img src="${s}" onclick="window.open().document.write('<img src=&quot;'+this.src+'&quot; style=&quot;max-width:100%&quot;>')"><figcaption>${ids[k][1]}</figcaption></figure>` : '').join(''); }
+}
+const MAN_ETAPAS_P = [['Aberta', '#64748B'], ['Em diagnóstico', '#7C3AED'], ['Em manutenção', '#1D4ED8'], ['Na oficina', '#0E7490'], ['Aguardando peças', '#D97706'], ['Aguardando terceiro', '#B45309'], ['Aguardando aprovação', '#BE185D'], ['Em teste', '#15803D']];
+const _mnEtCor = e => (MAN_ETAPAS_P.find(x => x[0] === (e || 'Aberta')) || ['', '#64748B'])[1];
+async function mnEtapa(id) {
+  const o = (dados.ordensServico || []).find(x => x.id === id); if (!o) return;
+  const et = document.getElementById('mn-et').value, obs = document.getElementById('mn-et-obs').value.trim(), agora = new Date().toISOString();
+  if (et === (o.etapa || 'Aberta') && !obs) return toast('Escolha outro andamento ou escreva uma observação.', 'error');
+  const etapas = ((o.etapas || []).length ? o.etapas : [{ etapa: 'Aberta', em: o.abertaEm || (o.inicio ? new Date(o.inicio).toISOString() : agora), por: o.abertaPor || '', obs: '' }]).concat([{ etapa: et, em: agora, por: (usuarioLogado && usuarioLogado.nome) || 'Escritório', obs }]);
+  await fbSave('ordensServico', id, { etapa: et, etapaEm: agora, etapas }); Object.assign(o, { etapa: et, etapaEm: agora, etapas });
+  renderManut(); mnVer(id); toast('Andamento atualizado.');
 }
 async function mnExcluir(id) { if (!confirm('Excluir esta OS de vez? Use só para OS lançada por engano.')) return; try { await fbDelete('ordensServico', id); dados.ordensServico = (dados.ordensServico || []).filter(o => o.id !== id); closeModal('modal-mn'); renderManut(); toast('OS excluída.'); } catch (e) { toast('Não consegui excluir: ' + e.message, 'error'); } }
 async function mnImprimir(id) {
