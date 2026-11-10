@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.13</div>
+  <div class="login-versao">ObraKontrol Campo · v3.14</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6745,9 +6745,9 @@ function _manResHtml(q) {
   l.sort((a, b) => { const ta = _manN(a.tag).startsWith(n) ? 0 : 1, tb = _manN(b.tag).startsWith(n) ? 0 : 1; return ta - tb || String(a.tag).localeCompare(String(b.tag)); });
   const tot = l.length; l = l.slice(0, 30);
   if (!tot) return `<div class="man-res-v">Nada encontrado${n ? ' para "' + _manE(q) + '"' : ''}.</div>`;
-  return (n ? '' : `<div class="man-res-h">${tot} ${vl ? 'veículo(s)' : 'equipamento(s)'} na obra — digite para filtrar</div>`) + l.map(x => `<div class="man-res-i" onclick="manEscolher('${_manE(x.id)}')"><div class="man-res-t"><b>${_manE(x.tag)}</b>${x.sub ? ' <span>' + _manE(x.sub) + '</span>' : ''}</div><div class="man-res-f">${_manE(x.fam || '—')}${x.forn ? ' · <em>' + _manE(x.forn) + '</em>' : ''}</div></div>`).join('') + (tot > 30 ? `<div class="man-res-h">+${tot - 30} — continue digitando</div>` : '');
+  return (n ? '' : `<div class="man-res-h">${tot} ${vl ? 'veículo(s)' : 'equipamento(s)'} na obra — digite para filtrar</div>`) + l.map(x => `<div class="man-res-i" onmousedown="event.preventDefault()" onclick="manEscolher('${_manE(x.id)}')"><div class="man-res-t"><b>${_manE(x.tag)}</b>${x.sub ? ' <span>' + _manE(x.sub) + '</span>' : ''}</div><div class="man-res-f">${_manE(x.fam || '—')}${x.forn ? ' · <em>' + _manE(x.forn) + '</em>' : ''}</div></div>`).join('') + (tot > 30 ? `<div class="man-res-h">+${tot - 30} — continue digitando</div>` : '');
 }
-function manBusca(q) { if (!man) return; man.q2 = q; const r = document.getElementById('man-res'); if (r) r.innerHTML = _manResHtml(q); }
+function manBusca(q) { if (!man) return; man.q2 = q; const r = document.getElementById('man-res'); if (r) { r.innerHTML = _manResHtml(q); r.style.display = ''; } }
 function manEscolher(id) { man.os.equipId = id; man.os.planoId = ''; man.os.horIni = ''; man.q2 = ''; man.sujo = true; manRender(); _manUltLeitura(); }
 function _manAgoraLocal() { const d = new Date(); return _hojeISO(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
 function _manDH(s) { if (!s) return '—'; const [d, h] = String(s).split('T'); return d.split('-').reverse().join('/') + (h ? ' ' + h.slice(0, 5) : ''); }
@@ -6830,7 +6830,7 @@ function manRender() {
   if (!man) return;
   const el = document.getElementById('man-content'), bar = document.getElementById('man-bar'), qr = document.getElementById('man-btn-qr');
   const T = (t, s) => { document.getElementById('man-tit').textContent = t; document.getElementById('man-sub').textContent = s || ''; };
-  qr.style.display = man.view === 'nova' ? '' : 'none';
+  qr.style.display = 'none';
   bar.style.display = 'none'; bar.innerHTML = '';
   if (man.view === 'lista') {
     const l = _manAbertas().sort((a, b) => (b.parado - a.parado) || String(a.inicio).localeCompare(String(b.inicio)));
@@ -6943,7 +6943,7 @@ function _manRenderNova(el, bar, T) {
   el.innerHTML = `<div class="card" style="margin:12px 16px"><div class="card-body">
     <div class="form-group"><label class="form-label">O que vai para manutenção *</label><div class="mob-seg">${[['eq', 'Equipamento'], ['vl', 'Veículo leve']].map(([k, t]) => `<button type="button" class="${os.alvo === k ? 'on' : ''}" onclick="man.os.alvo='${k}';man.os.equipId='';man.os.planoId='';man.os.horIni='';man.q2='';manRender()">${t}</button>`).join('')}</div></div>
     <div class="form-group"><label class="form-label">${os.alvo === 'vl' ? 'Veículo' : 'Equipamento'} *</label>
-      ${alvo ? '' : `<div class="man-busca"><input class="form-control" id="man-q" autocomplete="off" placeholder="Digite TAG, placa, família ou fornecedor…" value="${_manE(man.q2 || '')}" oninput="manBusca(this.value)" onfocus="manBusca(this.value)"/><div id="man-res">${_manResHtml(man.q2 || '')}</div></div>`}
+      ${alvo ? '' : `<div class="man-busca"><div class="man-qrow"><input class="form-control" id="man-q" autocomplete="off" placeholder="Escolha ou digite a TAG" value="${_manE(man.q2 || '')}" oninput="manBusca(this.value)" onfocus="manBusca(this.value)" onblur="setTimeout(()=>{const r=document.getElementById('man-res');if(r)r.style.display='none'},180)"/><button type="button" class="man-qrbtn" onclick="abrirQR('manq')" title="Ler QR Code do equipamento"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>QR</span></button></div><div id="man-res" style="display:none"></div></div>`}
       ${alvo ? `<div class="man-alvo man-alvo2"><div style="display:flex;align-items:flex-start;gap:8px"><div style="flex:1;min-width:0"><b style="font-size:16px">${_manE(alvo.tag)}</b>${alvo.placa && alvo.placa !== alvo.tag ? ' · ' + _manE(alvo.placa) : ''}${alvo.modelo ? ' · ' + _manE(alvo.modelo) : ''}</div><button type="button" class="mob-link" onclick="man.os.equipId='';man.os.planoId='';man.os.horIni='';man.q2='';manRender();setTimeout(()=>document.getElementById('man-q')?.focus(),50)">Trocar</button></div>
         <div class="man-ai"><span>Família</span><b>${_manE(alvo.familia || '—')}</b></div><div class="man-ai"><span>${os.alvo === 'vl' ? 'Locadora' : 'Fornecedor'}</span><b>${_manE(alvo.forn || '—')}</b></div></div>` : ''}
       ${ab ? `<div class="man-aviso">Este ${os.alvo === 'vl' ? 'veículo' : 'equipamento'} já tem a <b>${_manE(ab.num)}</b> aberta (${_manE(ab.tipo)}). <button type="button" class="mob-link" onclick="manFinalizar('${_manE(ab.id)}')">Finalizar ela</button></div>` : ''}</div>
@@ -7233,7 +7233,8 @@ function _manPrevLista() {
     .man-ets button.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,#fff);color:var(--c)}
     .man-hist .man-hi{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.man-hist .man-hi:last-child{border-bottom:0}.man-hi i{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}.man-hi span{font-size:11.5px;color:var(--text3)}.man-hi div div{font-size:12.5px;color:var(--text2);margin-top:2px}
     .man-os-f .btn + .btn{margin-left:6px}.man-os-f .btn{padding:7px 12px;min-height:0;font-size:13px;width:auto;flex:0 0 auto}.man-parado{white-space:nowrap}
-    .man-busca #man-res{margin-top:6px;max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff}.man-res-i{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer}.man-res-i:last-child{border-bottom:0}.man-res-i:active{background:#EFF6FF}
+    .man-qrow{display:flex;gap:8px}.man-qrow .form-control{flex:1;min-width:0}.man-qrbtn{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 14px;border-radius:10px;border:0;background:#1D4ED8;color:#fff;font-weight:800;font-size:13px}
+    .man-busca #man-res{margin-top:6px;max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff}.man-res-i{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer}.man-res-i:last-child{border-bottom:0}.man-res-i:active{background:#EFF6FF}
     .man-res-t{font-size:14px}.man-res-t span{font-size:12px;color:var(--text2)}.man-res-f{font-size:12px;color:#1D4ED8;margin-top:2px}.man-res-f em{font-style:normal;color:var(--text2)}.man-res-h,.man-res-v{padding:8px 12px;font-size:11.5px;color:var(--text3)}
     .man-alvo2{border:1.5px solid #1D4ED8;background:#EFF6FF}.man-ai{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;margin-top:6px}.man-ai span{color:var(--text2)}.man-ai b{text-align:right}.man-hor{display:flex;gap:8px;align-items:stretch}.man-hor .form-control{flex:1;min-width:0}
     .man-hor-add{flex:0 0 74px;border-radius:10px;border:1.5px dashed #DC2626;color:#B91C1C;background:#FEF2F2;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:18px;cursor:pointer;min-height:48px}.man-hor-add span{font-size:11px;font-weight:700}
