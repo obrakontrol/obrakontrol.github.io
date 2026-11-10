@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.09</div>
+  <div class="login-versao">ObraKontrol Campo · v3.10</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6799,13 +6799,13 @@ function manVoltar() {
 function manAbrir(view) { _manTela(); man = { view }; showScreen('man'); manRender(); }
 function manNova(pre) {
   _manTela();
-  man = { view: 'nova', sujo: false, os: Object.assign({ alvo: 'eq', equipId: '', tipo: '', natureza: '', ciclo: '', horCiclo: '', compartimento: '', planoId: '', parado: true, inicio: _manAgoraLocal(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioCampo && usuarioCampo.nome) || '', fotos: [] }, pre || {}) };
+  man = { view: 'nova', sujo: false, os: Object.assign({ alvo: 'eq', equipId: '', tipo: '', natureza: '', ciclo: '', horCiclo: '', compartimento: '', fotoHor: null, planoId: '', parado: true, inicio: _manAgoraLocal(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioCampo && usuarioCampo.nome) || '', fotos: [] }, pre || {}) };
   showScreen('man'); manRender(); if (man.os.equipId) _manUltLeitura();
 }
 function manFinalizar(id, de) {
   const os = _manOSs().find(o => o.id === id); if (!os) return toast('OS não encontrada.', 'err');
   _manTela();
-  man = { view: 'fim', de: de || 'lista', sujo: false, os: JSON.parse(JSON.stringify(os)), fim: { fim: _manAgoraLocal(), horFim: '', servico: '', pecas: [], custoMO: '', fotos: [], prodSel: '', qtd: '1', avNome: '', avPreco: '' } };
+  man = { view: 'fim', de: de || 'lista', sujo: false, os: JSON.parse(JSON.stringify(os)), fim: { fim: _manAgoraLocal(), horFim: '', servico: '', pecas: [], custoMO: '', fotos: [], fotoHor: null, prodSel: '', qtd: '1', avNome: '', avPreco: '' } };
   showScreen('man'); manRender();
 }
 function manCampo(k, v, re) { if (!man) return; (man.view === 'fim' && k in man.fim ? man.fim : man.os)[k] = v; man.sujo = true; if (re) manRender(); }
@@ -6884,14 +6884,29 @@ function _manRenderNova(el, bar, T) {
     <div class="form-group"><label class="form-label">Ficou parado? *</label><div class="mob-seg">${[[true, 'Sim, parado'], [false, 'Não, segue trabalhando']].map(([k, t]) => `<button type="button" class="${os.parado === k ? 'on' + (k ? ' nok' : '') : ''}" onclick="man.os.parado=${k};man.sujo=true;manRender()">${t}</button>`).join('')}</div>
       <div style="font-size:11.5px;color:var(--text3);margin-top:4px">${os.parado ? 'O tempo parado conta desde o início até a finalização. Na apropriação ele entra parado (MP/MNP).' : 'Serviço feito sem parar o equipamento (não conta tempo parado).'}</div></div>
     <div class="form-group"><label class="form-label">Início *</label><input class="form-control" type="datetime-local" value="${_manE(os.inicio)}" oninput="manCampo('inicio',this.value)"/></div>
-    <div class="form-group"><label class="form-label">${med} no início</label><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(os.horIni)}" oninput="manCampo('horIni',this.value)" placeholder="${man._ult != null ? 'Última leitura: ' + _fmtHor(man._ult) : 'Ex.: 1245,5'}"/></div>
-    <div class="form-group"><label class="form-label">Problema / serviço a fazer *</label><textarea class="form-control" rows="3" oninput="manCampo('problema',this.value)" placeholder="Ex.: vazamento no cilindro do braço">${_manE(os.problema)}</textarea></div>
+    <div class="form-group"><label class="form-label">${med} no início + foto *</label><div class="man-hor"><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(os.horIni)}" oninput="manCampo('horIni',this.value)" placeholder="${man._ult != null ? 'Última leitura: ' + _fmtHor(man._ult) : 'Ex.: 1245,5'}"/>${_manHorFotoBtn('ini', os.fotoHor)}</div></div>
+    <div class="form-group"><label class="form-label">Sintoma *</label><textarea class="form-control" rows="3" oninput="manCampo('problema',this.value)" placeholder="O que foi percebido. Ex.: vazamento de óleo no braço, barulho no motor, não liga">${_manE(os.problema)}</textarea></div>
     <div class="form-group"><label class="form-label">Quem executa</label><div class="mob-seg">${[['propria', 'Equipe própria'], ['terceiro', 'Terceiro / oficina']].map(([k, t]) => `<button type="button" class="${os.executor === k ? 'on' : ''}" onclick="man.os.executor='${k}';man.sujo=true;manRender()">${t}</button>`).join('')}</div></div>
     ${os.executor === 'terceiro' ? `<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-control" list="man-forn" value="${_manE(os.fornecedor)}" oninput="manCampo('fornecedor',this.value)" placeholder="Oficina / locadora"/><datalist id="man-forn">${emps.map(e => `<option value="${_manE(e.fantasia || e.nome || e.razao || e.cod)}">`).join('')}</datalist></div>` : ''}
     <div class="form-group"><label class="form-label">Mecânico / responsável</label><input class="form-control" value="${_manE(os.mecanico)}" oninput="manCampo('mecanico',this.value)"/></div>
     <div class="form-group"><label class="form-label">Fotos (opcional)</label>${_manFotosHtml(os.fotos, 'os')}</div>
   </div></div>`;
   bar.style.display = ''; bar.innerHTML = `<button class="btn btn-outline" onclick="manVoltar()">Cancelar</button><button class="btn" style="background:#1D4ED8;color:#fff;border:none" id="man-salvar" onclick="manSalvarNova()">Abrir OS</button>`;
+}
+// v3.10: foto obrigatória do horímetro/hodômetro, ao lado do campo
+function _manHorFotoBtn(onde, f) {
+  return f ? `<div class="man-hor-ft"><img src="${f.img}" alt="foto"/><button type="button" onclick="manHorFoto('${onde}',null)">×</button></div>`
+    : `<label class="man-hor-add" title="Tirar foto">📷<span>Foto</span><input type="file" accept="image/*" capture="environment" style="display:none" onchange="manHorFoto('${onde}',this)"/></label>`;
+}
+async function manHorFoto(onde, inp) {
+  if (!man) return; const alvo = onde === 'ini' ? man.os : man.fim;
+  if (!inp) { alvo.fotoHor = null; return manRender(); }
+  const f = inp.files && inp.files[0]; if (!f) return;
+  try { alvo.fotoHor = { img: await _reduzirFoto(f), em: new Date().toISOString() }; man.sujo = true; manRender(); } catch (e) { toast('Não consegui ler a foto.', 'err'); }
+}
+async function _manSalvarFotoHor(f, base, onde) {
+  if (!f) return ''; const id = base + '-hor' + onde + '-' + Date.now().toString(36);
+  try { await fbSalvar('fotos', { id, tipo: 'manutencao_horimetro', os: base, momento: onde, tiradaEm: f.em || '', img: f.img, lancadoPor: usuarioCampo.nome, obra: _manObra() }); return id; } catch (e) { return ''; }
 }
 function _manPlanoEscolhido() {
   const o = man.os, p = (dadosCampo.planosPrev || []).find(x => x.id === o.planoId); o.ciclo = ''; o.horCiclo = '';
@@ -6922,7 +6937,7 @@ async function _manSalvarFotos(l, base) {
 }
 async function manSalvarNova() {
   const os = man.os, alvo = _manAlvo(os), f = [];
-  if (!alvo) f.push(os.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!os.tipo) f.push('o tipo'); if (os.tipo === 'Corretiva' && !os.natureza) f.push('a natureza da corretiva'); if (!os.compartimento) f.push('o compartimento'); if (!os.inicio) f.push('o início'); if (!String(os.problema).trim()) f.push('o problema');
+  if (!alvo) f.push(os.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!os.tipo) f.push('o tipo'); if (os.tipo === 'Corretiva' && !os.natureza) f.push('a natureza da corretiva'); if (!os.compartimento) f.push('o compartimento'); if (!os.inicio) f.push('o início'); if (_manNum(os.horIni) == null) f.push((alvo && alvo.km ? 'o hodômetro' : 'o horímetro') + ' do início'); if (!os.fotoHor) f.push('a foto do ' + (alvo && alvo.km ? 'hodômetro' : 'horímetro')); if (!String(os.problema).trim()) f.push('o sintoma');
   if (f.length) return toast('Falta informar ' + f.join(', ') + '.', 'err');
   if (_manOSAberta(os.equipId) && !confirm('Já existe OS aberta para ' + alvo.tag + '. Abrir outra mesmo assim?')) return;
   const hi = _manNum(os.horIni); if (hi != null && man._ult != null && hi < man._ult && !confirm('A leitura (' + _fmtHor(hi) + ') é menor que a última conhecida (' + _fmtHor(man._ult) + '). Salvar assim?')) return;
@@ -6930,10 +6945,10 @@ async function manSalvarNova() {
   try {
     const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _manProxNum(os.tipo);
     const pl = (dadosCampo.planosPrev || []).find(p => p.id === os.planoId);
-    const fotos = await _manSalvarFotos(os.fotos, id);
+    const fotos = await _manSalvarFotos(os.fotos, id), fotoHorIni = await _manSalvarFotoHor(os.fotoHor, id, 'ini');
     const reg = { id, num, obra: _manObra(), alvo: os.alvo, equipId: alvo.id, tag: alvo.tag, placa: alvo.placa, modelo: alvo.modelo, familia: alvo.familia, famCod: alvo.famCod || '', medidor: alvo.km ? 'km' : 'h',
       tipo: os.tipo, natureza: os.tipo === 'Corretiva' ? os.natureza : '', ciclo: os.tipo === 'Preventiva' ? (_manNum(os.ciclo) ?? '') : '', horCiclo: os.tipo === 'Preventiva' ? (_manNum(os.horCiclo) ?? '') : '', compartimento: os.compartimento, planoId: os.tipo === 'Preventiva' ? (os.planoId || '') : '', planoNome: os.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!os.parado, inicio: os.inicio, horIni: hi == null ? '' : hi,
-      problema: String(os.problema).trim(), executor: os.executor, fornecedor: os.executor === 'terceiro' ? os.fornecedor : '', mecanico: os.mecanico, fotosAbertura: fotos,
+      problema: String(os.problema).trim(), executor: os.executor, fornecedor: os.executor === 'terceiro' ? os.fornecedor : '', mecanico: os.mecanico, fotosAbertura: fotos, fotoHorIni,
       status: 'aberta', abertaPor: usuarioCampo.nome, abertaPorId: usuarioCampo.id, abertaEm: new Date().toISOString() };
     await fbSalvar('ordensServico', reg); _manGuardarOS(reg);
     man.sujo = false;
@@ -6952,7 +6967,7 @@ function _manRenderFim(el, bar, T) {
     <div class="card" style="margin:12px 16px"><div class="card-body">
     <div class="form-group"><label class="form-label">Término *</label><input class="form-control" type="datetime-local" value="${_manE(fm.fim)}" oninput="manCampo('fim',this.value,1)"/>
       ${os.parado ? `<div class="man-tot">Tempo parado: <b>${_manDur(hp)}</b> (${hp.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h)</div>` : ''}</div>
-    <div class="form-group"><label class="form-label">${km ? 'Hodômetro (km)' : 'Horímetro (h)'} no término</label><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(fm.horFim)}" oninput="manCampo('horFim',this.value)" placeholder="${os.horIni !== '' && os.horIni != null ? 'Início: ' + _fmtHor(os.horIni) : ''}"/></div>
+    <div class="form-group"><label class="form-label">${km ? 'Hodômetro (km)' : 'Horímetro (h)'} no término + foto *</label><div class="man-hor"><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(fm.horFim)}" oninput="manCampo('horFim',this.value)" placeholder="${os.horIni !== '' && os.horIni != null ? 'Início: ' + _fmtHor(os.horIni) : ''}"/>${_manHorFotoBtn('fim', fm.fotoHor)}</div></div>
     <div class="form-group"><label class="form-label">Serviço executado *</label><textarea class="form-control" rows="3" oninput="manCampo('servico',this.value)" placeholder="O que foi feito">${_manE(fm.servico)}</textarea></div>
     </div></div>
     <div class="mr-sec" style="margin:14px 18px 6px">Peças e materiais</div>
@@ -6986,14 +7001,16 @@ async function manSalvarFim() {
   const os = man.os, fm = man.fim;
   if (!fm.fim) return toast('Informe o término.', 'err'); if (!String(fm.servico).trim()) return toast('Descreva o serviço executado.', 'err');
   if (new Date(fm.fim) < new Date(os.inicio)) return toast('O término está antes do início (' + _manDH(os.inicio) + ').', 'err');
+  if (_manNum(fm.horFim) == null) return toast('Informe o ' + (os.medidor === 'km' ? 'hodômetro' : 'horímetro') + ' do término.', 'err');
+  if (!fm.fotoHor) return toast('Tire a foto do ' + (os.medidor === 'km' ? 'hodômetro' : 'horímetro') + ' do término.', 'err');
   const hf = _manNum(fm.horFim), hi = _manNum(os.horIni); if (hf != null && hi != null && hf < hi) return toast('A leitura do término é menor que a do início (' + _fmtHor(hi) + ').', 'err');
   const b = document.getElementById('man-salvar'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
   try {
     const pecas = fm.pecas.map(p => ({ prodId: p.prodId || '', cod: p.cod || '', nome: p.nome, un: p.un || 'un', qtd: +p.qtd || 0, preco: +p.preco || 0, total: Math.round((+p.qtd || 0) * (+p.preco || 0) * 100) / 100, avulsa: !!p.avulsa }));
     const custoPecas = pecas.reduce((s, p) => s + p.total, 0), custoMO = os.executor === 'terceiro' ? (_manNum(fm.custoMO) || 0) : 0;
-    const fotos = await _manSalvarFotos(fm.fotos, os.id);
+    const fotos = await _manSalvarFotos(fm.fotos, os.id), fotoHorFim = await _manSalvarFotoHor(fm.fotoHor, os.id, 'fim');
     const reg = { id: os.id, status: 'finalizada', fim: fm.fim, horFim: hf == null ? '' : hf, servico: String(fm.servico).trim(), pecas, custoPecas: Math.round(custoPecas * 100) / 100, custoMO, custoTotal: Math.round((custoPecas + custoMO) * 100) / 100,
-      horasParado: os.parado ? Math.round(_manHoras(os.inicio, fm.fim) * 100) / 100 : 0, fotosFim: fotos, finalizadaPor: usuarioCampo.nome, finalizadaPorId: usuarioCampo.id, finalizadaEm: new Date().toISOString() };
+      horasParado: os.parado ? Math.round(_manHoras(os.inicio, fm.fim) * 100) / 100 : 0, fotosFim: fotos, fotoHorFim, finalizadaPor: usuarioCampo.nome, finalizadaPorId: usuarioCampo.id, finalizadaEm: new Date().toISOString() };
     await fbSalvar('ordensServico', reg); const full = { ...os, ...reg }; _manGuardarOS(full);
     // baixa no estoque dos produtos usados
     for (const p of pecas) { if (!p.prodId) continue; const pr = (dadosCampo.produtos || []).find(x => x.id === p.prodId); if (!pr || pr.estoque === '' || pr.estoque == null) continue;
@@ -7024,7 +7041,7 @@ function _manTermo(o) {
     ${L(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', [o.placa && o.placa !== o.tag ? o.placa : '', o.modelo].filter(Boolean).join(' · '))}${L('Família', o.familia)}${L('Compartimento', _manTN(o).comp)}${L('Natureza', _manTN(o).nat)}${L('Plano', o.planoNome)}${o.ciclo ? L('Ciclo', _fmtHor(o.ciclo) + (o.medidor === 'km' ? ' km' : ' h') + (o.horCiclo ? ' · revisão das ' + _fmtHor(o.horCiclo) : '')) : ''}
     ${L('Início', _manDH(o.inicio))}${L(km ? 'Km início' : 'Horímetro início', fmtM(o.horIni))}${L('Parado', o.parado ? 'Sim' : 'Não')}
     ${L('Executor', o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ' · ' + o.fornecedor : '') : 'Equipe própria')}${L('Responsável', o.mecanico)}
-    <hr><div style="color:#555;font-size:11px">PROBLEMA</div><div style="margin-bottom:4px">${_manE(o.problema)}</div>
+    <hr><div style="color:#555;font-size:11px">SINTOMA</div><div style="margin-bottom:4px">${_manE(o.problema)}</div>
     ${fin ? `<hr>${L('Término', _manDH(o.fim))}${L(km ? 'Km término' : 'Horímetro término', fmtM(o.horFim))}${o.parado ? L('Tempo parado', _manDur(+o.horasParado || 0)) : ''}
       <div style="color:#555;font-size:11px;margin-top:4px">SERVIÇO EXECUTADO</div><div>${_manE(o.servico)}</div>
       ${(o.pecas || []).length ? '<hr><div style="color:#555;font-size:11px">PEÇAS</div>' + o.pecas.map(p => `<div class="tk-l"><span>${_manE(p.qtd)}× ${_manE(p.nome)}</span><b>${_manMoeda(p.total ?? p.qtd * p.preco)}</b></div>`).join('') : ''}
@@ -7138,7 +7155,9 @@ function _manPrevLista() {
     .man-os-f{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}
     .man-parado{color:#B91C1C;font-weight:600}.man-rodando{color:#15803D;font-weight:600}
     .man-tipos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.man-tipos button{display:flex;align-items:center;gap:8px;min-height:44px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:700;font-size:13.5px;color:var(--text);padding:0 10px;text-align:left}
-    .man-tipos button span{display:flex;color:#1D4ED8}.man-tp button{font-size:15px}.man-comp{grid-template-columns:1fr}.man-chip.comp{background:#F1F5F9;color:#334155}.man-tipos button.on{border-color:#1D4ED8;background:#EFF6FF;color:#1D4ED8}
+    .man-tipos button span{display:flex;color:#1D4ED8}.man-tp button{font-size:15px}.man-comp{grid-template-columns:1fr}.man-hor{display:flex;gap:8px;align-items:stretch}.man-hor .form-control{flex:1;min-width:0}
+    .man-hor-add{flex:0 0 74px;border-radius:10px;border:1.5px dashed #DC2626;color:#B91C1C;background:#FEF2F2;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:18px;cursor:pointer;min-height:48px}.man-hor-add span{font-size:11px;font-weight:700}
+    .man-hor-ft{flex:0 0 74px;position:relative}.man-hor-ft img{width:74px;height:100%;min-height:48px;object-fit:cover;border-radius:10px;border:2px solid #16A34A;display:block}.man-hor-ft button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#111;color:#fff;font-size:14px;line-height:1}.man-chip.comp{background:#F1F5F9;color:#334155}.man-tipos button.on{border-color:#1D4ED8;background:#EFF6FF;color:#1D4ED8}
     .man-alvo{margin-top:8px;background:#F1F5F9;border-radius:10px;padding:8px 12px;font-size:13px}.man-alvo span{font-size:12px;color:var(--text2)}
     .man-aviso{margin-top:8px;background:#FEF3C7;color:#92400E;border-radius:10px;padding:8px 12px;font-size:12.5px}
     .man-itens{margin-top:8px;background:#F0FDF4;color:#166534;border-radius:10px;padding:8px 12px;font-size:12.5px}

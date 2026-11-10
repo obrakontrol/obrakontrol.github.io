@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.32 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.33 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17972,13 +17972,13 @@ async function mnVer(id) {
       ${L('Início', _mnDH(o.inicio))}${L('Término', o.fim ? _mnDH(o.fim) : '')}${L('Parado', o.parado ? 'Sim · ' + _mnHtxt(_mnHorasParado(o)) : 'Não')}
       ${L(km ? 'Km início' : 'Horímetro início', M(o.horIni))}${L(km ? 'Km término' : 'Horímetro término', M(o.horFim))}${L('Executor', o.executor === 'terceiro' ? 'Terceiro · ' + (o.fornecedor || '') : 'Equipe própria')}
       ${L('Responsável', o.mecanico)}${L('Aberta por', o.abertaPor)}${L('Finalizada por', o.finalizadaPor)}</div>
-    <div class="mn-tx"><b>Problema</b><div>${_e(o.problema || '—')}</div></div>${o.servico ? `<div class="mn-tx"><b>Serviço executado</b><div>${_e(o.servico)}</div></div>` : ''}
+    <div class="mn-tx"><b>Sintoma</b><div>${_e(o.problema || '—')}</div></div>${o.servico ? `<div class="mn-tx"><b>Serviço executado</b><div>${_e(o.servico)}</div></div>` : ''}
     ${(o.pecas || []).length ? `<table style="margin-top:10px"><thead><tr><th>Peça / material</th><th style="text-align:right">Qtd</th><th style="text-align:right">Unitário</th><th style="text-align:right">Total</th></tr></thead><tbody>${o.pecas.map(p => `<tr><td>${_e((p.cod ? p.cod + ' · ' : '') + p.nome)}${p.avulsa ? ' ' + tag('fora do cadastro', 'amber') : ''}</td><td style="text-align:right">${_e(p.qtd)} ${_e(p.un || '')}</td><td style="text-align:right">${_moeda(p.preco)}</td><td style="text-align:right">${_moeda(p.total ?? p.qtd * p.preco)}</td></tr>`).join('')}
       ${o.custoMO ? `<tr><td colspan="3">Mão de obra do terceiro</td><td style="text-align:right">${_moeda(o.custoMO)}</td></tr>` : ''}<tr><td colspan="3"><b>Custo total</b></td><td style="text-align:right"><b>${_moeda(o.custoTotal)}</b></td></tr></tbody></table>` : o.custoTotal ? `<div class="mn-tx"><b>Custo total:</b> ${_moeda(o.custoTotal)}</div>` : ''}
     <div id="mn-v-fotos" class="mn-fotos"></div>`;
   document.getElementById('mn-v-rod').innerHTML = `${_ehMaster() ? `<button class="btn btn-outline" style="margin-right:auto;color:var(--red)" onclick="mnExcluir('${o.id}')">Excluir</button>` : ''}<button class="btn btn-outline" onclick="closeModal('modal-mn')">Fechar</button><button class="btn btn-primary" onclick="mnImprimir('${o.id}')">🖨 Imprimir / PDF</button>`;
   openModal('modal-mn');
-  const ids = [...(o.fotosAbertura || []).map(i => [i, 'Abertura']), ...(o.fotosFim || []).map(i => [i, 'Serviço'])];
+  const ids = [...(o.fotoHorIni ? [[o.fotoHorIni, (o.medidor === 'km' ? 'Hodômetro' : 'Horímetro') + ' início']] : []), ...(o.fotosAbertura || []).map(i => [i, 'Abertura']), ...(o.fotoHorFim ? [[o.fotoHorFim, (o.medidor === 'km' ? 'Hodômetro' : 'Horímetro') + ' término']] : []), ...(o.fotosFim || []).map(i => [i, 'Serviço'])];
   if (ids.length) { const el = document.getElementById('mn-v-fotos'); el.innerHTML = '<div style="color:var(--text-3);font-size:12px">Carregando fotos…</div>';
     const imgs = await Promise.all(ids.map(([i]) => _mobFotoImg(i))); el.innerHTML = imgs.map((s, k) => s ? `<figure><img src="${s}" onclick="window.open().document.write('<img src=&quot;'+this.src+'&quot; style=&quot;max-width:100%&quot;>')"><figcaption>${ids[k][1]}</figcaption></figure>` : '').join(''); }
 }
@@ -17987,7 +17987,7 @@ async function mnImprimir(id) {
   const o = (dados.ordensServico || []).find(x => x.id === id); if (!o) return;
   const w = window.open('', '_blank'); if (!w) return toast('Libere as janelas (pop-up) para imprimir.', 'error');
   w.document.write('<p style="font-family:Arial;padding:20px">Montando a OS…</p>');
-  const ids = [...(o.fotosAbertura || []).map(i => [i, 'Abertura']), ...(o.fotosFim || []).map(i => [i, 'Serviço'])], imgs = await Promise.all(ids.map(([i]) => _mobFotoImg(i)));
+  const ids = [...(o.fotoHorIni ? [[o.fotoHorIni, (o.medidor === 'km' ? 'Hodômetro' : 'Horímetro') + ' início']] : []), ...(o.fotosAbertura || []).map(i => [i, 'Abertura']), ...(o.fotoHorFim ? [[o.fotoHorFim, (o.medidor === 'km' ? 'Hodômetro' : 'Horímetro') + ' término']] : []), ...(o.fotosFim || []).map(i => [i, 'Serviço'])], imgs = await Promise.all(ids.map(([i]) => _mobFotoImg(i)));
   const km = o.medidor === 'km', M = v => v === '' || v == null ? '—' : (+v).toLocaleString('pt-BR') + (km ? ' km' : ' h'), C = (k, v) => `<div><span>${k}</span>${_e(v || '—')}</div>`;
   const nome = 'Ordem de Manutenção-' + (o.num || o.id) + '-' + String(o.fim || o.inicio || '').slice(0, 10).split('-').reverse().join('-');
   let logo = ''; try { logo = _logoTermo(o.obra); } catch (e) {}
@@ -18005,7 +18005,7 @@ async function mnImprimir(id) {
     <div class="meta">${C(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', o.tag)}${C('Placa / modelo', [o.placa, o.modelo].filter(Boolean).join(' · '))}${C('Família', o.alvo === 'vl' ? 'Veículo leve' : o.familia)}${C('Tipo', _mnTipoTxt(o) + ' · ' + _mnTN(o).comp + (o.planoNome ? ' · ' + o.planoNome : ''))}
       ${C('Início', _mnDH(o.inicio))}${C('Término', o.fim ? _mnDH(o.fim) : 'em aberto')}${C('Parado', o.parado ? 'Sim · ' + _mnHtxt(_mnHorasParado(o)) : 'Não')}${C('Status', o.status)}
       ${C(km ? 'Km início' : 'Horímetro início', M(o.horIni))}${C(km ? 'Km término' : 'Horímetro término', M(o.horFim))}${C('Executor', o.executor === 'terceiro' ? 'Terceiro · ' + (o.fornecedor || '') : 'Equipe própria')}${C('Responsável', o.mecanico)}</div>
-    <h3>Problema</h3><div class="bx">${_e(o.problema || '')}</div><h3>Serviço executado</h3><div class="bx">${_e(o.servico || '')}</div>
+    <h3>Sintoma</h3><div class="bx">${_e(o.problema || '')}</div><h3>Serviço executado</h3><div class="bx">${_e(o.servico || '')}</div>
     <h3>Peças e custos</h3><table><thead><tr><th>Item</th><th class="n">Qtd</th><th class="n">Unitário</th><th class="n">Total</th></tr></thead><tbody>${(o.pecas || []).map(p => `<tr><td>${_e((p.cod ? p.cod + ' · ' : '') + p.nome)}</td><td class="n">${_e(p.qtd)} ${_e(p.un || '')}</td><td class="n">${_moeda(p.preco)}</td><td class="n">${_moeda(p.total ?? p.qtd * p.preco)}</td></tr>`).join('') || '<tr><td colspan="4" style="color:#888">Sem peças</td></tr>'}
       ${o.custoMO ? `<tr><td colspan="3">Mão de obra do terceiro</td><td class="n">${_moeda(o.custoMO)}</td></tr>` : ''}<tr><td colspan="3"><b>Total</b></td><td class="n"><b>${_moeda(o.custoTotal)}</b></td></tr></tbody></table>
     ${imgs.some(Boolean) ? `<h3>Fotos</h3><div class="fts">${imgs.map((s, k) => s ? `<figure><img src="${s}"><figcaption>${ids[k][1]}</figcaption></figure>` : '').join('')}</div>` : ''}
@@ -18014,7 +18014,7 @@ async function mnImprimir(id) {
 }
 function mnExcel() {
   const l = _mnLista(); if (!l.length) return toast('Nada para exportar.', 'error');
-  const rows = [['Nº', 'Status', 'TAG', 'Placa', 'Tipo', 'Natureza', 'Compartimento', 'Plano', 'Ciclo', 'Família', 'Problema', 'Serviço', 'Início', 'Término', 'Parado', 'Horas paradas', 'Leitura início', 'Leitura término', 'Executor', 'Fornecedor', 'Peças (R$)', 'Mão de obra (R$)', 'Total (R$)', 'Aberta por', 'Finalizada por']]
+  const rows = [['Nº', 'Status', 'TAG', 'Placa', 'Tipo', 'Natureza', 'Compartimento', 'Plano', 'Ciclo', 'Família', 'Sintoma', 'Serviço', 'Início', 'Término', 'Parado', 'Horas paradas', 'Leitura início', 'Leitura término', 'Executor', 'Fornecedor', 'Peças (R$)', 'Mão de obra (R$)', 'Total (R$)', 'Aberta por', 'Finalizada por']]
     .concat(l.map(o => [o.num, o.status, o.tag, o.placa || '', _mnTN(o).tipo, _mnTN(o).nat, _mnTN(o).comp, o.planoNome || '', o.ciclo || '', o.alvo === 'vl' ? 'Veículo leve' : o.familia || '', o.problema || '', o.servico || '', _mnDH(o.inicio), o.fim ? _mnDH(o.fim) : '', o.parado ? 'Sim' : 'Não', Math.round(_mnHorasParado(o) * 100) / 100, o.horIni ?? '', o.horFim ?? '', o.executor === 'terceiro' ? 'Terceiro' : 'Própria', o.fornecedor || '', +o.custoPecas || 0, +o.custoMO || 0, +o.custoTotal || 0, o.abertaPor || '', o.finalizadaPor || '']));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Ordens de serviço'); XLSX.writeFile(wb, 'Ordens_de_servico.xlsx');
 }
@@ -18155,8 +18155,8 @@ salvarProduto = window.salvarProduto = async function () {
         <select class="form-control" id="mn-mes" onchange="renderManut()" style="max-width:170px"></select><select class="form-control" id="mn-tipo" onchange="renderManut()" style="max-width:180px"></select>
         <select class="form-control" id="mn-st" onchange="renderManut()" style="max-width:160px"><option value="">Todos os status</option><option value="aberta">Abertas</option><option value="finalizada">Finalizadas</option><option value="cancelada">Canceladas</option></select>
         <select class="form-control" id="mn-alvo" onchange="renderManut()" style="max-width:190px"><option value="">Equipamentos e veículos</option><option value="eq">Só equipamentos</option><option value="vl">Só veículos leves</option></select>
-        <input class="form-control" id="mn-q" placeholder="Buscar TAG, nº, problema, fornecedor…" oninput="clearTimeout(window._mnQ);window._mnQ=setTimeout(renderManut,250)" style="max-width:280px"/></div>
-        <div class="table-wrap"><table><thead><tr><th>Nº</th><th>Status</th><th>TAG</th><th>Tipo</th><th>Problema</th><th>Início</th><th>Término</th><th style="text-align:right">Parado</th><th>Executor</th><th style="text-align:right">Custo</th></tr></thead><tbody id="mn-tbody"></tbody></table></div></div></div></div>
+        <input class="form-control" id="mn-q" placeholder="Buscar TAG, nº, sintoma, fornecedor…" oninput="clearTimeout(window._mnQ);window._mnQ=setTimeout(renderManut,250)" style="max-width:280px"/></div>
+        <div class="table-wrap"><table><thead><tr><th>Nº</th><th>Status</th><th>TAG</th><th>Tipo</th><th>Sintoma</th><th>Início</th><th>Término</th><th style="text-align:right">Parado</th><th>Executor</th><th style="text-align:right">Custo</th></tr></thead><tbody id="mn-tbody"></tbody></table></div></div></div></div>
     <div class="page" id="page-planos-prev"><div class="page-header"><div><div class="page-title">Planos de preventiva</div><div class="page-sub">A cada X horas, km ou dias. O app de campo avisa quando está perto e abre a OS já com o plano.</div></div>
       <div class="btn-group"><button class="btn btn-primary" onclick="ppEditar()">+ Novo plano</button></div></div>
       <div id="pp-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
@@ -18248,12 +18248,12 @@ function _mnFormNova() {
     <div class="form-group"><label class="form-label">Quem executa</label>${seg('executor', [['propria', 'Equipe própria'], ['terceiro', 'Terceiro']])}</div>
     ${f.executor === 'terceiro' ? `<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-control" list="mnf-forn" value="${v('fornecedor')}" oninput="_mnF.fornecedor=this.value"/><datalist id="mnf-forn">${emps.map(e => `<option value="${_e(e.fantasia || e.nome || e.razao || e.cod)}">`).join('')}</datalist></div>` : ''}
     <div class="form-group"><label class="form-label">Responsável</label><input class="form-control" value="${v('mecanico')}" oninput="_mnF.mecanico=this.value"/></div>
-    <div class="form-group form-full"><label class="form-label">Problema / serviço a fazer *</label><textarea class="form-control" rows="3" oninput="_mnF.problema=this.value">${v('problema')}</textarea></div></div>`;
+    <div class="form-group form-full"><label class="form-label">Sintoma *</label><textarea class="form-control" rows="3" oninput="_mnF.problema=this.value">${v('problema')}</textarea></div></div>`;
   document.getElementById('mnf-rod').innerHTML = `<button class="btn btn-outline" onclick="closeModal('modal-mnf')">Cancelar</button><button class="btn btn-primary" onclick="mnSalvarNova()">Abrir OS</button>`;
 }
 async function mnSalvarNova() {
   const f = window._mnF, a = _mnAlvoDe(f.alvo, f.equipId), falta = [];
-  if (!f.obra) falta.push('a obra'); if (!a) falta.push(f.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!f.tipo) falta.push('o tipo'); if (f.tipo === 'Corretiva' && !f.natureza) falta.push('a natureza'); if (!f.compartimento) falta.push('o compartimento'); if (!f.inicio) falta.push('o início'); if (!String(f.problema).trim()) falta.push('o problema');
+  if (!f.obra) falta.push('a obra'); if (!a) falta.push(f.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!f.tipo) falta.push('o tipo'); if (f.tipo === 'Corretiva' && !f.natureza) falta.push('a natureza'); if (!f.compartimento) falta.push('o compartimento'); if (!f.inicio) falta.push('o início'); if (!String(f.problema).trim()) falta.push('o sintoma');
   if (falta.length) return toast('Falta informar ' + falta.join(', ') + '.', 'error');
   const pl = (dados.planosPrev || []).find(p => p.id === f.planoId), hi = f.horIni === '' ? '' : +f.horIni;
   const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _mnProxNum(f.obra, f.tipo);
