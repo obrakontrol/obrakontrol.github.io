@@ -611,7 +611,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.37 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.38 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -11724,7 +11724,7 @@ function _pfGrupoSync() { document.querySelectorAll('#pf-telas .pf-tg').forEach(
         <td style="font-size:12px;color:var(--text-2);max-width:280px">${_e(acesso(u))}</td>
         <td style="font-size:12px">${obra ? _e(obra.cod || obra.nome) : '<span style="color:var(--text-3)">Todas</span>'}</td>
         <td>${tag(u.status || 'Ativo', u.status === 'Inativo' ? 'gray' : 'green')}</td>
-        <td style="white-space:nowrap;text-align:right" onclick="event.stopPropagation()"><button class="btn btn-outline btn-sm" onclick="editarUsuario('${u.id}')">✎ Editar</button>
+        <td style="white-space:nowrap;text-align:right" onclick="event.stopPropagation()"><button class="btn btn-outline btn-sm" title="Mandar login e link do app por WhatsApp ou e-mail" onclick="enviarAcesso('${u.id}')">📤 Acesso</button> <button class="btn btn-outline btn-sm" onclick="editarUsuario('${u.id}')">✎ Editar</button>
           ${pode ? `<button class="btn btn-sm" style="background:var(--red-light);color:var(--red);border:1px solid var(--red-light)" onclick="desativarUsuario('${u.id}')">${u.status === 'Inativo' ? 'Ativar' : 'Desativar'}</button>
           <button class="btn btn-sm" style="background:var(--red);color:white;border:1px solid var(--red)" onclick="excluirUsuario('${u.id}')">Excluir</button>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`
       : '<div style="text-align:center;color:var(--text-3);padding:2rem">Nenhum usuário encontrado</div>';
@@ -18377,6 +18377,64 @@ function _mnIndicadores(obra, mes, familia) {
     return r; };
   const css = document.createElement('style'); css.textContent = `#mnf-body .form-label{display:block}.mn-seg{display:flex;gap:6px;flex-wrap:wrap}.mn-seg button{flex:1;min-width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface,transparent);color:var(--text);font-weight:600;font-size:13px;cursor:pointer}.mn-seg button.on{border-color:#2563EB;background:rgba(37,99,235,.1);color:#2563EB}`;
   document.head.appendChild(css);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.38: ENVIAR ACESSO — depois de cadastrar (ou redefinir a senha) abre uma mensagem pronta com
+// link do app, login e senha, para mandar por WhatsApp ou e-mail. Na lista de usuários: botão "Enviar acesso".
+// ═══════════════════════════════════════════════════════════════
+function _accLinks() { const c = window.OK_CLIENTE || 'tenco'; return { campo: 'https://obrakontrol.github.io/campo.html?c=' + c, painel: 'https://obrakontrol.github.io/' + (c !== 'tenco' ? '?c=' + c : '') }; }
+const _accDig = v => String(v || '').replace(/\D/g, ''), _accCpfFmt = c => { c = _accDig(c); return c.length === 11 ? c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9) : c; };
+function _accFunc(u) { return (u.funcId && (dados.funcionarios || []).find(x => x.id === u.funcId)) || (u.cpf && (dados.funcionarios || []).find(x => _accDig(x.cpf) === _accDig(u.cpf))) || null; }
+function _accEhCampo(u) { try { if (_perfilEhCampo(u.perfil)) return true; } catch (e) {} return !!u.emailQR || String(u.email || '').endsWith('@' + _DOMINIO_CAMPO); }
+function _accCpf(u) { const f = _accFunc(u), c = _accDig((f && f.cpf) || u.cpf || ''); return c.length === 11 ? _accCpfFmt(c) : ''; }
+function _accTel(u) { const f = _accFunc(u); return u.tel || u.telefone || (f && (f.tel || f.telefone)) || ''; }
+function _accLogin(u) { return _accEhCampo(u) ? (_accCpf(u) || u.mat || u.matricula || '') : (loginDoUsuario(u) || u.email || ''); }
+function _accMsg(u, senha) {
+  const L = _accLinks(), campo = _accEhCampo(u), nome = String(u.nome || '').trim().split(/\s+/)[0] || '';
+  const nm = nome ? nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase() : '';
+  return `Olá${nm ? ', ' + nm : ''}! Seu acesso ao *ObraKontrol* está pronto.\n\n`
+    + (campo ? `📲 App de campo: ${L.campo}\n` : `📊 Painel de gestão: ${L.painel}\n📲 App de campo (celular): ${L.campo}\n`)
+    + `👤 ${campo && _accCpf(u) ? 'Login (CPF)' : 'Login'}: ${_accLogin(u)}\n`
+    + (senha ? `🔑 Senha: ${senha}\n` : campo && !u.senhaDefinida ? `🔑 Senha provisória: ${_SENHA_APROP}\n` : `🔑 Senha: a que você recebeu (se esqueceu, me avise)\n`)
+    + (campo ? `📇 Ou entre lendo o QR Code do seu crachá.\n` : '')
+    + `\nNo celular, abra o link e instale na tela inicial (Android: menu ⋮ > Instalar app · iPhone: Compartilhar > Adicionar à Tela de Início).\n\nQualquer dúvida, me chama!`;
+}
+function enviarAcesso(id, senha) {
+  const u = (USUARIOS || []).find(x => x.id === id); if (!u) return;
+  if (!document.getElementById('modal-acc')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-acc"><div class="modal" style="max-width:560px"><div class="modal-header"><div class="modal-title" id="acc-tit"></div><button class="modal-close" onclick="closeModal('modal-acc')">×</button></div><div class="modal-body" id="acc-body" style="display:block"></div><div class="modal-footer" id="acc-rod"></div></div></div>`);
+  const msg = _accMsg(u, senha), tel = _accTel(u), mailOk = u.email && !_accEhCampo(u);
+  window._accU = u; window._accSenha = senha || '';
+  document.getElementById('acc-tit').textContent = 'Enviar acesso · ' + (u.nome || '');
+  const campoProv = !senha && _accEhCampo(u) && !u.senhaDefinida;
+  document.getElementById('acc-body').innerHTML = `${campoProv ? '<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Acesso pronto. O login do app é o CPF com a senha provisória (ou o QR do crachá).</div>' : senha ? '<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Usuário salvo. Mande agora o acesso — a senha só aparece nesta tela (o sistema não guarda senha).</div>' : `<div class="alert alert-warning" style="margin-bottom:10px;font-size:13px">A senha não fica guardada no sistema. Para mandar uma senha nova, edite o usuário, digite a nova senha e salve — esta tela abre de novo com ela.${mailOk ? ' Ou envie um link para a pessoa criar a senha pelo e-mail.' : ''}</div>`}
+    <label class="form-label" style="display:block">Mensagem (pode editar antes de enviar)</label><textarea class="form-control" id="acc-msg" rows="13" style="display:block;width:100%;font-size:13px;line-height:1.45">${_e(msg)}</textarea>
+    <div style="font-size:12px;color:var(--text-3);margin-top:6px">${tel ? 'WhatsApp: ' + _e(tel) : 'Sem telefone no cadastro: o WhatsApp abre para você escolher o contato.'}${mailOk ? ' · E-mail: ' + _e(u.email) : ''}</div>`;
+  document.getElementById('acc-rod').innerHTML = `${!senha && mailOk ? `<button class="btn btn-outline" style="margin-right:auto" onclick="accLinkSenha()">✉ Link para criar senha</button>` : ''}
+    <button class="btn btn-outline" onclick="accCopiar()">📋 Copiar</button>${mailOk ? `<button class="btn btn-outline" onclick="accEmail()">✉ E-mail</button>` : ''}<button class="btn btn-primary" style="background:#16A34A;border-color:#16A34A" onclick="accWhats()">WhatsApp</button>`;
+  openModal('modal-acc');
+}
+function _accTexto() { return (document.getElementById('acc-msg') || {}).value || ''; }
+function accWhats() { const u = window._accU, t = _accTexto(); const l = _waLink(_accTel(u), t) || ('https://wa.me/?text=' + encodeURIComponent(t)); window.open(l, '_blank'); }
+function accEmail() { const u = window._accU; window.location.href = 'mailto:' + encodeURIComponent(u.email) + '?subject=' + encodeURIComponent('Seu acesso ao ObraKontrol') + '&body=' + encodeURIComponent(_accTexto().replace(/\*/g, '')); }
+async function accCopiar() { try { await navigator.clipboard.writeText(_accTexto()); toast('Mensagem copiada.'); } catch (e) { const t = document.getElementById('acc-msg'); t.select(); document.execCommand('copy'); toast('Mensagem copiada.'); } }
+async function accLinkSenha() { const u = window._accU; try { await auth.sendPasswordResetEmail(u.email); toast('Enviamos para ' + u.email + ' um link para criar a senha.'); } catch (e) { toast(_msgErroAuth(e.code), 'error'); } }
+(function () {
+  const oS = window.salvarUsuario;
+  window.salvarUsuario = async function () {
+    const g = id => (document.getElementById(id) || {}).value || '';
+    const funcId = g('usr-func-id'), perfilN = g('usr-perfil'); let ehCampoN = false; try { ehCampoN = _perfilEhCampo(perfilN); } catch (e) {}
+    const senha = g('usr-senha'), mat = g('usr-mat').trim(), email = g('usr-email').trim().toLowerCase(), nome = g('usr-nome').trim(), idAnt = g('usr-edit-id');
+    const r = await oS.apply(this, arguments);
+    try {
+      const m = document.getElementById('modal-novo-usuario');
+      if (ehCampoN && m && !m.classList.contains('open')) { const u = USUARIOS.find(x => x.funcId === funcId); if (u && !idAnt) setTimeout(() => enviarAcesso(u.id), 300); }
+      else if (senha && m && !m.classList.contains('open')) {
+        const u = (idAnt && USUARIOS.find(x => x.id === idAnt)) || USUARIOS.find(x => mat && (x.mat || x.matricula) === mat) || USUARIOS.find(x => email && x.email === email) || USUARIOS.find(x => x.nome === nome);
+        if (u && !(u.email && !_accEhCampo(u) && usuarioLogado && u.id !== usuarioLogado.id && idAnt)) setTimeout(() => enviarAcesso(u.id, senha), 300);
+      }
+    } catch (e) { console.warn('acesso', e); }
+    return r;
+  };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
