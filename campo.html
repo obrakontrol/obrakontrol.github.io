@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.14</div>
+  <div class="login-versao">ObraKontrol Campo · v3.15</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -1602,10 +1602,14 @@ async function fazerLoginCampo() {
   const DOM = 'campo.obracontrol.app';
   let mapa = {}; try { mapa = JSON.parse(localStorage.getItem('campo_login_map') || '{}'); } catch (e) {}
   let candidatos;
-  if (digitado.includes('@')) candidatos = [digitado.toLowerCase()];
+  const _clP = _okClienteLink(), _preP = _clP && _clP !== 'tenco' ? _clP + '-' : '';
+  // v3.15: usuário do painel entra no app com o mesmo login (ou e-mail) e senha — acesso <login>@painel.obracontrol.app
+  const _lgP = String(digitado).toLowerCase().split('@')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9._-]/g, '');
+  const _painel = /[a-z]/i.test(digitado) && _lgP ? [_preP + _lgP + '@painel.obracontrol.app', ...[2,3,4,5,6].map(n => _preP + _lgP + '.' + n + '@painel.obracontrol.app')] : [];
+  if (digitado.includes('@')) candidatos = [...new Set([mapa[digitado.toLowerCase()], digitado.toLowerCase(), ..._painel].filter(Boolean))];
   else {
     const cl = _okClienteLink(), m = (cl && cl !== 'tenco' ? cl + '-' : '') + digitado.replace(/\s+/g, '');
-    candidatos = [mapa[m], m + '@' + DOM, ...[2,3,4,5,6].map(n => m + '.' + n + '@' + DOM)].filter(Boolean);
+    candidatos = [mapa[m], ...(_painel.length && !/^\d+$/.test(m) ? [_painel[0]] : []), m + '@' + DOM, ...[2,3,4,5,6].map(n => m + '.' + n + '@' + DOM), ..._painel.slice(1)].filter(Boolean);
     candidatos = [...new Set(candidatos)];
   }
   let cred = null, ultimo = null;
@@ -1632,6 +1636,7 @@ async function fazerLoginCampo() {
   try {
     let snap = await db.collection('usuarios').where('email', '==', emailAuth).limit(1).get();
     if (snap.empty) snap = await db.collection('usuarios').where('emailQR', '==', emailAuth).limit(1).get();   // v2.76: entrou pelo crachá
+    if (snap.empty) snap = await db.collection('usuarios').where('authEmail', '==', emailAuth).limit(1).get();   // v3.15: usuário do painel
     if (snap.empty && !digitado.includes('@')) snap = await db.collection('usuarios').where('mat', '==', digitado).limit(1).get();
     if (!snap.empty) usr = { ...snap.docs[0].data(), id: snap.docs[0].id };
   } catch (e) { try { await auth.signOut(); } catch (_) {} erro('Não consegui ler o cadastro (' + (e.code || 'erro') + '). Tente de novo.'); return; }
@@ -1640,7 +1645,7 @@ async function fazerLoginCampo() {
   if (!usr) { try { await auth.signOut(); } catch (_) {} erro('Acesso sem cadastro no ObraKontrol. Fale com o escritório.'); return; }
   if (usr.status === 'Inativo') { try { await auth.signOut(); } catch (_) {} erro('Acesso desativado. Fale com o escritório.'); return; }
 
-  if (!digitado.includes('@')) { mapa[digitado.replace(/\s+/g, '')] = emailAuth; try { localStorage.setItem('campo_login_map', JSON.stringify(mapa)); } catch (e) {} }
+  if (digitado.toLowerCase() !== emailAuth) { mapa[digitado.includes('@') ? digitado.toLowerCase() : digitado.replace(/\s+/g, '')] = emailAuth; try { localStorage.setItem('campo_login_map', JSON.stringify(mapa)); } catch (e) {} }
   try { localStorage.setItem('ok_cliente_id', window.OK_CLIENTE || 'tenco'); const _cfgC = window.OK_CLIENTE ? await _okCarregarCliente(window.OK_CLIENTE) : null; if (_cfgC && _cfgC.nomeCurto) localStorage.setItem('ok_cliente_nome', _cfgC.nomeCurto); } catch (e) {}
   usuarioCampo = { id: usr.id, nome: usr.nome || digitado, perfil: usr.perfil || 'Colaborador', mat: usr.mat || digitado, obra: usr.obra || '', empresa: usr.empresa || '', perms: usr.perms || null, cliente: window.OK_CLIENTE || '' };
   btn.textContent = 'Entrar'; btn.disabled = false;
@@ -5556,15 +5561,17 @@ async function _okChecarSenha() {
   let u = null; for (let i = 0; i < 30 && !(auth && auth.currentUser); i++) await new Promise(r => setTimeout(r, 100));
   if (!auth || !auth.currentUser) return;
   try { const d = await db.collection('usuarios').doc(usuarioCampo.id).get(); u = d.exists ? d.data() : null; } catch (e) { return; }
+  const _emA = String(auth.currentUser.email || '').toLowerCase();
+  if (u && u.senhaProvisoria && u.authEmail && _emA === String(u.authEmail).toLowerCase()) { _okTelaSenha(u, true); return; }   // v3.15: usuário do painel com senha provisória
   if (!u || !u.emailQR || u.senhaDefinida) return;
   _okTelaSenha(u);
 }
-function _okTelaSenha(u) {
+function _okTelaSenha(u, painel) {
   document.getElementById('ok-senha-ov')?.remove();
   document.body.insertAdjacentHTML('beforeend', `<div id="ok-senha-ov" style="position:fixed;inset:0;z-index:9000;background:rgba(10,10,12,.92);display:flex;align-items:center;justify-content:center;padding:18px">
     <div style="background:#1A1A1E;color:#F4F4F5;border-radius:16px;padding:22px;max-width:380px;width:100%;border:1px solid #2A2A30">
       <div style="font-size:18px;font-weight:800;margin-bottom:6px;color:#fff">Crie sua senha</div>
-      <div style="font-size:13px;color:var(--text2,#9A9CA5);margin-bottom:14px">É o seu primeiro acesso. A senha é só sua: você usa quando esquecer o crachá (entra com o CPF e essa senha). Não conte para ninguém.</div>
+      <div style="font-size:13px;color:var(--text2,#9A9CA5);margin-bottom:14px">${painel ? 'Você entrou com a senha provisória. Escolha uma senha só sua — ela vale para o app e para o painel. Não conte para ninguém.' : 'É o seu primeiro acesso. A senha é só sua: você usa quando esquecer o crachá (entra com o CPF e essa senha). Não conte para ninguém.'}</div>
       <input class="form-control" id="oks-1" type="password" placeholder="Nova senha (mínimo 6)" style="margin-bottom:10px"/>
       <input class="form-control" id="oks-2" type="password" placeholder="Repita a senha" style="margin-bottom:10px"/>
       <div id="oks-err" style="color:#FF5A60;font-size:13px;min-height:18px;margin-bottom:8px"></div>
@@ -5581,13 +5588,13 @@ async function _okSalvarSenha() {
   const bt = $('oks-ok'); bt.disabled = true; bt.textContent = 'Salvando...';
   try {
     const atual = String(auth.currentUser && auth.currentUser.email || '').toLowerCase();
-    if (atual !== String(u.email || '').toLowerCase()) {   // entrou pelo crachá: entra no acesso do CPF com a senha provisória para trocar
+    if (!u.authEmail && atual !== String(u.email || '').toLowerCase()) {   // entrou pelo crachá: entra no acesso do CPF com a senha provisória para trocar
       try { await auth.signInWithEmailAndPassword(u.email, _SENHA_PROV); }
       catch (x) { if (['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(x.code)) { await db.collection('usuarios').doc(usuarioCampo.id).set({ senhaDefinida: true }, { merge: true }).catch(() => {}); $('ok-senha-ov').remove(); toast('Sua senha já tinha sido criada antes. Se esqueceu, fale com o escritório.', 'ok'); return; } throw x; }
     }
     await auth.currentUser.updatePassword(a);
-    await db.collection('usuarios').doc(usuarioCampo.id).set({ senhaDefinida: true, senhaDefinidaEm: new Date().toISOString() }, { merge: true });
-    $('ok-senha-ov').remove(); toast('Senha criada. Da próxima vez, é só ler o crachá.', 'ok');
+    await db.collection('usuarios').doc(usuarioCampo.id).set({ senhaDefinida: true, senhaProvisoria: false, senhaDefinidaEm: new Date().toISOString() }, { merge: true });
+    $('ok-senha-ov').remove(); toast(u.authEmail ? 'Senha criada! Use o seu login e essa senha no app e no painel.' : 'Senha criada. Da próxima vez, é só ler o crachá.', 'ok');
   } catch (x) {
     bt.disabled = false; bt.textContent = 'Salvar e continuar';
     if (x.code === 'auth/requires-recent-login') { e('Por segurança, saia e entre de novo para criar a senha.'); return; }

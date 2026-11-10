@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.40 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.41 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -3800,7 +3800,8 @@ async function fbSave(colecao, id, dados) {
   try {
     await db.collection(colecao).doc(id).set(dados, { merge: true });
     if (colecao === 'usuarios' && window.OK_CLIENTE && dados && dados.email && !String(id).startsWith('dev-'))
-      await db.collection('acessos').doc(String(dados.email).toLowerCase()).set({ cliente: window.OK_CLIENTE, nome: dados.nome || '', perfil: dados.perfil || '', atualizadoEm: new Date().toISOString() }, { merge: true });
+      for (const em of [...new Set([dados.email, dados.authEmail].filter(Boolean).map(x => String(x).toLowerCase()))])   // v4.41: acesso interno do painel também
+        await db.collection('acessos').doc(em).set({ cliente: window.OK_CLIENTE, nome: dados.nome || '', perfil: dados.perfil || '', atualizadoEm: new Date().toISOString() }, { merge: true });
   } catch(e) { console.warn('Erro ao salvar '+colecao+':', e.message); }
 }
 
@@ -3809,10 +3810,11 @@ async function fbDelete(colecao, id) {
   if (!_firebaseReady) { console.warn('fbDelete: firebase not ready'); throw new Error('Firebase não pronto'); }
   const user = auth ? auth.currentUser : null;
   if (!user) { console.warn('fbDelete: user not authenticated'); throw new Error('Usuário não autenticado no Firebase'); }
-  let emailAc = '';
-  if (colecao === 'usuarios' && window.OK_CLIENTE) { try { const d = await db.collection('usuarios').doc(id).get(); emailAc = d.exists ? String(d.data().email || '').toLowerCase() : ''; } catch (e) {} }
+  let emailAc = '', emailAc2 = '';
+  if (colecao === 'usuarios' && window.OK_CLIENTE) { try { const d = await db.collection('usuarios').doc(id).get(); emailAc = d.exists ? String(d.data().email || '').toLowerCase() : ''; emailAc2 = d.exists ? String(d.data().authEmail || '').toLowerCase() : ''; } catch (e) {} }
   await db.collection(colecao).doc(id).delete();
   if (emailAc) { try { await db.collection('acessos').doc(emailAc).delete(); } catch (e) {} }
+  if (emailAc2) { try { await db.collection('acessos').doc(emailAc2).delete(); } catch (e) {} }
   console.log('Deleted from Firebase:', colecao, id);
 }
 
@@ -4209,7 +4211,7 @@ function fazerLogin() {
       const usrs = await fbLoadAll('usuarios');
       if (usrs && usrs.length > 0) USUARIOS = usrs;
       const emailAuth = ((cred.user && cred.user.email) || email).toLowerCase();
-      let usr = USUARIOS.find(u => (u.email||'').toLowerCase() === emailAuth) || USUARIOS.find(u => u.id === (cred.user && cred.user.uid));
+      let usr = USUARIOS.find(u => (u.email||'').toLowerCase() === emailAuth) || USUARIOS.find(u => (u.authEmail||'').toLowerCase() === emailAuth) || USUARIOS.find(u => u.id === (cred.user && cred.user.uid));
       if (!usr && window._okDevComo) usr = _usrDev(emailAuth);
       if (!usr) {
         // Só cria perfil Admin automático se ainda não existir nenhum administrador (primeira instalação)
@@ -4225,7 +4227,7 @@ function fazerLogin() {
       }
       if (usr.status === 'Inativo') { auth.signOut(); erro('Usuário desativado. Fale com o administrador.'); return; }
       usuarioLogado = usr; _garantirMaster();
-      if (!digitado.includes('@')) _lembrarLogin(digitado, emailAuth);
+      if (digitado !== emailAuth) _lembrarLogin(digitado, emailAuth);
       usuarioLogado = usr;
       if (erroEl) erroEl.style.display='none';
       if (btnEl) btnEl.textContent = 'Carregando dados...';
@@ -4448,11 +4450,18 @@ async function salvarUsuario() {
   if (perfil==='Admin') Object.keys(perms).forEach(k=>perms[k]=true);
 
   // v2.10: trocar o login (e-mail ou matrícula) exige definir a senha do novo acesso
-  if (existente && (existente.email||'').toLowerCase() !== email && !senha) {
+  if (existente && !existente.authEmail && (existente.email||'').toLowerCase() !== email && !senha) {
     toast('Você mudou o login deste usuário. Defina uma senha (mínimo 6 caracteres) para criar o novo acesso.', 'error');
     document.getElementById('usr-senha')?.focus();
     return;
   }
+  // v4.41: quem já tem acesso interno do painel e troca o login precisa de senha nova (o acesso segue o login)
+  if (existente && existente.authEmail && !ehCampo && login !== loginDoUsuario(existente) && !senha) {
+    toast('Você mudou o login. Defina uma senha provisória para o novo login.', 'error');
+    document.getElementById('usr-senha')?.focus();
+    return;
+  }
+  let authEmailNovo = '';
   // v2.2: a senha vira um acesso de verdade no Firebase (antes ficava só na memória e ninguém conseguia entrar)
   // v2.6: na edição, preencher a senha REDEFINE a senha:
   //   - você mesma: troca na hora
@@ -4462,7 +4471,7 @@ async function salvarUsuario() {
   if (senha) {
     const ehEu = existente && usuarioLogado && existente.id === usuarioLogado.id;
     const emailMudou = existente && (existente.email||'').toLowerCase() !== email;
-    if (ehEu && !emailMudou) {
+    if (ehEu && !emailMudou && !(existente.authEmail && login !== loginDoUsuario(existente))) {
       const fu = auth && auth.currentUser;
       if (!fu) { toast('Sem conexão com o servidor','error'); return; }
       try { await fu.updatePassword(senha); avisoAcesso = ' Sua senha foi alterada.'; }
@@ -4472,6 +4481,11 @@ async function salvarUsuario() {
           : _msgErroAuth(e.code), 'error');
         return;
       }
+    } else if (!ehCampo) {
+      // v4.41: painel — acesso interno <login>@painel…: o admin define a senha na hora (provisória, a pessoa troca no 1º acesso)
+      const ra = await _painelCriarAcesso(login || gerarLogin(email), senha, existente);
+      if (!ra.ok) { toast(ra.msg, 'error'); return; }
+      authEmailNovo = ra.email; avisoAcesso = existente ? ' Senha redefinida — vale agora.' : '';
     } else {
       try { await criarAcessoFirebase(email, senha); if (existente) avisoAcesso = ' Senha definida.'; }
       catch (e) {
@@ -4502,8 +4516,9 @@ async function salvarUsuario() {
   if (id) {
     const usr = USUARIOS.find(u=>u.id===id);
     if (usr) {
-      if (usr.email !== email && !senha) avisoAcesso = ' Atenção: o login continua sendo o e-mail antigo até você definir uma senha nova.';
+      if (usr.email !== email && !senha && !usr.authEmail) avisoAcesso = ' Atenção: o login continua sendo o e-mail antigo até você definir uma senha nova.';
       delete usr.senha;
+      if (authEmailNovo) { usr.authEmail = authEmailNovo; usr.senhaProvisoria = !(usuarioLogado && usr.id === usuarioLogado.id); usr.senhaDefinida = !usr.senhaProvisoria; }
       if (usr.master) {
         usr.nome=nome; usr.email=email; usr.mat=mat; usr.login=login;
         usr.perfil='Admin'; Object.keys(usr.perms).forEach(k=>usr.perms[k]=true);
@@ -4516,7 +4531,7 @@ async function salvarUsuario() {
   } else {
     const dup = USUARIOS.find(u=>(u.email||'').toLowerCase()===email);
     if (dup) { toast('E-mail já cadastrado','error'); return; }
-    USUARIOS.push({ id:'u'+Date.now(), nome, email, login, mat, perfil, empresa, cargo, tel, status, obra, master:false, perms });
+    USUARIOS.push({ id:'u'+Date.now(), nome, email, login, mat, perfil, empresa, cargo, tel, status, obra, master:false, perms, ...(authEmailNovo ? { authEmail: authEmailNovo, senhaProvisoria: true } : {}) });
   }
 
   saveUsuarios();
@@ -8991,7 +9006,7 @@ async function atualizarDados() {
         const em = (user.email || '').toLowerCase();
         if (!(await _definirCliente(em))) { auth.signOut(); if (lbl) lbl.textContent = ''; return; }
         const usrs = await fbLoadAll('usuarios'); if (usrs && usrs.length) USUARIOS = usrs;
-        const usr = USUARIOS.find(u => (u.email||'').toLowerCase() === em) || USUARIOS.find(u => u.id === user.uid) || (window._okDevComo ? _usrDev(em) : null);
+        const usr = USUARIOS.find(u => (u.email||'').toLowerCase() === em) || USUARIOS.find(u => (u.authEmail||'').toLowerCase() === em) || USUARIOS.find(u => u.id === user.uid) || (window._okDevComo ? _usrDev(em) : null);
         // apontador de campo no mesmo aparelho: não mexe na sessão dele, só pede o login do painel
         if (!usr || usr.status === 'Inativo' || _perfilEhCampo(usr.perfil)) { if (lbl) lbl.textContent = ''; return; }
         usuarioLogado = usr;
@@ -18459,9 +18474,163 @@ async function accLinkSenha() { const u = window._accU; try { await auth.sendPas
       if (ehCampoN && m && !m.classList.contains('open')) { const u = USUARIOS.find(x => x.funcId === funcId); if (u && !idAnt) setTimeout(() => enviarAcesso(u.id), 300); }
       else if (senha && m && !m.classList.contains('open')) {
         const u = (idAnt && USUARIOS.find(x => x.id === idAnt)) || USUARIOS.find(x => mat && (x.mat || x.matricula) === mat) || USUARIOS.find(x => email && x.email === email) || USUARIOS.find(x => x.nome === nome);
-        if (u && !(u.email && !_accEhCampo(u) && usuarioLogado && u.id !== usuarioLogado.id && idAnt)) setTimeout(() => enviarAcesso(u.id, senha), 300);
+        if (u && !(usuarioLogado && u.id === usuarioLogado.id)) setTimeout(() => enviarAcesso(u.id, senha), 300);
       }
     } catch (e) { console.warn('acesso', e); }
+    return r;
+  };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.41: SENHA DO PAINEL SEM E-MAIL — o admin define a senha provisória na hora (como no app de campo).
+// Cada usuário do painel ganha um acesso interno <login>@painel.obracontrol.app (ou .2, .3… a cada redefinição);
+// ele entra com o LOGIN (ou o e-mail) e a senha provisória, e cria a senha dele no 1º acesso.
+// Cadastro e lista mostram com clareza: Painel de gestão ✓ · App de campo (o quê).
+// ═══════════════════════════════════════════════════════════════
+const _DOMINIO_PAINEL = 'painel.obracontrol.app';
+async function _painelCriarAcesso(login, senha, existente) {
+  login = gerarLogin(login); if (!login) return { ok: false, msg: 'Defina o login do painel (ex.: nome.sobrenome).' };
+  if (String(senha || '').length < 6) return { ok: false, msg: 'A senha precisa ter pelo menos 6 caracteres.' };
+  const base = _preCampo() + login, ant = String((existente && existente.authEmail) || '').toLowerCase();
+  let ini = 1; if (ant.startsWith(base + '@') || ant.startsWith(base + '.')) ini = ((ant.match(/\.(\d+)@/) || [0, 1])[1] * 1) + 1;
+  for (let n = ini; n <= 9; n++) {
+    const em = (n === 1 ? base : base + '.' + n) + '@' + _DOMINIO_PAINEL;
+    try { await criarAcessoFirebase(em, senha); return { ok: true, email: em }; }
+    catch (e) { if (e.code !== 'auth/email-already-in-use') return { ok: false, msg: _msgErroAuth(e.code) }; }
+  }
+  return { ok: false, msg: 'Limite de redefinições deste login. Mude o login (ex.: acrescente um número) e salve de novo.' };
+}
+(function () {
+  const oC = candidatosLogin;
+  candidatosLogin = window.candidatosLogin = function (digitado) {
+    const t = String(digitado || '').trim().toLowerCase(); if (!t) return [];
+    const base = oC.apply(this, arguments), m = _mapaLogin(), lg = gerarLogin(t);
+    const cl = new URLSearchParams(location.search).get('c'), pres = [...new Set(['', _preCampo(), cl && cl !== 'tenco' ? cl + '-' : ''])];
+    const p1 = lg ? pres.map(p => p + lg + '@' + _DOMINIO_PAINEL) : [], pN = lg ? pres.flatMap(p => [2, 3, 4, 5, 6].map(n => p + lg + '.' + n + '@' + _DOMINIO_PAINEL)) : [];
+    const doCad = (USUARIOS || []).filter(u => u.authEmail && (loginDoUsuario(u) === t || String(u.email || '').toLowerCase() === t)).map(u => u.authEmail.toLowerCase());
+    return [...new Set([m[t], ...doCad, ...(t.includes('@') ? [t] : []), ...p1, ...base, ...pN].filter(Boolean))];
+  };
+})();
+// o que a pessoa faz no app de campo, pelo perfil
+const _APP_MODS = [['apontamentos', 'Apropriação'], ['abastecimento', 'Abastecimento'], ['mobilizacao', 'Movimentação'], ['manutencao', 'Manutenção']];
+function _appDoPerfil(nome) { const p = perfilPorNome(nome); if (nome === 'Admin') return _APP_MODS.map(x => x[1]); if (!p) return []; return _APP_MODS.filter(([k]) => p.perms && p.perms[k]).map(x => x[1]); }
+// cadastro: quadro "o que essa pessoa acessa" + senha provisória clara
+(function () {
+  const $ = id => document.getElementById(id);
+  const pg = $('usr-perfil') && $('usr-perfil').closest('.form-group');
+  if (pg && !$('usr-acesso-res')) pg.insertAdjacentHTML('beforeend', '<div id="usr-acesso-res" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"></div>');
+  const sg = $('usr-senha') && $('usr-senha').closest('.form-group'), sl = sg && sg.querySelector('.form-label');
+  if (sl) sl.id = 'usr-senha-lbl';
+  if (sg && !$('usr-senha-prov')) sg.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-outline btn-sm" id="usr-senha-prov" style="margin-top:6px" onclick="usrSenhaProv()">🔑 Usar senha provisória ${_SENHA_APROP}</button>`);
+  window.usrSenhaProv = function () { const i = $('usr-senha'); if (!i) return; i.value = _SENHA_APROP; i.type = 'text'; i.focus(); };
+  const chip = (on, ico, txt, sub) => `<div style="flex:1;min-width:190px;border:1px solid ${on ? '#86EFAC' : 'var(--border)'};background:${on ? '#F0FDF4' : 'var(--bg,#F6F7F9)'};border-radius:10px;padding:8px 10px">
+    <div style="font-weight:700;font-size:12.5px;color:${on ? '#166534' : 'var(--text-3)'}">${ico} ${txt} ${on ? '✓' : '— não'}</div>${sub ? `<div style="font-size:11.5px;color:var(--text-2);margin-top:2px">${sub}</div>` : ''}</div>`;
+  const oM = window.usrPerfilMudou;
+  window.usrPerfilMudou = function () {
+    const r = oM.apply(this, arguments);
+    try {
+      const nome = $('usr-perfil')?.value || '', campo = _perfilEhCampo(nome), app = _appDoPerfil(nome), box = $('usr-acesso-res');
+      const ed = $('usr-edit-id')?.value, u = ed ? USUARIOS.find(x => x.id === ed) : null;
+      if (box) box.innerHTML = chip(!campo, '🖥️', 'Painel de gestão', campo ? '' : 'Entra com o <b>login</b> + senha')
+        + chip(app.length > 0, '📱', 'App de campo', app.length ? app.join(' · ') + (campo ? ' — entra com o CPF ou crachá' : ' — mesmo login e senha do painel') : 'Para liberar, marque no perfil <b>' + _e(nome) + '</b> (botão Perfis)');
+      if (!campo) {
+        const lb = $('usr-senha-lbl'), dc = $('usr-senha-dica'), bt = $('usr-senha-prov'), i = $('usr-senha');
+        if (lb) lb.textContent = u ? 'Redefinir senha' : 'Senha provisória *';
+        if (dc) dc.innerHTML = u ? (u.id === usuarioLogado?.id ? 'Preencha só se quiser trocar a sua senha.' : 'Deixe em branco para não mudar. Preenchendo, a senha nova <b>vale na hora</b> e a pessoa cria a dela no próximo acesso.' + (u.senhaProvisoria ? ' <span style="color:#B45309">· aguardando o 1º acesso</span>' : ''))
+          : 'Passe o <b>login</b> e esta senha para a pessoa (botão Enviar acesso). No 1º acesso ela cria a senha dela.';
+        if (bt) bt.style.display = u && u.id === usuarioLogado?.id ? 'none' : '';
+        if (i && !u && !i.value) { i.value = _SENHA_APROP; i.type = 'text'; }
+        if (i && u) i.type = 'password';
+      }
+    } catch (e) { console.warn('acesso', e); }
+    return r;
+  };
+})();
+// lista: coluna Acesso mostra Painel + App; senha provisória pendente
+(function () {
+  const oR = window.renderUsuarios;
+  window.renderUsuarios = renderUsuarios = function () {
+    const r = oR.apply(this, arguments);
+    try {
+      const rows = document.querySelectorAll('#usuarios-grid tbody tr');
+      rows.forEach(tr => { const m = (tr.getAttribute('onclick') || '').match(/editarUsuario\('([^']+)'\)/), u = m && USUARIOS.find(x => x.id === m[1]); if (!u) return;
+        const td = tr.children[2]; if (!td || td.dataset.app) return; td.dataset.app = 1;
+        const campo = _perfilEhCampo(u.perfil), app = _appDoPerfil(u.perfil);
+        td.innerHTML = (campo ? '' : `<div>🖥️ ${td.innerHTML}</div>`) + (app.length ? `<div style="margin-top:2px;color:#166534">📱 App: ${_e(app.join(', '))}</div>` : '');
+        const st = tr.children[4]; if (st && u.senhaProvisoria && !campo) st.insertAdjacentHTML('beforeend', ' <span class="tag tag-amber" title="Ainda não entrou para criar a senha">1º acesso pendente</span>');
+      });
+    } catch (e) {}
+    return r;
+  };
+})();
+// mensagem de acesso: login + senha provisória; link do app só se o perfil usa o app
+(function () {
+  const oMsg = _accMsg;
+  _accMsg = function (u, senha) {
+    if (_accEhCampo(u)) return oMsg.apply(this, arguments);
+    const L = _accLinks(), app = _appDoPerfil(u.perfil), nome = String(u.nome || '').trim().split(/\s+/)[0] || '';
+    const nm = nome ? nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase() : '', prov = !!(senha || u.senhaProvisoria);
+    return `Olá${nm ? ', ' + nm : ''}! Seu acesso ao *ObraKontrol* está pronto.\n\n`
+      + `📊 Painel de gestão: ${L.painel}\n` + (app.length ? `📲 App de campo (${app.join(', ')}): ${L.campo}\n` : '')
+      + `👤 Login: ${loginDoUsuario(u) || u.email}\n`
+      + (senha ? `🔑 Senha provisória: ${senha}\n` : u.senhaProvisoria ? `🔑 Senha provisória: a que te passei (se esqueceu, me avise)\n` : `🔑 Senha: a sua (se esqueceu, me avise que eu redefino)\n`)
+      + (prov ? `\nNo primeiro acesso o sistema pede para você criar a sua senha.\n` : '')
+      + (app.length ? `\nNo celular, abra o link do app e instale na tela inicial (Android: menu ⋮ > Instalar app · iPhone: Compartilhar > Adicionar à Tela de Início). Use o mesmo login e senha.\n` : '')
+      + `\nQualquer dúvida, me chama!`;
+  };
+  const oE = enviarAcesso;
+  enviarAcesso = window.enviarAcesso = function (id, senha) {
+    const r = oE.apply(this, arguments);
+    try { const u = USUARIOS.find(x => x.id === id), rod = document.getElementById('acc-rod');
+      if (u && rod && !_accEhCampo(u)) { rod.querySelector('[onclick="accLinkSenha()"]')?.remove();
+        if (!senha && !(usuarioLogado && u.id === usuarioLogado.id)) rod.insertAdjacentHTML('afterbegin', `<button class="btn btn-outline" style="margin-right:auto" onclick="accRedefinir()">🔑 Gerar senha provisória</button>`); }
+    } catch (e) {}
+    return r;
+  };
+  window.accRedefinir = async function () {
+    const u = window._accU; if (!u) return;
+    if (!confirm('Gerar a senha provisória ' + _SENHA_APROP + ' para ' + u.nome + '?\n\nA senha antiga deixa de valer e ele cria a dele no próximo acesso.')) return;
+    const ra = await _painelCriarAcesso(loginDoUsuario(u) || gerarLogin(u.email), _SENHA_APROP, u);
+    if (!ra.ok) { toast(ra.msg, 'error'); return; }
+    u.authEmail = ra.email; u.senhaProvisoria = true; u.senhaDefinida = false;
+    saveUsuarios(); renderUsuarios(); closeModal('modal-acc');
+    setTimeout(() => enviarAcesso(u.id, _SENHA_APROP), 200);
+  };
+})();
+// 1º acesso no painel com senha provisória: pede a senha nova antes de usar
+function _pnTelaSenha() {
+  document.getElementById('pn-senha-ov')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div id="pn-senha-ov" style="position:fixed;inset:0;z-index:99999;background:rgba(10,10,12,.82);display:flex;align-items:center;justify-content:center;padding:18px">
+    <div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+      <div style="font-size:19px;font-weight:800;margin-bottom:6px">Crie sua senha</div>
+      <div style="font-size:13px;color:#555;margin-bottom:14px">Você entrou com a senha provisória. Escolha uma senha só sua — ela vale para o painel e para o app de campo.</div>
+      <input class="form-control" id="pns-1" type="password" placeholder="Nova senha (mínimo 6)" style="margin-bottom:10px" autocomplete="new-password"/>
+      <input class="form-control" id="pns-2" type="password" placeholder="Repita a senha" style="margin-bottom:8px" autocomplete="new-password" onkeydown="if(event.key==='Enter')_pnSalvarSenha()"/>
+      <div id="pns-err" style="color:#DC2626;font-size:13px;min-height:18px;margin-bottom:8px"></div>
+      <button class="btn btn-primary" id="pns-ok" onclick="_pnSalvarSenha()" style="width:100%">Salvar e continuar</button>
+      <button class="btn" onclick="document.getElementById('pn-senha-ov').remove();logout()" style="width:100%;margin-top:8px;background:none;color:#777">Sair</button></div></div>`);
+  setTimeout(() => document.getElementById('pns-1')?.focus(), 100);
+}
+async function _pnSalvarSenha() {
+  const $ = k => document.getElementById(k), a = $('pns-1').value, b = $('pns-2').value, e = m => { $('pns-err').textContent = m; };
+  if (a.length < 6) return e('A senha precisa ter pelo menos 6 caracteres.');
+  if (a !== b) return e('As duas senhas não estão iguais.');
+  if (a === _SENHA_APROP) return e('Escolha uma senha diferente da provisória.');
+  const bt = $('pns-ok'); bt.disabled = true; bt.textContent = 'Salvando...';
+  try {
+    await auth.currentUser.updatePassword(a);
+    const u = USUARIOS.find(x => x.id === usuarioLogado.id) || usuarioLogado;
+    u.senhaProvisoria = false; u.senhaDefinida = true; u.senhaDefinidaEm = new Date().toISOString(); usuarioLogado.senhaProvisoria = false;
+    await db.collection('usuarios').doc(u.id).set({ senhaProvisoria: false, senhaDefinida: true, senhaDefinidaEm: u.senhaDefinidaEm }, { merge: true });
+    $('pn-senha-ov').remove(); toast('Senha criada! Da próxima vez, entre com o seu login e essa senha.');
+  } catch (x) { bt.disabled = false; bt.textContent = 'Salvar e continuar';
+    e(x.code === 'auth/requires-recent-login' ? 'Por segurança, saia e entre de novo para criar a senha.' : 'Não consegui salvar (' + (x.code || x.message || 'erro') + '). Tente de novo.'); }
+}
+(function () {
+  const oE = window.entrarNoApp;
+  window.entrarNoApp = entrarNoApp = function () {
+    const r = oE.apply(this, arguments);
+    try { const u = usuarioLogado, em = String(auth && auth.currentUser && auth.currentUser.email || '').toLowerCase();
+      if (u && u.senhaProvisoria && u.authEmail && em === String(u.authEmail).toLowerCase()) setTimeout(_pnTelaSenha, 400); } catch (e) {}
     return r;
   };
 })();
