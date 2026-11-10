@@ -610,7 +610,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.30 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.32 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -17904,7 +17904,24 @@ function _frModeloUp() {
 // v4.29: MANUTENÇÃO — Ordens de serviço (abertas e finalizadas no app de campo), Planos de preventiva
 // e cadastro de Produtos funcionando (peças, pneus, filtros… com estoque e preço — o campo dá baixa na OS).
 // ═══════════════════════════════════════════════════════════════
-const MAN_TIPOS_P = ['Preventiva', 'Corretiva', 'Troca de peça', 'Pneu / esteira', 'Elétrica', 'Hidráulica', 'Outros'];
+const MAN_TIPOS_P = ['Preventiva', 'Corretiva'];
+const MAN_COMP_P = ['Sistema Elétrico', 'Sistema de Motor', 'Sistema Hidráulico', 'Pneus / Material Rodante', 'Mecânica Geral'];
+function _mnTN(o) { // v4.31: tipo = Preventiva/Corretiva; o resto virou compartimento (OS antigas são convertidas na leitura)
+  if (!o) return { tipo: '', comp: '' }; const t = o.tipo || '';
+  if (t === 'Preventiva' || t === 'Corretiva') return { tipo: t, comp: o.compartimento || '', nat: t === 'Corretiva' ? (o.natureza || 'Corretiva normal') : '' };
+  const m = { 'Pneu / esteira': 'Pneus / Material Rodante', 'Elétrica': 'Sistema Elétrico', 'Hidráulica': 'Sistema Hidráulico' };
+  return { tipo: t ? 'Corretiva' : '', comp: o.compartimento || m[t] || (t ? 'Mecânica Geral' : ''), nat: t ? 'Corretiva normal' : '' }; }
+const MAN_NAT_P = ['Corretiva normal', 'Falha operacional'], _mnSig = t => t === 'Preventiva' ? 'OMP' : 'OMC';
+function _mnTipoTxt(o) { const t = _mnTN(o); return t.tipo ? _mnSig(t.tipo) + ' · ' + (t.nat || (o.ciclo ? 'Ciclo ' + (+o.ciclo).toLocaleString('pt-BR') + (o.medidor === 'km' ? ' km' : ' h') : 'Preventiva')) : ''; }
+function _ppCiclos(p) { return String((p && p.ciclos) || '').split(/[;,\s]+/).map(x => parseFloat(x.replace(',', '.'))).filter(x => x > 0).sort((a, b) => a - b); }
+function _ppCicloCalc(p, ult, base) {
+  const cs = _ppCiclos(p), int = +p.intervalo;
+  if (!cs.length) return base == null || isNaN(base) ? null : { prox: base + int, ciclo: int };
+  const m = cs[0]; let prox;
+  if (ult && ult.horCiclo !== '' && ult.horCiclo != null && !isNaN(+ult.horCiclo)) prox = +ult.horCiclo + m;
+  else if (base == null || isNaN(base)) return null;
+  else prox = ult ? Math.round(base / m) * m + m : (Math.floor(base / m + 1e-9) + 1) * m;
+  let ciclo = m; cs.forEach(c => { if (Math.abs(prox / c - Math.round(prox / c)) < 1e-9) ciclo = c; }); return { prox, ciclo }; }
 function _mnDH(s) { if (!s) return '—'; const [d, h] = String(s).split('T'); return d.split('-').reverse().join('/') + (h ? ' ' + h.slice(0, 5) : ''); }
 function _mnH(a, b) { const ta = new Date(a).getTime(), tb = b ? new Date(b).getTime() : Date.now(); return isNaN(ta) || isNaN(tb) ? 0 : Math.max(0, (tb - ta) / 36e5); }
 function _mnHtxt(h) { return (+h || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' h'; }
@@ -17912,9 +17929,9 @@ function _mnHorasParado(o) { return !o.parado ? 0 : o.status === 'aberta' ? _mnH
 function _mnObraOk(x) { const o = _okObraAtual(); return o === 'todas' || !x.obra || x.obra === o; }
 function _mnLista() {
   const f = id => (document.getElementById(id) || {}).value || '';
-  const mes = f('mn-mes'), tp = f('mn-tipo'), st = f('mn-st'), al = f('mn-alvo'), q = f('mn-q').toLowerCase();
+  const mes = f('mn-mes'), tp = f('mn-tipo'), cp = f('mn-comp'), st = f('mn-st'), al = f('mn-alvo'), q = f('mn-q').toLowerCase();
   return (dados.ordensServico || []).filter(o => _mnObraOk(o) && (!mes || String(o.inicio || '').slice(0, 7) === mes || (o.fim && String(o.fim).slice(0, 7) === mes) || (o.status === 'aberta' && mes >= String(o.inicio || '').slice(0, 7)))
-    && (!tp || o.tipo === tp) && (!st || o.status === st) && (!al || (o.alvo || 'eq') === al)
+    && (!tp || _mnTN(o).tipo === tp) && (!cp || _mnTN(o).comp === cp) && (!st || o.status === st) && (!al || (o.alvo || 'eq') === al)
     && (!q || [o.num, o.tag, o.placa, o.problema, o.servico, o.fornecedor, o.mecanico].some(x => String(x || '').toLowerCase().includes(q))))
     .sort((a, b) => ((a.status === 'aberta') ? 0 : 1) - ((b.status === 'aberta') ? 0 : 1) || String(b.inicio || '').localeCompare(String(a.inicio || '')));
 }
@@ -17923,15 +17940,17 @@ function renderManut() {
   const todas = (dados.ordensServico || []).filter(_mnObraOk);
   const sm = $('mn-mes'); if (sm && !sm.dataset.ok) { const ms = [...new Set(todas.map(o => String(o.inicio || '').slice(0, 7)).filter(Boolean))].sort().reverse(); const at = _hojeLocal().slice(0, 7); if (!ms.includes(at)) ms.unshift(at);
     sm.innerHTML = '<option value="">Todos os meses</option>' + ms.map(m => `<option value="${m}">${m.split('-').reverse().join('/')}</option>`).join(''); sm.value = at; sm.dataset.ok = '1'; }
-  const st = $('mn-tipo'); if (st && !st.options.length) st.innerHTML = '<option value="">Todos os tipos</option>' + MAN_TIPOS_P.map(t => `<option>${t}</option>`).join('');
+  const st = $('mn-tipo'); if (st && !st.options.length) st.innerHTML = '<option value="">Preventiva e corretiva</option>' + MAN_TIPOS_P.map(t => `<option>${t}</option>`).join('');
+  if (!$('mn-comp') && st) st.insertAdjacentHTML('afterend', `<select class="form-control" id="mn-comp" onchange="renderManut()" style="max-width:220px"><option value="">Todos os compartimentos</option>${MAN_COMP_P.map(t => `<option>${t}</option>`).join('')}</select>`);
   const l = _mnLista(), ab = todas.filter(o => o.status === 'aberta'), par = ab.filter(o => o.parado);
   const fin = l.filter(o => o.status === 'finalizada'), hP = l.filter(o => o.status !== 'cancelada').reduce((s, o) => s + _mnHorasParado(o), 0), custo = fin.reduce((s, o) => s + (+o.custoTotal || 0), 0);
-  const corr = fin.filter(o => o.parado && o.tipo !== 'Preventiva'), mttr = corr.length ? corr.reduce((s, o) => s + (+o.horasParado || 0), 0) / corr.length : 0;
+  const corr = fin.filter(o => o.parado && _mnTN(o).tipo !== 'Preventiva'), mttr = corr.length ? corr.reduce((s, o) => s + (+o.horasParado || 0), 0) / corr.length : 0;
   const k = (lb, v, sub, cor) => `<div class="stat-card"><div class="stat-label">${lb}</div><div class="stat-value" ${cor ? `style="color:${cor}"` : ''}>${v}</div><div class="stat-sub">${sub}</div></div>`;
   $('mn-kpis').innerHTML = k('Abertas agora', ab.length, ab.length ? ab.map(o => o.tag).slice(0, 4).join(', ') + (ab.length > 4 ? '…' : '') : 'nenhuma', ab.length ? '#2563EB' : '') + k('Paradas agora', par.length, par.length ? 'mais antiga há ' + _mnHtxt(Math.max(...par.map(o => _mnH(o.inicio)))) : 'tudo rodando', par.length ? '#DC2626' : '')
-    + k('Horas paradas', _mnHtxt(hP), 'no filtro (corrido)') + k('Custo das OS', _moeda(custo), fin.length + ' finalizada(s)') + k('Tempo médio de reparo', corr.length ? _mnHtxt(mttr) : '—', 'corretivas paradas (MTTR)');
+    + k('Horas paradas', _mnHtxt(hP), 'no filtro (corrido)') + k('Custo das OS', _moeda(custo), fin.length + ' finalizada(s)') + k('Tempo médio de reparo', corr.length ? _mnHtxt(mttr) : '—', 'corretivas paradas (MTTR)')
+    + (() => { const fo = l.filter(o => o.status !== 'cancelada' && _mnTN(o).nat === 'Falha operacional'); return k('Falhas operacionais', fo.length, fo.length ? _mnHtxt(fo.reduce((s, o) => s + _mnHorasParado(o), 0)) + ' parado · ' + _moeda(fo.reduce((s, o) => s + (+o.custoTotal || 0), 0)) : 'nenhuma no filtro', fo.length ? '#D97706' : ''); })();
   // por tipo
-  const pt = {}; l.filter(o => o.status !== 'cancelada').forEach(o => { const t = pt[o.tipo] || (pt[o.tipo] = { n: 0, h: 0, c: 0 }); t.n++; t.h += _mnHorasParado(o); t.c += +o.custoTotal || 0; });
+  const pt = {}; l.filter(o => o.status !== 'cancelada').forEach(o => { const k = _mnTN(o).comp || 'Compartimento não informado', t = pt[k] || (pt[k] = { n: 0, h: 0, c: 0 }); t.n++; t.h += _mnHorasParado(o); t.c += +o.custoTotal || 0; });
   const mx = Math.max(1, ...Object.values(pt).map(t => t.h));
   $('mn-tipos').innerHTML = Object.keys(pt).length ? Object.entries(pt).sort((a, b) => b[1].h - a[1].h).map(([t, v]) => `<div class="mn-bar"><span>${_e(t)}</span><div><i style="width:${(v.h / mx * 100).toFixed(1)}%"></i></div><b>${_mnHtxt(v.h)}</b><small>${v.n} OS · ${_moeda(v.c)}</small></div>`).join('') : '<div style="color:var(--text-3);font-size:13px">Sem OS no filtro.</div>';
   const pe = {}; l.filter(o => o.status !== 'cancelada').forEach(o => { const t = pe[o.tag] || (pe[o.tag] = { n: 0, h: 0, c: 0 }); t.n++; t.h += _mnHorasParado(o); t.c += +o.custoTotal || 0; });
@@ -17939,7 +17958,7 @@ function renderManut() {
   $('mn-eqs').innerHTML = Object.keys(pe).length ? Object.entries(pe).sort((a, b) => b[1].h - a[1].h).slice(0, 8).map(([t, v]) => `<div class="mn-bar"><span>${_e(t)}</span><div><i style="width:${(v.h / mxe * 100).toFixed(1)}%;background:#DC2626"></i></div><b>${_mnHtxt(v.h)}</b><small>${v.n} OS · ${_moeda(v.c)}</small></div>`).join('') : '<div style="color:var(--text-3);font-size:13px">—</div>';
   const stt = o => o.status === 'aberta' ? (o.parado ? tag('Aberta · parado', 'red') : tag('Aberta', 'blue')) : o.status === 'finalizada' ? tag('Finalizada', 'green') : tag('Cancelada', 'gray');
   $('mn-tbody').innerHTML = l.length ? l.map(o => `<tr style="cursor:pointer" onclick="mnVer('${o.id}')"><td class="td-mono">${_e(o.num || '')}</td><td>${stt(o)}</td><td><b>${_e(o.tag || '')}</b><div style="font-size:11.5px;color:var(--text-3)">${o.alvo === 'vl' ? 'Veículo leve' : _e(o.familia || '')}</div></td>
-      <td>${_e(o.tipo || '')}${o.planoNome ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(o.planoNome)}</div>` : ''}</td><td style="max-width:260px">${_e(o.problema || '')}</td><td class="td-mono">${_mnDH(o.inicio)}</td><td class="td-mono">${o.status === 'finalizada' ? _mnDH(o.fim) : '—'}</td>
+      <td>${_e(_mnTipoTxt(o))}<div style="font-size:11.5px;color:var(--text-3)">${_e(_mnTN(o).comp)}</div>${o.planoNome ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(o.planoNome)}</div>` : ''}</td><td style="max-width:260px">${_e(o.problema || '')}</td><td class="td-mono">${_mnDH(o.inicio)}</td><td class="td-mono">${o.status === 'finalizada' ? _mnDH(o.fim) : '—'}</td>
       <td style="text-align:right" class="td-mono">${o.parado ? _mnHtxt(_mnHorasParado(o)) : '—'}</td><td>${o.executor === 'terceiro' ? _e(o.fornecedor || 'Terceiro') : 'Própria'}</td><td style="text-align:right" class="td-mono">${o.custoTotal ? _moeda(o.custoTotal) : '—'}</td></tr>`).join('')
     : '<tr><td colspan="10" class="empty-row">Nenhuma OS no filtro. As OS são abertas no app de campo (chave Manutenção na tela inicial).</td></tr>';
 }
@@ -17948,7 +17967,7 @@ async function mnVer(id) {
   if (!document.getElementById('modal-mn')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-mn"><div class="modal" style="max-width:760px;width:96vw"><div class="modal-header"><div class="modal-title" id="mn-v-tit"></div><button class="modal-close" onclick="closeModal('modal-mn')">×</button></div><div class="modal-body" id="mn-v-body"></div><div class="modal-footer" id="mn-v-rod"></div></div></div>`);
   const L = (k, v) => v === '' || v == null ? '' : `<div class="mn-l"><span>${k}</span><b>${_e(v)}</b></div>`, km = o.medidor === 'km', M = v => v === '' || v == null ? '' : (+v).toLocaleString('pt-BR') + (km ? ' km' : ' h');
   document.getElementById('mn-v-tit').textContent = (o.num || 'OS') + ' · ' + (o.tag || '');
-  document.getElementById('mn-v-body').innerHTML = `<div class="mn-grid">${L('Status', o.status === 'aberta' ? 'Aberta' + (o.parado ? ' — parado há ' + _mnHtxt(_mnH(o.inicio)) : '') : o.status === 'finalizada' ? 'Finalizada' : 'Cancelada' + (o.motivoCanc ? ' — ' + o.motivoCanc : ''))}${L('Tipo', o.tipo)}${L('Plano', o.planoNome)}
+  document.getElementById('mn-v-body').innerHTML = `<div class="mn-grid">${L('Status', o.status === 'aberta' ? 'Aberta' + (o.parado ? ' — parado há ' + _mnHtxt(_mnH(o.inicio)) : '') : o.status === 'finalizada' ? 'Finalizada' : 'Cancelada' + (o.motivoCanc ? ' — ' + o.motivoCanc : ''))}${L('Tipo', _mnTipoTxt(o))}${L('Compartimento', _mnTN(o).comp)}${o.horCiclo ? L('Revisão', (+o.horCiclo).toLocaleString('pt-BR') + (o.medidor === 'km' ? ' km' : ' h')) : ''}${L('Plano', o.planoNome)}
       ${L(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', [o.tag, o.placa && o.placa !== o.tag ? o.placa : '', o.modelo].filter(Boolean).join(' · '))}${L('Família', o.familia)}${L('Obra', getNomeObra(o.obra))}
       ${L('Início', _mnDH(o.inicio))}${L('Término', o.fim ? _mnDH(o.fim) : '')}${L('Parado', o.parado ? 'Sim · ' + _mnHtxt(_mnHorasParado(o)) : 'Não')}
       ${L(km ? 'Km início' : 'Horímetro início', M(o.horIni))}${L(km ? 'Km término' : 'Horímetro término', M(o.horFim))}${L('Executor', o.executor === 'terceiro' ? 'Terceiro · ' + (o.fornecedor || '') : 'Equipe própria')}
@@ -17970,7 +17989,7 @@ async function mnImprimir(id) {
   w.document.write('<p style="font-family:Arial;padding:20px">Montando a OS…</p>');
   const ids = [...(o.fotosAbertura || []).map(i => [i, 'Abertura']), ...(o.fotosFim || []).map(i => [i, 'Serviço'])], imgs = await Promise.all(ids.map(([i]) => _mobFotoImg(i)));
   const km = o.medidor === 'km', M = v => v === '' || v == null ? '—' : (+v).toLocaleString('pt-BR') + (km ? ' km' : ' h'), C = (k, v) => `<div><span>${k}</span>${_e(v || '—')}</div>`;
-  const nome = 'Ordem de Serviço-' + (o.num || o.id) + '-' + String(o.fim || o.inicio || '').slice(0, 10).split('-').reverse().join('-');
+  const nome = 'Ordem de Manutenção-' + (o.num || o.id) + '-' + String(o.fim || o.inicio || '').slice(0, 10).split('-').reverse().join('-');
   let logo = ''; try { logo = _logoTermo(o.obra); } catch (e) {}
   w.document.open(); w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(nome)}</title><style>
     @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:14px;font-size:12px}
@@ -17982,8 +18001,8 @@ async function mnImprimir(id) {
     .ass{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:44px}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px;font-size:11px}
     .np{position:sticky;top:0;background:#111;color:#fff;padding:8px;text-align:center;margin:-14px -14px 12px}.np button{background:#E30613;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}@media print{.np{display:none}body{padding:0}}</style></head><body>
     <div class="np"><button onclick="window.print()">Imprimir / salvar PDF</button></div>
-    <div class="hd">${logo ? `<img src="${logo}">` : '<div></div>'}<div><b>ORDEM DE SERVIÇO</b><div style="text-align:right">${_e(o.num || '')} · ${_e(getNomeObra(o.obra) || '')}</div></div></div>
-    <div class="meta">${C(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', o.tag)}${C('Placa / modelo', [o.placa, o.modelo].filter(Boolean).join(' · '))}${C('Família', o.alvo === 'vl' ? 'Veículo leve' : o.familia)}${C('Tipo', o.tipo + (o.planoNome ? ' · ' + o.planoNome : ''))}
+    <div class="hd">${logo ? `<img src="${logo}">` : '<div></div>'}<div><b>ORDEM DE MANUTENÇÃO ${_mnTN(o).tipo === 'Preventiva' ? 'PREVENTIVA' : 'CORRETIVA'}</b><div style="text-align:right">${_e(o.num || '')} · ${_e(getNomeObra(o.obra) || '')}</div></div></div>
+    <div class="meta">${C(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', o.tag)}${C('Placa / modelo', [o.placa, o.modelo].filter(Boolean).join(' · '))}${C('Família', o.alvo === 'vl' ? 'Veículo leve' : o.familia)}${C('Tipo', _mnTipoTxt(o) + ' · ' + _mnTN(o).comp + (o.planoNome ? ' · ' + o.planoNome : ''))}
       ${C('Início', _mnDH(o.inicio))}${C('Término', o.fim ? _mnDH(o.fim) : 'em aberto')}${C('Parado', o.parado ? 'Sim · ' + _mnHtxt(_mnHorasParado(o)) : 'Não')}${C('Status', o.status)}
       ${C(km ? 'Km início' : 'Horímetro início', M(o.horIni))}${C(km ? 'Km término' : 'Horímetro término', M(o.horFim))}${C('Executor', o.executor === 'terceiro' ? 'Terceiro · ' + (o.fornecedor || '') : 'Equipe própria')}${C('Responsável', o.mecanico)}</div>
     <h3>Problema</h3><div class="bx">${_e(o.problema || '')}</div><h3>Serviço executado</h3><div class="bx">${_e(o.servico || '')}</div>
@@ -17995,8 +18014,8 @@ async function mnImprimir(id) {
 }
 function mnExcel() {
   const l = _mnLista(); if (!l.length) return toast('Nada para exportar.', 'error');
-  const rows = [['Nº', 'Status', 'TAG', 'Placa', 'Tipo', 'Plano', 'Família', 'Problema', 'Serviço', 'Início', 'Término', 'Parado', 'Horas paradas', 'Leitura início', 'Leitura término', 'Executor', 'Fornecedor', 'Peças (R$)', 'Mão de obra (R$)', 'Total (R$)', 'Aberta por', 'Finalizada por']]
-    .concat(l.map(o => [o.num, o.status, o.tag, o.placa || '', o.tipo, o.planoNome || '', o.alvo === 'vl' ? 'Veículo leve' : o.familia || '', o.problema || '', o.servico || '', _mnDH(o.inicio), o.fim ? _mnDH(o.fim) : '', o.parado ? 'Sim' : 'Não', Math.round(_mnHorasParado(o) * 100) / 100, o.horIni ?? '', o.horFim ?? '', o.executor === 'terceiro' ? 'Terceiro' : 'Própria', o.fornecedor || '', +o.custoPecas || 0, +o.custoMO || 0, +o.custoTotal || 0, o.abertaPor || '', o.finalizadaPor || '']));
+  const rows = [['Nº', 'Status', 'TAG', 'Placa', 'Tipo', 'Natureza', 'Compartimento', 'Plano', 'Ciclo', 'Família', 'Problema', 'Serviço', 'Início', 'Término', 'Parado', 'Horas paradas', 'Leitura início', 'Leitura término', 'Executor', 'Fornecedor', 'Peças (R$)', 'Mão de obra (R$)', 'Total (R$)', 'Aberta por', 'Finalizada por']]
+    .concat(l.map(o => [o.num, o.status, o.tag, o.placa || '', _mnTN(o).tipo, _mnTN(o).nat, _mnTN(o).comp, o.planoNome || '', o.ciclo || '', o.alvo === 'vl' ? 'Veículo leve' : o.familia || '', o.problema || '', o.servico || '', _mnDH(o.inicio), o.fim ? _mnDH(o.fim) : '', o.parado ? 'Sim' : 'Não', Math.round(_mnHorasParado(o) * 100) / 100, o.horIni ?? '', o.horFim ?? '', o.executor === 'terceiro' ? 'Terceiro' : 'Própria', o.fornecedor || '', +o.custoPecas || 0, +o.custoMO || 0, +o.custoTotal || 0, o.abertaPor || '', o.finalizadaPor || '']));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Ordens de serviço'); XLSX.writeFile(wb, 'Ordens_de_servico.xlsx');
 }
 
@@ -18017,11 +18036,11 @@ function _ppSituacao() {
       let atual = null, menor = null; const up = v => { v = parseFloat(v); if (!isNaN(v)) { if (atual == null || v > atual) atual = v; if (menor == null || v < menor) menor = v; } };
       up(a.base); (dados.aponEQ || []).forEach(x => { if (x.equipId === a.id && x.status !== 'rejeitado') up(x.hor); }); os.forEach(o => { if (o.equipId === a.id) { up(o.horIni); up(o.horFim); } });
       (dados.abastVeic || []).forEach(x => { if (x.veicId === a.id) up(x.km); });
-      let st = 'ok', falta = null, prox = null, un = p.unidade === 'dias' ? 'dias' : p.unidade;
+      let st = 'ok', falta = null, prox = null, ciclo = null, un = p.unidade === 'dias' ? 'dias' : p.unidade;
       if (p.unidade === 'dias') { const b = ult ? new Date(ult.fim) : a.data ? new Date(a.data + 'T08:00') : null; if (b && !isNaN(b)) { falta = Math.round(int - (hoje - b.getTime()) / 864e5); prox = _hojeLocal(new Date(b.getTime() + int * 864e5)); } }
-      else { let b = ult ? (parseFloat(ult.horFim) || parseFloat(ult.horIni)) : a.base; if ((b == null || isNaN(b)) && !ult) b = menor; if (!isNaN(b) && b != null && atual != null) { prox = b + int; falta = Math.round((prox - atual) * 10) / 10; } }
+      else { let b = ult ? (parseFloat(ult.horFim) || parseFloat(ult.horIni)) : a.base; if ((b == null || isNaN(b)) && !ult) b = menor; const cc = atual != null ? _ppCicloCalc(p, ult, b) : null; if (cc) { prox = cc.prox; ciclo = cc.ciclo; falta = Math.round((prox - atual) * 10) / 10; } }
       st = falta == null ? 'sem' : falta <= 0 ? 'venc' : falta <= av ? 'prox' : 'ok';
-      out.push({ p, a, ult, atual, prox, falta, un, st, aberta: os.find(o => o.status === 'aberta' && o.equipId === a.id) });
+      out.push({ p, a, ult, atual, prox, ciclo, falta, un, st, aberta: os.find(o => o.status === 'aberta' && o.equipId === a.id) });
     });
   });
   const ord = { venc: 0, prox: 1, sem: 2, ok: 3 }; return out.sort((x, y) => ord[x.st] - ord[y.st] || String(x.a.tag).localeCompare(String(y.a.tag)));
@@ -18031,14 +18050,14 @@ function renderPlanosPrev() {
   const fam = c => { const f = (dados.familias || []).find(x => x.cod === c); return f ? (f.desc || f.cod) : c; };
   const pls = (dados.planosPrev || []).filter(_mnObraOk).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   const alvoTxt = p => p.aplica === 'vl' ? 'Todos os veículos leves' : p.aplica === 'equip' ? 'Só ' + (((dados.equipamentos || []).concat(dados.frota || [])).find(x => x.id === p.equipId) || {}).tag : 'Família ' + fam(p.familia);
-  $('pp-tbody').innerHTML = pls.length ? pls.map(p => `<tr><td><b>${_e(p.nome)}</b>${p.ativo === false ? ' ' + tag('inativo', 'gray') : ''}</td><td>${_e(alvoTxt(p))}</td><td class="td-mono">a cada ${(+p.intervalo).toLocaleString('pt-BR')} ${p.unidade === 'dias' ? 'dias' : p.unidade}</td><td class="td-mono">${p.aviso ? (+p.aviso).toLocaleString('pt-BR') + ' ' + (p.unidade === 'dias' ? 'dias' : p.unidade) + ' antes' : '—'}</td>
+  $('pp-tbody').innerHTML = pls.length ? pls.map(p => `<tr><td><b>${_e(p.nome)}</b>${p.ativo === false ? ' ' + tag('inativo', 'gray') : ''}</td><td>${_e(alvoTxt(p))}</td><td class="td-mono">${_ppCiclos(p).length ? 'ciclos ' + _ppCiclos(p).map(c => c.toLocaleString('pt-BR')).join(' / ') + ' ' + p.unidade : 'a cada ' + (+p.intervalo).toLocaleString('pt-BR') + ' ' + (p.unidade === 'dias' ? 'dias' : p.unidade)}</td><td class="td-mono">${p.aviso ? (+p.aviso).toLocaleString('pt-BR') + ' ' + (p.unidade === 'dias' ? 'dias' : p.unidade) + ' antes' : '—'}</td>
       <td>${p.obra ? _e(getNomeObra(p.obra)) : 'Todas'}</td><td style="max-width:280px;font-size:12px;color:var(--text-2)">${_e(p.itens || '').replace(/\n/g, ' · ')}</td><td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="ppEditar('${p.id}')">Editar</button></td></tr>`).join('')
     : '<tr><td colspan="7" class="empty-row">Nenhum plano. Ex.: "Revisão 250 h" para a família Escavadeira, ou "Revisão 10.000 km" para os veículos leves.</td></tr>';
   const sit = _ppSituacao(), stTag = { venc: tag('Vencida', 'red'), prox: tag('Perto', 'amber'), ok: tag('Em dia', 'green'), sem: tag('Sem referência', 'gray') };
   const fmt = (v, un) => v == null ? '—' : un === 'dias' ? v : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' ' + un;
   $('pp-kpis').innerHTML = [['Vencidas', sit.filter(x => x.st === 'venc').length, '#DC2626'], ['Perto de vencer', sit.filter(x => x.st === 'prox').length, '#D97706'], ['Em dia', sit.filter(x => x.st === 'ok').length, '#16A34A'], ['Com OS aberta', sit.filter(x => x.aberta).length, '#2563EB']]
     .map(([l, v, c]) => `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value" style="color:${v ? c : ''}">${v}</div><div class="stat-sub">${sit.length} item(ns) nos planos</div></div>`).join('');
-  $('pp-sit').innerHTML = sit.length ? sit.map(x => `<tr><td>${stTag[x.st]}</td><td><b>${_e(x.a.tag)}</b></td><td>${_e(x.p.nome)}</td><td class="td-mono">${x.p.unidade === 'dias' ? '—' : fmt(x.atual, x.un)}</td><td class="td-mono">${x.ult ? _mnDH(x.ult.fim).slice(0, 10) + (x.p.unidade !== 'dias' && x.ult.horFim !== '' ? ' · ' + fmt(x.ult.horFim, x.un) : '') : 'mobilização'}</td>
+  $('pp-sit').innerHTML = sit.length ? sit.map(x => `<tr><td>${stTag[x.st]}</td><td><b>${_e(x.a.tag)}</b></td><td>${_e(x.p.nome)}${x.ciclo && _ppCiclos(x.p).length ? `<div style="font-size:11.5px;color:var(--text-3)">ciclo ${fmt(x.ciclo, x.un)}</div>` : ''}</td><td class="td-mono">${x.p.unidade === 'dias' ? '—' : fmt(x.atual, x.un)}</td><td class="td-mono">${x.ult ? _mnDH(x.ult.fim).slice(0, 10) + (x.p.unidade !== 'dias' && x.ult.horFim !== '' ? ' · ' + fmt(x.ult.horFim, x.un) : '') : 'mobilização'}</td>
       <td class="td-mono">${x.p.unidade === 'dias' ? (x.prox ? fmtData(x.prox) : '—') : fmt(x.prox, x.un)}</td><td class="td-mono" style="font-weight:700;color:${x.st === 'venc' ? '#DC2626' : x.st === 'prox' ? '#D97706' : ''}">${x.falta == null ? '—' : x.falta <= 0 ? 'passou ' + fmt(-x.falta, x.un) : 'faltam ' + fmt(x.falta, x.un)}</td><td>${x.aberta ? `<a href="#" onclick="mnVer('${x.aberta.id}');return false">${_e(x.aberta.num)}</a>` : ''}</td></tr>`).join('')
     : '<tr><td colspan="8" class="empty-row">Cadastre um plano para ver a situação dos equipamentos.</td></tr>';
 }
@@ -18060,7 +18079,9 @@ function _ppForm() {
     <div class="form-group"><label class="form-label">Vale para *</label><select class="form-control" onchange="_ppEd.aplica=this.value;if(this.value==='vl')_ppEd.unidade='km';_ppForm()">${[['familia', 'Uma família de equipamentos'], ['equip', 'Um equipamento / veículo'], ['vl', 'Todos os veículos leves']].map(([k, t]) => `<option value="${k}" ${p.aplica === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
     ${p.aplica === 'familia' ? `<div class="form-group"><label class="form-label">Família *</label><select class="form-control" onchange="_ppEd.familia=this.value"><option value="">Escolha…</option>${fams.map(f => `<option value="${_e(f.cod)}" ${f.cod === p.familia ? 'selected' : ''}>${_e(f.cod + ' · ' + (f.desc || ''))}</option>`).join('')}</select></div>`
       : p.aplica === 'equip' ? `<div class="form-group"><label class="form-label">Equipamento / veículo *</label><select class="form-control" onchange="_ppEd.equipId=this.value"><option value="">Escolha…</option><optgroup label="Equipamentos">${eqs.map(e => `<option value="${e.id}" ${e.id === p.equipId ? 'selected' : ''}>${_e(e.tag || e.placa)}</option>`).join('')}</optgroup><optgroup label="Veículos leves">${vls.map(e => `<option value="${e.id}" ${e.id === p.equipId ? 'selected' : ''}>${_e((e.tag || '') + ' ' + (e.placa || ''))}</option>`).join('')}</optgroup></select></div>` : '<div></div>'}
+    <div class="form-group"><label class="form-label">Compartimento</label><select class="form-control" onchange="_ppEd.compartimento=this.value"><option value="">—</option>${MAN_COMP_P.map(c => `<option ${c === p.compartimento ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Intervalo *</label><input class="form-control" type="number" value="${v('intervalo')}" oninput="_ppEd.intervalo=this.value" placeholder="250"/></div>
+    <div class="form-group form-full"><label class="form-label">Ciclos da preventiva (opcional)</label><input class="form-control" value="${v('ciclos')}" oninput="_ppEd.ciclos=this.value" placeholder="Ex.: 250, 500, 1000, 2000"/><div style="font-size:11.5px;color:var(--text-3);margin-top:3px">Com ciclos, a revisão segue os múltiplos do horímetro/km e o sistema diz qual ciclo cabe (ex.: nas 1.000 h entra o ciclo de 1.000).</div></div>
     <div class="form-group"><label class="form-label">Unidade *</label><select class="form-control" onchange="_ppEd.unidade=this.value">${[['h', 'Horas (horímetro)'], ['km', 'Km (hodômetro)'], ['dias', 'Dias (calendário)']].map(([k, t]) => `<option value="${k}" ${p.unidade === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Avisar quando faltar</label><input class="form-control" type="number" value="${v('aviso')}" oninput="_ppEd.aviso=this.value" placeholder="Ex.: 30"/></div>
     <div class="form-group"><label class="form-label">Obra</label><select class="form-control" onchange="_ppEd.obra=this.value;_ppForm()"><option value="">Todas as obras</option>${(dados.obras || []).map(x => `<option value="${x.id}" ${x.id === p.obra ? 'selected' : ''}>${_e(x.nome)}</option>`).join('')}</select></div>
@@ -18068,10 +18089,10 @@ function _ppForm() {
     <div class="form-group form-full"><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" ${p.ativo !== false ? 'checked' : ''} onchange="_ppEd.ativo=this.checked"/> Plano ativo</label></div></div>`;
 }
 async function ppSalvar() {
-  const p = window._ppEd; if (!String(p.nome || '').trim()) return toast('Informe o nome do plano.', 'error'); if (!(+p.intervalo > 0)) return toast('Informe o intervalo.', 'error');
+  const p = window._ppEd; if (!String(p.nome || '').trim()) return toast('Informe o nome do plano.', 'error'); if (!(+p.intervalo > 0) && _ppCiclos(p).length) p.intervalo = _ppCiclos(p)[0]; if (!(+p.intervalo > 0)) return toast('Informe o intervalo.', 'error');
   if (p.aplica === 'familia' && !p.familia) return toast('Escolha a família.', 'error'); if (p.aplica === 'equip' && !p.equipId) return toast('Escolha o equipamento.', 'error');
   const id = p.id || 'pp' + Date.now().toString(36);
-  const reg = { id, nome: String(p.nome).trim(), aplica: p.aplica, familia: p.aplica === 'familia' ? p.familia : '', equipId: p.aplica === 'equip' ? p.equipId : '', intervalo: +p.intervalo, unidade: p.unidade || 'h', aviso: +p.aviso || 0, itens: p.itens || '', ativo: p.ativo !== false, obra: p.obra || '', atualizadoEm: new Date().toISOString(), atualizadoPor: (usuarioLogado && usuarioLogado.nome) || '' };
+  const reg = { id, nome: String(p.nome).trim(), aplica: p.aplica, familia: p.aplica === 'familia' ? p.familia : '', equipId: p.aplica === 'equip' ? p.equipId : '', compartimento: p.compartimento || '', ciclos: _ppCiclos(p).join(', '), intervalo: +p.intervalo, unidade: p.unidade || 'h', aviso: +p.aviso || 0, itens: p.itens || '', ativo: p.ativo !== false, obra: p.obra || '', atualizadoEm: new Date().toISOString(), atualizadoPor: (usuarioLogado && usuarioLogado.nome) || '' };
   await fbSave('planosPrev', id, reg); const l = dados.planosPrev || (dados.planosPrev = []); const i = l.findIndex(x => x.id === id); if (i >= 0) l[i] = reg; else l.push(reg);
   closeModal('modal-pp'); renderPlanosPrev(); toast('Plano salvo.');
 }
@@ -18128,7 +18149,7 @@ salvarProduto = window.salvarProduto = async function () {
       <div class="btn-group"><button class="btn btn-outline btn-sm" onclick="mnExcel()">⬇ Excel</button></div></div>
       <div id="mn-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-bottom:12px">
-        <div class="card"><div class="card-body"><div class="mn-h">Horas paradas por tipo</div><div id="mn-tipos"></div></div></div>
+        <div class="card"><div class="card-body"><div class="mn-h">Horas paradas por compartimento</div><div id="mn-tipos"></div></div></div>
         <div class="card"><div class="card-body"><div class="mn-h">Equipamentos que mais pararam</div><div id="mn-eqs"></div></div></div></div>
       <div class="card"><div class="card-body"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <select class="form-control" id="mn-mes" onchange="renderManut()" style="max-width:170px"></select><select class="form-control" id="mn-tipo" onchange="renderManut()" style="max-width:180px"></select>
@@ -18185,8 +18206,8 @@ salvarProduto = window.salvarProduto = async function () {
 // ═══════════════════════════════════════════════════════════════
 function _hmApon(eq) { return (eq || []).filter(a => /^(MP|MNP)$/i.test(String(a.motivo || '').trim())).reduce((s, a) => s + (+a.hpar || 0), 0); }
 function _mnSigla(obra) { const o = (dados.obras || []).find(x => x.id === obra); return o && (o.sigla || o.cod) ? String(o.sigla || o.cod).toUpperCase().replace(/\s+/g, '') : 'OB'; }
-function _mnProxNum(obra) {
-  const pre = 'OS-' + _mnSigla(obra) + '-', re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$'); let mx = 0;
+function _mnProxNum(obra, tipo) {
+  const pre = _mnSig(tipo) + '-' + _mnSigla(obra) + '-', re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$'); let mx = 0;
   (dados.ordensServico || []).forEach(o => { const m = re.exec(o.num || ''); if (m) mx = Math.max(mx, +m[1]); }); return pre + String(mx + 1).padStart(4, '0');
 }
 function _mnAgora() { const d = new Date(); return _hojeLocal(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
@@ -18201,7 +18222,7 @@ function _mnModal() {
 // ── abrir OS ──
 function mnNova() {
   const o = _okObraAtual();
-  window._mnF = { modo: 'nova', obra: o === 'todas' ? '' : o, alvo: 'eq', equipId: '', tipo: '', planoId: '', parado: true, inicio: _mnAgora(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioLogado && usuarioLogado.nome) || '' };
+  window._mnF = { modo: 'nova', obra: o === 'todas' ? '' : o, alvo: 'eq', equipId: '', tipo: '', natureza: '', ciclo: '', horCiclo: '', compartimento: '', planoId: '', parado: true, inicio: _mnAgora(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioLogado && usuarioLogado.nome) || '' };
   _mnModal(); document.getElementById('mnf-tit').textContent = 'Abrir ordem de serviço'; _mnFormNova(); openModal('modal-mnf');
 }
 function _mnFormNova() {
@@ -18217,8 +18238,10 @@ function _mnFormNova() {
     <div class="form-group"><label class="form-label">O que vai para manutenção *</label>${seg('alvo', [['eq', 'Equipamento'], ['vl', 'Veículo leve']], "_mnF.equipId='';_mnF.planoId='';")}</div>
     <div class="form-group"><label class="form-label">${f.alvo === 'vl' ? 'Veículo' : 'Equipamento'} *</label><select class="form-control" onchange="_mnF.equipId=this.value;_mnF.planoId='';_mnFormNova()"><option value="">Escolha…</option>${(f.alvo === 'vl' ? vls : eqs).map(e => `<option value="${e.id}" ${e.id === f.equipId ? 'selected' : ''}>${_e((e.tag || e.placa) + (f.alvo === 'vl' ? (e.placa ? ' · ' + e.placa : '') + (e.modelo ? ' — ' + e.modelo : '') : (e.familia || e.codFamilia ? ' — ' + (e.familia || e.codFamilia) : '')))}</option>`).join('')}</select>
       ${ab ? `<div class="alert alert-warning" style="margin-top:6px;font-size:12.5px">Já tem a <b>${_e(ab.num)}</b> aberta para ${_e(ab.tag)}.</div>` : ''}</div>
-    <div class="form-group form-full"><label class="form-label">Tipo *</label>${seg('tipo', MAN_TIPOS_P.map(t => [t, t]))}</div>
-    ${f.tipo === 'Preventiva' ? `<div class="form-group form-full"><label class="form-label">Plano de preventiva</label><select class="form-control" onchange="_mnF.planoId=this.value"><option value="">${pls.length ? 'Escolha…' : 'Nenhum plano para este item'}</option>${pls.map(p => `<option value="${p.id}" ${p.id === f.planoId ? 'selected' : ''}>${_e(p.nome)}</option>`).join('')}</select></div>` : ''}
+    <div class="form-group form-full"><label class="form-label">Tipo *</label>${seg('tipo', [['Corretiva', 'OMC · Corretiva'], ['Preventiva', 'OMP · Preventiva']])}</div>
+    ${f.tipo === 'Corretiva' ? `<div class="form-group form-full"><label class="form-label">Natureza da corretiva *</label>${seg('natureza', MAN_NAT_P.map(t => [t, t]))}</div>` : ''}
+    <div class="form-group form-full"><label class="form-label">Compartimento *</label>${seg('compartimento', MAN_COMP_P.map(t => [t, t]))}</div>
+    ${f.tipo === 'Preventiva' ? `<div class="form-group form-full"><label class="form-label">Plano de preventiva</label><select class="form-control" onchange="_mnF.planoId=this.value;const p=(dados.planosPrev||[]).find(x=>x.id===this.value);_mnF.ciclo='';_mnF.horCiclo='';if(p){if(p.compartimento)_mnF.compartimento=p.compartimento;const it=_ppSituacao().find(x=>x.p.id===p.id&&x.a.id===_mnF.equipId);if(it&&it.ciclo&&_ppCiclos(p).length){_mnF.ciclo=it.ciclo;_mnF.horCiclo=it.prox}}_mnFormNova()"><option value="">${pls.length ? 'Escolha…' : 'Nenhum plano para este item'}</option>${pls.map(p => `<option value="${p.id}" ${p.id === f.planoId ? 'selected' : ''}>${_e(p.nome)}</option>`).join('')}</select></div>` : ''}
     <div class="form-group"><label class="form-label">Ficou parado? *</label>${seg('parado', [[true, 'Sim, parado'], [false, 'Não']])}</div>
     <div class="form-group"><label class="form-label">Início *</label><input class="form-control" type="datetime-local" value="${v('inicio')}" oninput="_mnF.inicio=this.value"/></div>
     <div class="form-group"><label class="form-label">${a && a.km ? 'Hodômetro (km)' : 'Horímetro (h)'} no início</label><input class="form-control" type="number" step="0.1" value="${v('horIni')}" oninput="_mnF.horIni=this.value"/></div>
@@ -18230,11 +18253,11 @@ function _mnFormNova() {
 }
 async function mnSalvarNova() {
   const f = window._mnF, a = _mnAlvoDe(f.alvo, f.equipId), falta = [];
-  if (!f.obra) falta.push('a obra'); if (!a) falta.push(f.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!f.tipo) falta.push('o tipo'); if (!f.inicio) falta.push('o início'); if (!String(f.problema).trim()) falta.push('o problema');
+  if (!f.obra) falta.push('a obra'); if (!a) falta.push(f.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!f.tipo) falta.push('o tipo'); if (f.tipo === 'Corretiva' && !f.natureza) falta.push('a natureza'); if (!f.compartimento) falta.push('o compartimento'); if (!f.inicio) falta.push('o início'); if (!String(f.problema).trim()) falta.push('o problema');
   if (falta.length) return toast('Falta informar ' + falta.join(', ') + '.', 'error');
   const pl = (dados.planosPrev || []).find(p => p.id === f.planoId), hi = f.horIni === '' ? '' : +f.horIni;
-  const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _mnProxNum(f.obra);
-  const reg = { id, num, obra: f.obra, alvo: f.alvo, equipId: a.id, tag: a.tag, placa: a.placa, modelo: a.modelo, familia: a.familia, famCod: a.famCod, medidor: a.km ? 'km' : 'h', tipo: f.tipo,
+  const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _mnProxNum(f.obra, f.tipo);
+  const reg = { id, num, obra: f.obra, alvo: f.alvo, equipId: a.id, tag: a.tag, placa: a.placa, modelo: a.modelo, familia: a.familia, famCod: a.famCod, medidor: a.km ? 'km' : 'h', tipo: f.tipo, natureza: f.tipo === 'Corretiva' ? f.natureza : '', ciclo: f.tipo === 'Preventiva' ? (f.ciclo || '') : '', horCiclo: f.tipo === 'Preventiva' ? (f.horCiclo || '') : '', compartimento: f.compartimento,
     planoId: f.tipo === 'Preventiva' ? f.planoId || '' : '', planoNome: f.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!f.parado, inicio: f.inicio, horIni: hi, problema: String(f.problema).trim(),
     executor: f.executor, fornecedor: f.executor === 'terceiro' ? f.fornecedor : '', mecanico: f.mecanico, fotosAbertura: [], status: 'aberta', abertaPor: (usuarioLogado && usuarioLogado.nome) || 'Escritório', abertaEm: new Date().toISOString(), origem: 'painel' };
   await fbSave('ordensServico', id, reg); (dados.ordensServico = dados.ordensServico || []).push(reg);
@@ -18251,7 +18274,7 @@ function _mnFormFim() {
   const f = window._mnF, o = (dados.ordensServico || []).find(x => x.id === f.id), km = o.medidor === 'km', v = k => _e(f[k] ?? '');
   const prods = (dados.produtos || []).filter(p => p.ativo !== false && !/combust/i.test(p.categoria || '') && (!p.obra || !o.obra || p.obra === o.obra)).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   const totP = f.pecas.reduce((s, p) => s + p.qtd * p.preco, 0), hp = o.parado ? _mnH(o.inicio, f.fim) : 0;
-  document.getElementById('mnf-body').innerHTML = `<div class="mn-tx" style="margin:0 0 12px"><b>${_e(o.tipo)} · aberta ${_mnDH(o.inicio)} por ${_e(o.abertaPor || '')}</b><div>${_e(o.problema)}</div></div><div class="form-grid">
+  document.getElementById('mnf-body').innerHTML = `<div class="mn-tx" style="margin:0 0 12px"><b>${_e(_mnTipoTxt(o))} · ${_e(_mnTN(o).comp)} · aberta ${_mnDH(o.inicio)} por ${_e(o.abertaPor || '')}</b><div>${_e(o.problema)}</div></div><div class="form-grid">
     <div class="form-group"><label class="form-label">Término *</label><input class="form-control" type="datetime-local" value="${v('fim')}" onchange="_mnF.fim=this.value;_mnFormFim()"/>${o.parado ? `<div style="font-size:12px;color:var(--text-3);margin-top:4px">Tempo parado: <b>${_mnHtxt(hp)}</b></div>` : ''}</div>
     <div class="form-group"><label class="form-label">${km ? 'Hodômetro (km)' : 'Horímetro (h)'} no término</label><input class="form-control" type="number" step="0.1" value="${v('horFim')}" oninput="_mnF.horFim=this.value" placeholder="${o.horIni !== '' && o.horIni != null ? 'início ' + o.horIni : ''}"/></div>
     <div class="form-group form-full"><label class="form-label">Serviço executado *</label><textarea class="form-control" rows="3" oninput="_mnF.servico=this.value">${v('servico')}</textarea></div></div>
@@ -18303,12 +18326,12 @@ function _mnIndicadores(obra, mes, familia) {
   let HC = 0; if (ini) eqs.forEach(e => { const m = e.dataMob ? new Date(e.dataMob + 'T00:00') : ini; const s = Math.max(ini.getTime(), m.getTime()); if (fimP.getTime() > s) HC += (fimP.getTime() - s) / 36e5; });
   const doPer = os.filter(o => !mes || String(o.inicio).slice(0, 7) <= mes && (!o.fim || String(o.fim).slice(0, 7) >= mes));
   const HMos = doPer.filter(o => o.parado).reduce((s, o) => s + (mes ? corte(o.inicio, o.status === 'aberta' ? null : o.fim) : _mnHorasParado(o)), 0);
-  const fin = doPer.filter(o => o.status === 'finalizada' && (!mes || String(o.fim).slice(0, 7) === mes)), corr = fin.filter(o => o.parado && o.tipo !== 'Preventiva');
+  const fin = doPer.filter(o => o.status === 'finalizada' && (!mes || String(o.fim).slice(0, 7) === mes)), corr = fin.filter(o => o.parado && _mnTN(o).tipo !== 'Preventiva');
   const MTTR = corr.length ? corr.reduce((s, o) => s + (+o.horasParado || 0), 0) / corr.length : null;
-  const nFalhas = doPer.filter(o => o.tipo !== 'Preventiva' && (!mes || String(o.inicio).slice(0, 7) === mes)).length;
+  const nFalhas = doPer.filter(o => _mnTN(o).tipo !== 'Preventiva' && (!mes || String(o.inicio).slice(0, 7) === mes)).length;
   const MTBF = nFalhas && HC ? (HC - HMos) / nFalhas : null;
-  const custo = fin.reduce((s, o) => s + (+o.custoTotal || 0), 0), prev = fin.filter(o => o.tipo === 'Preventiva').length;
-  const porTipo = {}; doPer.filter(o => o.parado).forEach(o => { porTipo[o.tipo] = (porTipo[o.tipo] || 0) + (mes ? corte(o.inicio, o.status === 'aberta' ? null : o.fim) : _mnHorasParado(o)); });
+  const custo = fin.reduce((s, o) => s + (+o.custoTotal || 0), 0), prev = fin.filter(o => _mnTN(o).tipo === 'Preventiva').length;
+  const porTipo = {}; doPer.filter(o => o.parado).forEach(o => { const k = _mnTN(o).comp || 'Compartimento não informado'; porTipo[k] = (porTipo[k] || 0) + (mes ? corte(o.inicio, o.status === 'aberta' ? null : o.fim) : _mnHorasParado(o)); });
   return { HC, HMos, DF: HC ? (HC - HMos) / HC * 100 : null, MTTR, MTBF, custo, n: doPer.length, abertas: doPer.filter(o => o.status === 'aberta').length, prev, nCorr: nFalhas, porTipo, nEq: eqs.length };
 }
 (function () {

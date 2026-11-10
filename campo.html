@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.07</div>
+  <div class="login-versao">ObraKontrol Campo · v3.09</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6664,7 +6664,35 @@ function _mobIdHtml() {
 // conta o tempo parado e avisa as preventivas por horímetro / km / dias.
 // Coleções: ordensServico, planosPrev, produtos.
 // ══════════════════════════════════════════════════════════════
-const MAN_TIPOS = [['Preventiva', '🛠'], ['Corretiva', '⚠️'], ['Troca de peça', '⚙️'], ['Pneu / esteira', '🛞'], ['Elétrica', '⚡'], ['Hidráulica', '💧'], ['Outros', '•']];
+const MAN_TIPOS = [['Preventiva', '🛠'], ['Corretiva', '⚠️']];
+// v3.08: compartimentos (subitem da manutenção)
+const _MIC = d => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+const MAN_COMP = [['Sistema Elétrico', _MIC('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>')],
+  ['Sistema de Motor', _MIC('<rect x="4" y="8" width="13" height="10" rx="1"/><path d="M8 8V5h5v3M17 11h3v4h-3M4 12H2M9 12h3"/>')],
+  ['Sistema Hidráulico', _MIC('<path d="M12 2.7l5.7 5.7a8 8 0 11-11.4 0z"/>')],
+  ['Pneus / Material Rodante', _MIC('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3v5.5M12 15.5V21M3 12h5.5M15.5 12H21"/>')],
+  ['Mecânica Geral', _MIC('<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>')]];
+const MAN_NAT = ['Corretiva normal', 'Falha operacional'];
+function _manCiclos(p) { return String((p && p.ciclos) || '').split(/[;,\s]+/).map(x => parseFloat(x.replace(',', '.'))).filter(x => x > 0).sort((a, b) => a - b); }
+// próxima revisão de um plano: com ciclos (ex.: 250/500/1000/2000 h) segue os múltiplos do horímetro e diz qual ciclo cabe
+function _manCicloCalc(p, ult, base) {
+  const cs = _manCiclos(p), int = _manNum(p.intervalo);
+  if (!cs.length) return base == null ? null : { prox: base + int, ciclo: int };
+  const m = cs[0]; let prox;
+  if (ult && _manNum(ult.horCiclo) != null) prox = _manNum(ult.horCiclo) + m;
+  else if (base == null) return null;
+  else prox = ult ? Math.round(base / m) * m + m : (Math.floor(base / m + 1e-9) + 1) * m;
+  let ciclo = m; cs.forEach(c => { if (Math.abs(prox / c - Math.round(prox / c)) < 1e-9) ciclo = c; });
+  return { prox, ciclo };
+}
+// OS antigas (antes da v3.08) tinham elétrica, pneu etc. como tipo
+function _manTN(o) {
+  if (!o) return { tipo: '', comp: '' }; const t = o.tipo || '';
+  if (t === 'Preventiva' || t === 'Corretiva') return { tipo: t, comp: o.compartimento || '', nat: t === 'Corretiva' ? (o.natureza || 'Corretiva normal') : '' };
+  const m = { 'Pneu / esteira': 'Pneus / Material Rodante', 'Elétrica': 'Sistema Elétrico', 'Hidráulica': 'Sistema Hidráulico' };
+  return { tipo: t ? 'Corretiva' : '', comp: o.compartimento || m[t] || (t ? 'Mecânica Geral' : ''), nat: t ? 'Corretiva normal' : '' };
+}
+const _manSig = t => t === 'Preventiva' ? 'OMP' : 'OMC';
 let man = null;
 function _manPode() {
   const u = usuarioCampo; if (!u) return false; if (u.perfil === 'Admin') return true;
@@ -6712,8 +6740,8 @@ function _manDur(h) { if (h < 1) return Math.round(h * 60) + ' min'; if (h < 48)
 function _manMoeda(v) { return (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function _manNum(v) { const n = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(n) ? null : n; }
 function _manSigla() { const o = (dadosCampo.obras || []).concat(window._mobObras || []).find(x => x.id === _manObra()); return o && (o.sigla || o.cod) ? String(o.sigla || o.cod).toUpperCase().replace(/\s+/g, '') : 'OB'; }
-function _manProxNum() {
-  const pre = 'OS-' + _manSigla() + '-', re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$');
+function _manProxNum(tipo) {
+  const pre = (tipo === 'Preventiva' ? 'OMP-' : 'OMC-') + _manSigla() + '-', re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$');
   let mx = 0; _manOSs().forEach(o => { const m = re.exec(o.num || ''); if (m) mx = Math.max(mx, +m[1]); });
   return pre + String(mx + 1).padStart(4, '0');
 }
@@ -6771,7 +6799,7 @@ function manVoltar() {
 function manAbrir(view) { _manTela(); man = { view }; showScreen('man'); manRender(); }
 function manNova(pre) {
   _manTela();
-  man = { view: 'nova', sujo: false, os: Object.assign({ alvo: 'eq', equipId: '', tipo: '', planoId: '', parado: true, inicio: _manAgoraLocal(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioCampo && usuarioCampo.nome) || '', fotos: [] }, pre || {}) };
+  man = { view: 'nova', sujo: false, os: Object.assign({ alvo: 'eq', equipId: '', tipo: '', natureza: '', ciclo: '', horCiclo: '', compartimento: '', planoId: '', parado: true, inicio: _manAgoraLocal(), horIni: '', problema: '', executor: 'propria', fornecedor: '', mecanico: (usuarioCampo && usuarioCampo.nome) || '', fotos: [] }, pre || {}) };
   showScreen('man'); manRender(); if (man.os.equipId) _manUltLeitura();
 }
 function manFinalizar(id, de) {
@@ -6798,7 +6826,7 @@ function manRender() {
   if (man.view === 'hist') {
     const q = (man.q || '').toLowerCase();
     let l = _manOSs().filter(o => o.status !== 'aberta').sort((a, b) => String(b.fim || b.canceladaEm || '').localeCompare(String(a.fim || a.canceladaEm || '')));
-    if (q) l = l.filter(o => [o.num, o.tag, o.placa, o.tipo, o.problema].some(x => String(x || '').toLowerCase().includes(q)));
+    if (q) l = l.filter(o => [o.num, o.tag, o.placa, o.tipo, o.compartimento, o.problema].some(x => String(x || '').toLowerCase().includes(q)));
     T('Histórico de OS', l.length + ' OS');
     el.innerHTML = `<div style="padding:12px 16px 0"><input class="form-control" placeholder="Buscar TAG, placa, nº da OS…" value="${_manE(man.q || '')}" oninput="man.q=this.value;clearTimeout(window._manQ);window._manQ=setTimeout(manRender,300)"/></div>` +
       (l.length ? l.slice(0, 80).map(o => _manCardOS(o, false)).join('') : '<div class="ap-vazio">Nenhuma OS finalizada ainda</div>');
@@ -6812,7 +6840,7 @@ function manRender() {
       : !l.length ? '<div class="ap-vazio">Nenhum equipamento nos planos desta obra.</div>'
       : '<div class="card" style="padding:0;overflow:hidden;margin:12px 16px">' + l.map(x => {
         const ab = _manOSAberta(x.alvo.id);
-        return `<div class="man-pv ${x.st}" onclick="${ab ? `manFinalizar('${_manE(ab.id)}','prev')` : `manNova({alvo:'${x.tipoAlvo}',equipId:'${_manE(x.alvo.id)}',tipo:'Preventiva',planoId:'${_manE(x.plano.id)}',parado:true})`}">
+        return `<div class="man-pv ${x.st}" onclick="${ab ? `manFinalizar('${_manE(ab.id)}','prev')` : `manNova({alvo:'${x.tipoAlvo}',equipId:'${_manE(x.alvo.id)}',tipo:'Preventiva',planoId:'${_manE(x.plano.id)}',ciclo:'${x.ciclo || ''}',horCiclo:'${x.horCiclo || ''}',compartimento:'${_manE(x.plano.compartimento || '')}',parado:true})`}">
           <div class="man-pv-st"></div><div style="flex:1;min-width:0"><div class="list-name">${_manE(x.alvo.tag)} <span class="man-chip">${_manE(x.plano.nome || 'Preventiva')}</span></div>
           <div class="list-sub">${x.txt}</div>${ab ? `<div class="list-sub" style="color:#1D4ED8;font-weight:700">🔧 ${_manE(ab.num)} aberta — toque para finalizar</div>` : ''}</div>
           <div class="man-pv-r">${x.st === 'venc' ? 'VENCIDA' : x.st === 'prox' ? 'PERTO' : 'OK'}</div></div>`; }).join('') + '</div>' +
@@ -6824,7 +6852,7 @@ function manRender() {
 }
 function _manCardOS(o, aberta) {
   const h = o.parado ? (aberta ? _manHoras(o.inicio) : (+o.horasParado || 0)) : 0;
-  const tipo = (MAN_TIPOS.find(t => t[0] === o.tipo) || ['', '•'])[1] + ' ' + _manE(o.tipo || '—');
+  const tn = _manTN(o), tipo = (tn.tipo ? _manSig(tn.tipo) + ' · ' : '') + _manE(tn.nat || (tn.tipo === 'Preventiva' && o.ciclo ? 'Ciclo ' + _fmtHor(o.ciclo) : tn.tipo) || '—') + (tn.comp ? '</span><span class="man-chip comp">' + _manE(tn.comp) : '');
   return `<div class="man-os ${aberta && o.parado ? 'parado' : ''} ${o.status === 'cancelada' ? 'canc' : ''}">
     <div class="man-os-h"><b>${_manE(o.tag || '—')}</b><span class="man-chip">${tipo}</span><span class="man-num">${_manE(o.num || '')}</span></div>
     <div class="man-os-p">${_manE(o.problema || '')}</div>
@@ -6847,8 +6875,11 @@ function _manRenderNova(el, bar, T) {
       <select class="form-control" onchange="man.os.equipId=this.value;man.os.planoId='';man.os.horIni='';man.sujo=true;manRender();_manUltLeitura()"><option value="">Escolha ou leia o QR Code…</option>${lista.map(([v, t]) => `<option value="${_manE(v)}" ${v === os.equipId ? 'selected' : ''}>${_manE(t)}</option>`).join('')}</select>
       ${alvo ? `<div class="man-alvo"><b>${_manE(alvo.tag)}</b>${alvo.placa && alvo.placa !== alvo.tag ? ' · ' + _manE(alvo.placa) : ''}${alvo.modelo ? ' · ' + _manE(alvo.modelo) : ''}${alvo.familia ? '<br><span>' + _manE(alvo.familia) + '</span>' : ''}</div>` : ''}
       ${ab ? `<div class="man-aviso">Este ${os.alvo === 'vl' ? 'veículo' : 'equipamento'} já tem a <b>${_manE(ab.num)}</b> aberta (${_manE(ab.tipo)}). <button type="button" class="mob-link" onclick="manFinalizar('${_manE(ab.id)}')">Finalizar ela</button></div>` : ''}</div>
-    <div class="form-group"><label class="form-label">Tipo de manutenção *</label><div class="man-tipos">${MAN_TIPOS.map(([t, ic]) => `<button type="button" class="${os.tipo === t ? 'on' : ''}" onclick="man.os.tipo='${t}';man.sujo=true;manRender()"><span>${ic}</span>${t}</button>`).join('')}</div></div>
-    ${os.tipo === 'Preventiva' ? `<div class="form-group"><label class="form-label">Plano de preventiva</label><select class="form-control" onchange="manCampo('planoId',this.value)"><option value="">${planos.length ? 'Escolha o plano…' : 'Nenhum plano para este item'}</option>${planos.map(p => `<option value="${_manE(p.id)}" ${p.id === os.planoId ? 'selected' : ''}>${_manE(p.nome)} — a cada ${_manE(p.intervalo)} ${p.unidade === 'dias' ? 'dias' : p.unidade}</option>`).join('')}</select>
+    <div class="form-group"><label class="form-label">Tipo de manutenção *</label><div class="mob-seg man-tp">${[['Corretiva', 'OMC'], ['Preventiva', 'OMP']].map(([t, sg]) => `<button type="button" class="${os.tipo === t ? 'on' : ''}" onclick="man.os.tipo='${t}';man.sujo=true;manRender()"><b>${sg}</b>&nbsp;· ${t}</button>`).join('')}</div></div>
+    ${os.tipo === 'Corretiva' ? `<div class="form-group"><label class="form-label">Natureza da corretiva *</label><div class="mob-seg">${MAN_NAT.map(n => `<button type="button" class="${os.natureza === n ? 'on' + (n === 'Falha operacional' ? ' nok' : '') : ''}" onclick="man.os.natureza='${n}';man.sujo=true;manRender()">${n}</button>`).join('')}</div>${os.natureza === 'Falha operacional' ? '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">Quebra por uso errado, batida ou descuido na operação.</div>' : ''}</div>` : ''}
+    <div class="form-group"><label class="form-label">Compartimento *</label><div class="man-tipos man-comp">${MAN_COMP.map(([t, ic]) => `<button type="button" class="${os.compartimento === t ? 'on' : ''}" onclick="man.os.compartimento='${t}';man.sujo=true;manRender()"><span>${ic}</span>${t}</button>`).join('')}</div></div>
+    ${os.tipo === 'Preventiva' ? `<div class="form-group"><label class="form-label">Plano de preventiva</label><select class="form-control" onchange="manCampo('planoId',this.value);_manPlanoEscolhido()"><option value="">${planos.length ? 'Escolha o plano…' : 'Nenhum plano para este item'}</option>${planos.map(p => `<option value="${_manE(p.id)}" ${p.id === os.planoId ? 'selected' : ''}>${_manE(p.nome)} — a cada ${_manE(p.intervalo)} ${p.unidade === 'dias' ? 'dias' : p.unidade}</option>`).join('')}</select>
+      ${os.planoId && os.ciclo ? `<div class="man-alvo"><b>Ciclo ${_manE(_fmtHor(os.ciclo))} ${(_manAlvo(os) || {}).km ? 'km' : 'h'}</b>${os.horCiclo ? ' · revisão das ' + _manE(_fmtHor(os.horCiclo)) : ''}</div>` : ''}
       ${os.planoId ? (() => { const p = planos.find(x => x.id === os.planoId); return p && p.itens ? `<div class="man-itens"><b>O que fazer:</b><br>${_manE(p.itens).replace(/\n/g, '<br>')}</div>` : ''; })() : ''}</div>` : ''}
     <div class="form-group"><label class="form-label">Ficou parado? *</label><div class="mob-seg">${[[true, 'Sim, parado'], [false, 'Não, segue trabalhando']].map(([k, t]) => `<button type="button" class="${os.parado === k ? 'on' + (k ? ' nok' : '') : ''}" onclick="man.os.parado=${k};man.sujo=true;manRender()">${t}</button>`).join('')}</div>
       <div style="font-size:11.5px;color:var(--text3);margin-top:4px">${os.parado ? 'O tempo parado conta desde o início até a finalização. Na apropriação ele entra parado (MP/MNP).' : 'Serviço feito sem parar o equipamento (não conta tempo parado).'}</div></div>
@@ -6861,6 +6892,12 @@ function _manRenderNova(el, bar, T) {
     <div class="form-group"><label class="form-label">Fotos (opcional)</label>${_manFotosHtml(os.fotos, 'os')}</div>
   </div></div>`;
   bar.style.display = ''; bar.innerHTML = `<button class="btn btn-outline" onclick="manVoltar()">Cancelar</button><button class="btn" style="background:#1D4ED8;color:#fff;border:none" id="man-salvar" onclick="manSalvarNova()">Abrir OS</button>`;
+}
+function _manPlanoEscolhido() {
+  const o = man.os, p = (dadosCampo.planosPrev || []).find(x => x.id === o.planoId); o.ciclo = ''; o.horCiclo = '';
+  if (p) { if (p.compartimento && !o.compartimento) o.compartimento = p.compartimento;
+    const it = _manPrevLista().find(x => x.plano.id === p.id && x.alvo.id === o.equipId); if (it && it.ciclo) { o.ciclo = it.ciclo; o.horCiclo = it.horCiclo; } }
+  manRender();
 }
 function _manFotosHtml(l, onde) {
   return `<div class="man-fotos">${(l || []).map((f, i) => `<div class="man-ft"><img src="${f.img}"/><button type="button" onclick="manFotoTirar('${onde}',${i})">×</button></div>`).join('')}
@@ -6885,17 +6922,17 @@ async function _manSalvarFotos(l, base) {
 }
 async function manSalvarNova() {
   const os = man.os, alvo = _manAlvo(os), f = [];
-  if (!alvo) f.push(os.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!os.tipo) f.push('o tipo'); if (!os.inicio) f.push('o início'); if (!String(os.problema).trim()) f.push('o problema');
+  if (!alvo) f.push(os.alvo === 'vl' ? 'o veículo' : 'o equipamento'); if (!os.tipo) f.push('o tipo'); if (os.tipo === 'Corretiva' && !os.natureza) f.push('a natureza da corretiva'); if (!os.compartimento) f.push('o compartimento'); if (!os.inicio) f.push('o início'); if (!String(os.problema).trim()) f.push('o problema');
   if (f.length) return toast('Falta informar ' + f.join(', ') + '.', 'err');
   if (_manOSAberta(os.equipId) && !confirm('Já existe OS aberta para ' + alvo.tag + '. Abrir outra mesmo assim?')) return;
   const hi = _manNum(os.horIni); if (hi != null && man._ult != null && hi < man._ult && !confirm('A leitura (' + _fmtHor(hi) + ') é menor que a última conhecida (' + _fmtHor(man._ult) + '). Salvar assim?')) return;
   const b = document.getElementById('man-salvar'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
   try {
-    const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _manProxNum();
+    const id = 'os' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num = _manProxNum(os.tipo);
     const pl = (dadosCampo.planosPrev || []).find(p => p.id === os.planoId);
     const fotos = await _manSalvarFotos(os.fotos, id);
     const reg = { id, num, obra: _manObra(), alvo: os.alvo, equipId: alvo.id, tag: alvo.tag, placa: alvo.placa, modelo: alvo.modelo, familia: alvo.familia, famCod: alvo.famCod || '', medidor: alvo.km ? 'km' : 'h',
-      tipo: os.tipo, planoId: os.tipo === 'Preventiva' ? (os.planoId || '') : '', planoNome: os.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!os.parado, inicio: os.inicio, horIni: hi == null ? '' : hi,
+      tipo: os.tipo, natureza: os.tipo === 'Corretiva' ? os.natureza : '', ciclo: os.tipo === 'Preventiva' ? (_manNum(os.ciclo) ?? '') : '', horCiclo: os.tipo === 'Preventiva' ? (_manNum(os.horCiclo) ?? '') : '', compartimento: os.compartimento, planoId: os.tipo === 'Preventiva' ? (os.planoId || '') : '', planoNome: os.tipo === 'Preventiva' && pl ? pl.nome : '', parado: !!os.parado, inicio: os.inicio, horIni: hi == null ? '' : hi,
       problema: String(os.problema).trim(), executor: os.executor, fornecedor: os.executor === 'terceiro' ? os.fornecedor : '', mecanico: os.mecanico, fotosAbertura: fotos,
       status: 'aberta', abertaPor: usuarioCampo.nome, abertaPorId: usuarioCampo.id, abertaEm: new Date().toISOString() };
     await fbSalvar('ordensServico', reg); _manGuardarOS(reg);
@@ -6910,7 +6947,7 @@ function _manRenderFim(el, bar, T) {
   const prods = (dadosCampo.produtos || []).filter(p => p.ativo !== false && !/combust/i.test(p.categoria || '')).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   const totP = fm.pecas.reduce((s, p) => s + (+p.qtd || 0) * (+p.preco || 0), 0), mo = _manNum(fm.custoMO) || 0;
   const hp = os.parado ? _manHoras(os.inicio, fm.fim) : 0;
-  el.innerHTML = `<div class="man-os ${os.parado ? 'parado' : ''}" style="margin-top:12px"><div class="man-os-h"><b>${_manE(os.tag)}</b><span class="man-chip">${_manE(os.tipo)}</span><span class="man-num">${_manE(os.num)}</span></div>
+  el.innerHTML = `<div class="man-os ${os.parado ? 'parado' : ''}" style="margin-top:12px"><div class="man-os-h"><b>${_manE(os.tag)}</b><span class="man-chip">${_manE(_manTN(os).tipo)}</span>${_manTN(os).comp ? `<span class="man-chip comp">${_manE(_manTN(os).comp)}</span>` : ''}<span class="man-num">${_manE(os.num)}</span></div>
       <div class="man-os-p">${_manE(os.problema)}</div><div class="man-os-m">Aberta ${_manDH(os.inicio)} por ${_manE(os.abertaPor || '')}${os.horIni !== '' && os.horIni != null ? ' · ' + (km ? 'km ' : 'horímetro ') + _fmtHor(os.horIni) : ''}</div></div>
     <div class="card" style="margin:12px 16px"><div class="card-body">
     <div class="form-group"><label class="form-label">Término *</label><input class="form-control" type="datetime-local" value="${_manE(fm.fim)}" oninput="manCampo('fim',this.value,1)"/>
@@ -6981,10 +7018,10 @@ function _manTermo(o) {
   return `<div class="tk" style="width:330px">
     <img class="tk-logo" src="${typeof _TK_LOGO !== 'undefined' ? _TK_LOGO : ''}" alt="ObraKontrol">
     <div class="tk-c" style="font-size:11px;color:#555">${_manE(cliente)}</div>
-    <div class="tk-t">ORDEM DE SERVIÇO</div>
+    <div class="tk-t">ORDEM DE MANUTENÇÃO ${_manTN(o).tipo === 'Preventiva' ? 'PREVENTIVA' : 'CORRETIVA'}</div>
     <div class="tk-big" style="font-size:28px">${_manE(o.tag)}</div>
-    <div class="tk-c" style="font-weight:800">${_manE(o.num)} · ${_manE(o.tipo)}</div><hr>
-    ${L(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', [o.placa && o.placa !== o.tag ? o.placa : '', o.modelo].filter(Boolean).join(' · '))}${L('Família', o.familia)}${L('Plano', o.planoNome)}
+    <div class="tk-c" style="font-weight:800">${_manE(o.num)} · ${_manE(_manTN(o).tipo)}</div><hr>
+    ${L(o.alvo === 'vl' ? 'Veículo' : 'Equipamento', [o.placa && o.placa !== o.tag ? o.placa : '', o.modelo].filter(Boolean).join(' · '))}${L('Família', o.familia)}${L('Compartimento', _manTN(o).comp)}${L('Natureza', _manTN(o).nat)}${L('Plano', o.planoNome)}${o.ciclo ? L('Ciclo', _fmtHor(o.ciclo) + (o.medidor === 'km' ? ' km' : ' h') + (o.horCiclo ? ' · revisão das ' + _fmtHor(o.horCiclo) : '')) : ''}
     ${L('Início', _manDH(o.inicio))}${L(km ? 'Km início' : 'Horímetro início', fmtM(o.horIni))}${L('Parado', o.parado ? 'Sim' : 'Não')}
     ${L('Executor', o.executor === 'terceiro' ? 'Terceiro' + (o.fornecedor ? ' · ' + o.fornecedor : '') : 'Equipe própria')}${L('Responsável', o.mecanico)}
     <hr><div style="color:#555;font-size:11px">PROBLEMA</div><div style="margin-bottom:4px">${_manE(o.problema)}</div>
@@ -7023,7 +7060,7 @@ function _manPrevLista() {
     alvos.forEach(([ta, id]) => {
       const a = _manAlvo({ alvo: ta, equipId: id }); if (!a) return;
       const ult = _manOSs().filter(o => o.status === 'finalizada' && o.equipId === id && o.planoId === p.id).sort((x, y) => String(y.fim).localeCompare(String(x.fim)))[0];
-      let st = 'ok', txt = '';
+      let st = 'ok', txt = '', cc = null;
       if (p.unidade === 'dias') {
         const base = ult ? new Date(ult.fim) : (a.dataBase ? new Date(a.dataBase + 'T08:00') : null);
         if (!base || isNaN(base)) { txt = 'Sem data de referência — abra a primeira preventiva'; st = 'prox'; }
@@ -7033,10 +7070,10 @@ function _manPrevLista() {
         let base = ult ? (_manNum(ult.horFim) ?? _manNum(ult.horIni)) : _manNum(a.base);
         if (base == null && !ult) _manOSs().filter(o => o.equipId === a.id).forEach(o => { const n = _manNum(o.horIni); if (n != null && (base == null || n < base)) base = n; });
         if (atual == null || base == null) { txt = 'Sem leitura de referência — abra a primeira preventiva'; st = 'prox'; }
-        else { const prox = base + int, falta = Math.round((prox - atual) * 10) / 10; st = falta <= 0 ? 'venc' : falta <= av ? 'prox' : 'ok';
-          txt = (falta <= 0 ? 'Passou ' + _fmtHor(-falta) + un : 'Faltam ' + _fmtHor(falta) + un) + ' · atual ' + _fmtHor(atual) + ' · próxima em ' + _fmtHor(prox) + un; }
+        else { cc = _manCicloCalc(p, ult, base); const prox = cc.prox, falta = Math.round((prox - atual) * 10) / 10; st = falta <= 0 ? 'venc' : falta <= av ? 'prox' : 'ok';
+          txt = (_manCiclos(p).length ? 'Ciclo ' + _fmtHor(cc.ciclo) + un + ' · ' : '') + (falta <= 0 ? 'Passou ' + _fmtHor(-falta) + un : 'Faltam ' + _fmtHor(falta) + un) + ' · atual ' + _fmtHor(atual) + ' · próxima em ' + _fmtHor(prox) + un; }
       }
-      out.push({ plano: p, alvo: a, tipoAlvo: ta, st, txt });
+      out.push({ plano: p, alvo: a, tipoAlvo: ta, st, txt, ciclo: cc && cc.ciclo, horCiclo: cc && cc.prox });
     });
   });
   const ord = { venc: 0, prox: 1, ok: 2 }; return out.sort((x, y) => ord[x.st] - ord[y.st] || String(x.alvo.tag).localeCompare(String(y.alvo.tag)));
@@ -7101,7 +7138,7 @@ function _manPrevLista() {
     .man-os-f{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}
     .man-parado{color:#B91C1C;font-weight:600}.man-rodando{color:#15803D;font-weight:600}
     .man-tipos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.man-tipos button{display:flex;align-items:center;gap:8px;min-height:44px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:700;font-size:13.5px;color:var(--text);padding:0 10px;text-align:left}
-    .man-tipos button span{font-size:16px}.man-tipos button.on{border-color:#1D4ED8;background:#EFF6FF;color:#1D4ED8}
+    .man-tipos button span{display:flex;color:#1D4ED8}.man-tp button{font-size:15px}.man-comp{grid-template-columns:1fr}.man-chip.comp{background:#F1F5F9;color:#334155}.man-tipos button.on{border-color:#1D4ED8;background:#EFF6FF;color:#1D4ED8}
     .man-alvo{margin-top:8px;background:#F1F5F9;border-radius:10px;padding:8px 12px;font-size:13px}.man-alvo span{font-size:12px;color:var(--text2)}
     .man-aviso{margin-top:8px;background:#FEF3C7;color:#92400E;border-radius:10px;padding:8px 12px;font-size:12.5px}
     .man-itens{margin-top:8px;background:#F0FDF4;color:#166534;border-radius:10px;padding:8px 12px;font-size:12.5px}
