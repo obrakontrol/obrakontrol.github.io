@@ -611,7 +611,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <div class="lg-ver">ObraKontrol v4.35 · Controle de Mão de Obra e Equipamentos</div>
+    <div class="lg-ver">ObraKontrol v4.36 · Controle de Mão de Obra e Equipamentos</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -14324,6 +14324,7 @@ function dxRenderEQ2() {
   if (!custo) {
     const byTag = {}; eq.forEach(a => { const t = tagDe(a); byTag[t] = byTag[t] || { a: 0, b: 0 }; byTag[t].a += +a.hp || 0; byTag[t].b += +a.hpar || 0; });
     const byMot = {}; pe.filter(p => !/m[ãa]o de obra|^mo$/i.test(p.tipo || '')).forEach(p => { const m = p.motivo || 'Sem motivo'; byMot[m] = (byMot[m] || 0) + (+p.horas || 0); });
+    { const ML = { MNP: 'Manut. não programada (MNP)', MP: 'Manut. programada (MP)', CHU: 'Chuva', AMA: 'Aguardo material', ADM: 'Administrativo' }; eq.forEach(a => { const h = +a.hpar || 0; if (!h) return; const c = String(a.motivo || '').trim().toUpperCase(), m = ML[c] || (c ? c : 'Sem motivo'); byMot[m] = (byMot[m] || 0) + h; }); } // v4.36: paradas da apropriação também
     const stCor = st => st === 'Mobilizado' ? ['rgba(34,197,94,.18)', '#4ADE80'] : /manut/i.test(st || '') ? ['rgba(245,158,11,.18)', '#FBBF24'] : ['rgba(255,255,255,.08)', '#C9C9CF'];
     const nMob = equipsObra.filter(e => e.status === 'Mobilizado').length, nMan = equipsObra.filter(e => /manut/i.test(e.status || '')).length;
     const linhas = serv.map(l => { const [m, fr, sv] = l.k.split('|'), us = Object.keys(l.unid), u = us.length === 1 ? us[0] : _unidServ(sv);
@@ -18067,7 +18068,7 @@ function renderPlanosPrev() {
       <td>${p.obra ? _e(getNomeObra(p.obra)) : 'Todas'}</td><td style="max-width:280px;font-size:12px;color:var(--text-2)">${_e(p.itens || '').replace(/\n/g, ' · ')}</td><td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="ppEditar('${p.id}')">Editar</button></td></tr>`).join('')
     : '<tr><td colspan="7" class="empty-row">Nenhum plano. Ex.: "Revisão 250 h" para a família Escavadeira, ou "Revisão 10.000 km" para os veículos leves.</td></tr>';
   const sit = _ppSituacao(), stTag = { venc: tag('Vencida', 'red'), prox: tag('Perto', 'amber'), ok: tag('Em dia', 'green'), sem: tag('Sem referência', 'gray') };
-  const fmt = (v, un) => v == null ? '—' : un === 'dias' ? v : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' ' + un;
+  const fmt = (v, un) => v == null ? '—' : un === 'dias' ? (+v).toLocaleString('pt-BR') + ' dias' : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' ' + un;
   $('pp-kpis').innerHTML = [['Vencidas', sit.filter(x => x.st === 'venc').length, '#DC2626'], ['Perto de vencer', sit.filter(x => x.st === 'prox').length, '#D97706'], ['Em dia', sit.filter(x => x.st === 'ok').length, '#16A34A'], ['Com OS aberta', sit.filter(x => x.aberta).length, '#2563EB']]
     .map(([l, v, c]) => `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value" style="color:${v ? c : ''}">${v}</div><div class="stat-sub">${sit.length} item(ns) nos planos</div></div>`).join('');
   $('pp-sit').innerHTML = sit.length ? sit.map(x => `<tr><td>${stTag[x.st]}</td><td><b>${_e(x.a.tag)}</b></td><td>${_e(x.p.nome)}${x.ciclo && _ppCiclos(x.p).length ? `<div style="font-size:11.5px;color:var(--text-3)">ciclo ${fmt(x.ciclo, x.un)}</div>` : ''}</td><td class="td-mono">${x.p.unidade === 'dias' ? '—' : fmt(x.atual, x.un)}</td><td class="td-mono">${x.ult ? _mnDH(x.ult.fim).slice(0, 10) + (x.p.unidade !== 'dias' && x.ult.horFim !== '' ? ' · ' + fmt(x.ult.horFim, x.un) : '') : 'mobilização'}</td>
