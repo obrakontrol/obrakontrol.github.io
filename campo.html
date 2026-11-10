@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.10</div>
+  <div class="login-versao">ObraKontrol Campo · v3.11</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6728,11 +6728,27 @@ function _manEqs() { return _daObraCampo(dadosCampo.equipamentos || []).filter(e
 function _manVls() { const ob = _manObra(); return (window._vlFrota || []).filter(v => (!ob || !v.obra || v.obra === ob) && !/devolv|inativ|baixad/i.test(v.status || '')); }
 function _manAlvo(os) {
   if (!os || !os.equipId) return null;
-  if (os.alvo === 'vl') { const v = (window._vlFrota || []).find(x => x.id === os.equipId); return v ? { id: v.id, tag: v.tag || v.placa, placa: v.placa || '', modelo: v.modelo || '', familia: 'Veículo leve', km: true, base: +v.kmMob || null, dataBase: v.dataMob || '' } : null; }
+  if (os.alvo === 'vl') { const v = (window._vlFrota || []).find(x => x.id === os.equipId); return v ? { id: v.id, tag: v.tag || v.placa, placa: v.placa || '', modelo: v.modelo || '', familia: 'Veículo leve', forn: v.locadora || v.fornecedor || '', km: true, base: +v.kmMob || null, dataBase: v.dataMob || '' } : null; }
   const e = (dadosCampo.equipamentos || []).find(x => x.id === os.equipId); if (!e) return null;
   const fam = (dadosCampo.familias || []).find(f => f.cod === (e.codFamilia || e.familia));
-  return { id: e.id, tag: e.tag || e.placa, placa: e.placa || '', modelo: e.modelo || e.codModelo || '', familia: (fam && (fam.desc || fam.cod)) || e.familia || e.codFamilia || '', famCod: (fam && fam.cod) || e.codFamilia || e.familia || '', km: e.medidor === 'hodometro', base: parseFloat(e.horMob), dataBase: e.dataMob || '' };
+  return { id: e.id, tag: e.tag || e.placa, placa: e.placa || '', modelo: e.modelo || e.codModelo || '', familia: (fam && (fam.desc || fam.cod)) || e.familia || e.codFamilia || '', forn: _manFornEq(e), famCod: (fam && fam.cod) || e.codFamilia || e.familia || '', km: e.medidor === 'hodometro', base: parseFloat(e.horMob), dataBase: e.dataMob || '' };
 }
+// v3.11: busca do equipamento digitando (TAG, placa, família, modelo ou fornecedor)
+function _manFornEq(e) { const em = (dadosCampo.empresas || []).find(x => x.cod && x.cod === e.prop); return em ? (em.fantasia || em.nome || em.razao || em.cod) : (e.empresaNome || e.prop || ''); }
+const _manN = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function _manResHtml(q) {
+  const vl = man.os.alvo === 'vl', n = _manN(q).trim();
+  const fams = {}; (dadosCampo.familias || []).forEach(f => fams[f.cod] = f.desc || f.cod);
+  let l = vl ? _manVls().map(v => ({ id: v.id, tag: v.tag || v.placa, sub: [v.placa, v.modelo].filter(Boolean).join(' · '), fam: 'Veículo leve', forn: v.locadora || v.fornecedor || '' }))
+    : _manEqs().map(e => ({ id: e.id, tag: e.tag || e.placa, sub: [e.placa && e.placa !== e.tag ? e.placa : '', e.modelo || e.codModelo].filter(Boolean).join(' · '), fam: fams[e.codFamilia || e.familia] || e.familia || e.codFamilia || '', famCod: e.codFamilia || e.familia || '', forn: _manFornEq(e) }));
+  if (n) { const ps = n.split(/\s+/); l = l.filter(x => { const h = _manN([x.tag, x.sub, x.fam, x.famCod, x.forn].join(' ')); return ps.every(p => h.includes(p)); }); }
+  l.sort((a, b) => { const ta = _manN(a.tag).startsWith(n) ? 0 : 1, tb = _manN(b.tag).startsWith(n) ? 0 : 1; return ta - tb || String(a.tag).localeCompare(String(b.tag)); });
+  const tot = l.length; l = l.slice(0, 30);
+  if (!tot) return `<div class="man-res-v">Nada encontrado${n ? ' para "' + _manE(q) + '"' : ''}.</div>`;
+  return (n ? '' : `<div class="man-res-h">${tot} ${vl ? 'veículo(s)' : 'equipamento(s)'} na obra — digite para filtrar</div>`) + l.map(x => `<div class="man-res-i" onclick="manEscolher('${_manE(x.id)}')"><div class="man-res-t"><b>${_manE(x.tag)}</b>${x.sub ? ' <span>' + _manE(x.sub) + '</span>' : ''}</div><div class="man-res-f">${_manE(x.fam || '—')}${x.forn ? ' · <em>' + _manE(x.forn) + '</em>' : ''}</div></div>`).join('') + (tot > 30 ? `<div class="man-res-h">+${tot - 30} — continue digitando</div>` : '');
+}
+function manBusca(q) { if (!man) return; man.q2 = q; const r = document.getElementById('man-res'); if (r) r.innerHTML = _manResHtml(q); }
+function manEscolher(id) { man.os.equipId = id; man.os.planoId = ''; man.os.horIni = ''; man.q2 = ''; man.sujo = true; manRender(); _manUltLeitura(); }
 function _manAgoraLocal() { const d = new Date(); return _hojeISO(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
 function _manDH(s) { if (!s) return '—'; const [d, h] = String(s).split('T'); return d.split('-').reverse().join('/') + (h ? ' ' + h.slice(0, 5) : ''); }
 function _manHoras(a, b) { const ta = new Date(a).getTime(), tb = b ? new Date(b).getTime() : Date.now(); return isNaN(ta) || isNaN(tb) ? 0 : Math.max(0, (tb - ta) / 36e5); }
@@ -6870,10 +6886,11 @@ function _manRenderNova(el, bar, T) {
   const emps = _daObraCampo(dadosCampo.empresas || []);
   const med = alvo && alvo.km ? 'Hodômetro (km)' : 'Horímetro (h)';
   el.innerHTML = `<div class="card" style="margin:12px 16px"><div class="card-body">
-    <div class="form-group"><label class="form-label">O que vai para manutenção *</label><div class="mob-seg">${[['eq', 'Equipamento'], ['vl', 'Veículo leve']].map(([k, t]) => `<button type="button" class="${os.alvo === k ? 'on' : ''}" onclick="man.os.alvo='${k}';man.os.equipId='';man.os.planoId='';man.os.horIni='';manRender()">${t}</button>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">O que vai para manutenção *</label><div class="mob-seg">${[['eq', 'Equipamento'], ['vl', 'Veículo leve']].map(([k, t]) => `<button type="button" class="${os.alvo === k ? 'on' : ''}" onclick="man.os.alvo='${k}';man.os.equipId='';man.os.planoId='';man.os.horIni='';man.q2='';manRender()">${t}</button>`).join('')}</div></div>
     <div class="form-group"><label class="form-label">${os.alvo === 'vl' ? 'Veículo' : 'Equipamento'} *</label>
-      <select class="form-control" onchange="man.os.equipId=this.value;man.os.planoId='';man.os.horIni='';man.sujo=true;manRender();_manUltLeitura()"><option value="">Escolha ou leia o QR Code…</option>${lista.map(([v, t]) => `<option value="${_manE(v)}" ${v === os.equipId ? 'selected' : ''}>${_manE(t)}</option>`).join('')}</select>
-      ${alvo ? `<div class="man-alvo"><b>${_manE(alvo.tag)}</b>${alvo.placa && alvo.placa !== alvo.tag ? ' · ' + _manE(alvo.placa) : ''}${alvo.modelo ? ' · ' + _manE(alvo.modelo) : ''}${alvo.familia ? '<br><span>' + _manE(alvo.familia) + '</span>' : ''}</div>` : ''}
+      ${alvo ? '' : `<div class="man-busca"><input class="form-control" id="man-q" autocomplete="off" placeholder="Digite TAG, placa, família ou fornecedor…" value="${_manE(man.q2 || '')}" oninput="manBusca(this.value)" onfocus="manBusca(this.value)"/><div id="man-res">${_manResHtml(man.q2 || '')}</div></div>`}
+      ${alvo ? `<div class="man-alvo man-alvo2"><div style="display:flex;align-items:flex-start;gap:8px"><div style="flex:1;min-width:0"><b style="font-size:16px">${_manE(alvo.tag)}</b>${alvo.placa && alvo.placa !== alvo.tag ? ' · ' + _manE(alvo.placa) : ''}${alvo.modelo ? ' · ' + _manE(alvo.modelo) : ''}</div><button type="button" class="mob-link" onclick="man.os.equipId='';man.os.planoId='';man.os.horIni='';man.q2='';manRender();setTimeout(()=>document.getElementById('man-q')?.focus(),50)">Trocar</button></div>
+        <div class="man-ai"><span>Família</span><b>${_manE(alvo.familia || '—')}</b></div><div class="man-ai"><span>${os.alvo === 'vl' ? 'Locadora' : 'Fornecedor'}</span><b>${_manE(alvo.forn || '—')}</b></div></div>` : ''}
       ${ab ? `<div class="man-aviso">Este ${os.alvo === 'vl' ? 'veículo' : 'equipamento'} já tem a <b>${_manE(ab.num)}</b> aberta (${_manE(ab.tipo)}). <button type="button" class="mob-link" onclick="manFinalizar('${_manE(ab.id)}')">Finalizar ela</button></div>` : ''}</div>
     <div class="form-group"><label class="form-label">Tipo de manutenção *</label><div class="mob-seg man-tp">${[['Corretiva', 'OMC'], ['Preventiva', 'OMP']].map(([t, sg]) => `<button type="button" class="${os.tipo === t ? 'on' : ''}" onclick="man.os.tipo='${t}';man.sujo=true;manRender()"><b>${sg}</b>&nbsp;· ${t}</button>`).join('')}</div></div>
     ${os.tipo === 'Corretiva' ? `<div class="form-group"><label class="form-label">Natureza da corretiva *</label><div class="mob-seg">${MAN_NAT.map(n => `<button type="button" class="${os.natureza === n ? 'on' + (n === 'Falha operacional' ? ' nok' : '') : ''}" onclick="man.os.natureza='${n}';man.sujo=true;manRender()">${n}</button>`).join('')}</div>${os.natureza === 'Falha operacional' ? '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">Quebra por uso errado, batida ou descuido na operação.</div>' : ''}</div>` : ''}
@@ -6886,7 +6903,7 @@ function _manRenderNova(el, bar, T) {
     <div class="form-group"><label class="form-label">Início *</label><input class="form-control" type="datetime-local" value="${_manE(os.inicio)}" oninput="manCampo('inicio',this.value)"/></div>
     <div class="form-group"><label class="form-label">${med} no início + foto *</label><div class="man-hor"><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${_manE(os.horIni)}" oninput="manCampo('horIni',this.value)" placeholder="${man._ult != null ? 'Última leitura: ' + _fmtHor(man._ult) : 'Ex.: 1245,5'}"/>${_manHorFotoBtn('ini', os.fotoHor)}</div></div>
     <div class="form-group"><label class="form-label">Sintoma *</label><textarea class="form-control" rows="3" oninput="manCampo('problema',this.value)" placeholder="O que foi percebido. Ex.: vazamento de óleo no braço, barulho no motor, não liga">${_manE(os.problema)}</textarea></div>
-    <div class="form-group"><label class="form-label">Quem executa</label><div class="mob-seg">${[['propria', 'Equipe própria'], ['terceiro', 'Terceiro / oficina']].map(([k, t]) => `<button type="button" class="${os.executor === k ? 'on' : ''}" onclick="man.os.executor='${k}';man.sujo=true;manRender()">${t}</button>`).join('')}</div></div>
+    <div class="form-group"><label class="form-label">Quem executa</label><div class="mob-seg">${[['propria', 'Equipe própria'], ['terceiro', 'Terceiro / oficina']].map(([k, t]) => `<button type="button" class="${os.executor === k ? 'on' : ''}" onclick="man.os.executor='${k}';if('${k}'==='terceiro'&&!man.os.fornecedor){const a=_manAlvo(man.os);if(a&&a.forn&&!/pr[óo]pri|tenco/i.test(a.forn))man.os.fornecedor=a.forn}man.sujo=true;manRender()">${t}</button>`).join('')}</div></div>
     ${os.executor === 'terceiro' ? `<div class="form-group"><label class="form-label">Fornecedor</label><input class="form-control" list="man-forn" value="${_manE(os.fornecedor)}" oninput="manCampo('fornecedor',this.value)" placeholder="Oficina / locadora"/><datalist id="man-forn">${emps.map(e => `<option value="${_manE(e.fantasia || e.nome || e.razao || e.cod)}">`).join('')}</datalist></div>` : ''}
     <div class="form-group"><label class="form-label">Mecânico / responsável</label><input class="form-control" value="${_manE(os.mecanico)}" oninput="manCampo('mecanico',this.value)"/></div>
     <div class="form-group"><label class="form-label">Fotos (opcional)</label>${_manFotosHtml(os.fotos, 'os')}</div>
@@ -7155,7 +7172,10 @@ function _manPrevLista() {
     .man-os-f{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}
     .man-parado{color:#B91C1C;font-weight:600}.man-rodando{color:#15803D;font-weight:600}
     .man-tipos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.man-tipos button{display:flex;align-items:center;gap:8px;min-height:44px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:700;font-size:13.5px;color:var(--text);padding:0 10px;text-align:left}
-    .man-tipos button span{display:flex;color:#1D4ED8}.man-tp button{font-size:15px}.man-comp{grid-template-columns:1fr}.man-hor{display:flex;gap:8px;align-items:stretch}.man-hor .form-control{flex:1;min-width:0}
+    .man-tipos button span{display:flex;color:#1D4ED8}.man-tp button{font-size:15px}.man-comp{grid-template-columns:1fr}
+    .man-busca #man-res{margin-top:6px;max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff}.man-res-i{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer}.man-res-i:last-child{border-bottom:0}.man-res-i:active{background:#EFF6FF}
+    .man-res-t{font-size:14px}.man-res-t span{font-size:12px;color:var(--text2)}.man-res-f{font-size:12px;color:#1D4ED8;margin-top:2px}.man-res-f em{font-style:normal;color:var(--text2)}.man-res-h,.man-res-v{padding:8px 12px;font-size:11.5px;color:var(--text3)}
+    .man-alvo2{border:1.5px solid #1D4ED8;background:#EFF6FF}.man-ai{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;margin-top:6px}.man-ai span{color:var(--text2)}.man-ai b{text-align:right}.man-hor{display:flex;gap:8px;align-items:stretch}.man-hor .form-control{flex:1;min-width:0}
     .man-hor-add{flex:0 0 74px;border-radius:10px;border:1.5px dashed #DC2626;color:#B91C1C;background:#FEF2F2;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:18px;cursor:pointer;min-height:48px}.man-hor-add span{font-size:11px;font-weight:700}
     .man-hor-ft{flex:0 0 74px;position:relative}.man-hor-ft img{width:74px;height:100%;min-height:48px;object-fit:cover;border-radius:10px;border:2px solid #16A34A;display:block}.man-hor-ft button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#111;color:#fff;font-size:14px;line-height:1}.man-chip.comp{background:#F1F5F9;color:#334155}.man-tipos button.on{border-color:#1D4ED8;background:#EFF6FF;color:#1D4ED8}
     .man-alvo{margin-top:8px;background:#F1F5F9;border-radius:10px;padding:8px 12px;font-size:13px}.man-alvo span{font-size:12px;color:var(--text2)}
