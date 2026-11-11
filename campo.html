@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.16</div>
+  <div class="login-versao">ObraKontrol Campo · v3.17</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7264,6 +7264,89 @@ function _manPrevLista() {
     .man-pv-r{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:#15803D}.man-pv.prox .man-pv-r{color:#B45309}.man-pv.venc .man-pv-r{color:#DC2626}
     .man-ap-tag{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;background:#DBEAFE;color:#1D4ED8;vertical-align:middle}`;
   document.head.appendChild(css);
+})();
+
+// v3.17: PARTES DIÁRIAS NO "MEU RESUMO" — as que a pessoa lançou nos últimos 7 dias; toca e abre a folha (A4, imprime / salva PDF)
+(function () {
+  const K = 'campo_pd_meus', DIAS = 7, lim = () => _hojeISO(new Date(Date.now() - DIAS * 864e5));
+  const ler = () => { try { return JSON.parse(localStorage.getItem(K) || '[]'); } catch (e) { return []; } };
+  const gravar = l => { l = l.filter(x => x.data >= lim()).slice(-40); try { localStorage.setItem(K, JSON.stringify(l)); } catch (e) {} };
+  const oF = fbSalvar;
+  fbSalvar = async function (col, item) { const r = await oF.apply(this, arguments);
+    try { if (col === 'partesDiarias' && item && item.id) { const l = ler().filter(x => x.id !== item.id); l.push(item); gravar(l); } } catch (e) {}
+    return r; };
+  async function lista() {
+    const m = new Map(ler().filter(x => x.data >= lim()).map(x => [x.id, x]));
+    if (db && _fbReady && isOnline && usuarioCampo && usuarioCampo.nome) {
+      try { const sn = await db.collection('partesDiarias').where('lancadoPor', '==', usuarioCampo.nome).get();
+        sn.forEach(d => { const y = d.data(); if (y.data >= lim()) m.set(y.id || d.id, { ...y, id: y.id || d.id }); }); } catch (e) {}
+    }
+    return [...m.values()].sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(a.tag).localeCompare(String(b.tag)));
+  }
+  window._pdMeus = [];
+  const oR = abrirMeuResumo;
+  abrirMeuResumo = function () {
+    const r = oR.apply(this, arguments);
+    lista().then(l => { window._pdMeus = l; if (!l.length) return; const body = document.getElementById('meu-resumo-body'); if (!body || body.querySelector('.mr-pd')) return;
+      body.querySelector('.ap-vazio')?.remove();
+      const n = v => v === '' || v == null ? '—' : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+      const h = '<div class="mr-sec mr-pd">Partes diárias (últimos ' + DIAS + ' dias)</div>' + l.map(x => `<div class="mr-item" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px" onclick="pdDocCampo('${_esc(x.id)}')">
+        <div><b>${_esc(x.tag || x.placa || '')}</b> · ${String(x.data).split('-').reverse().slice(0, 2).join('/')}<br><span style="font-size:12px;color:var(--text3)">${_esc(x.operador || '')} · ${_esc(x.horaIni || '')}–${_esc(x.horaFim || '…')} · ${x.trabalhado === '' || x.trabalhado == null ? 'sem leitura final' : n(x.trabalhado) + (x.medidor === 'hodometro' ? ' km' : ' h')}</span></div>
+        <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;background:${x.situacao === 'fechada' ? '#DCFCE7;color:#166534' : '#FEF3C7;color:#92400E'}">${x.situacao === 'fechada' ? 'Fechada' : 'Aberta'}</span></div>`).join('');
+      const nota = [...body.children].pop();
+      if (nota && /neste celular/.test(nota.textContent)) nota.insertAdjacentHTML('beforebegin', h); else body.insertAdjacentHTML('beforeend', h);
+    });
+    return r;
+  };
+  const COD = { C: ['Mangueira estourada', 'Pneu furado', 'Problema ar-condicionado', 'Troca material FPS', 'Serviço de solda', 'Defeito elétrico', 'Aguardando peças', 'Outro'], P: ['Revisão', 'Lubrificação', 'Abastecimento', 'Lavagem de equipamento', 'Chuva', 'Aguardando frente', 'Outro'] };
+  window.pdDocCampo = async function (id) {
+    const x = (window._pdMeus || []).find(y => y.id === id) || ler().find(y => y.id === id); if (!x) { toast('Parte diária não encontrada.', 'err'); return; }
+    const w = window.open('', '_blank'); if (!w) { toast('Libere as janelas pop-up para abrir a folha.', 'err'); return; }
+    w.document.write('<p style="font-family:Arial;padding:20px">Abrindo a parte diária…</p>');
+    let foto = ''; if (x.fotoId && db && isOnline) { try { const d = await db.collection('fotos').doc(x.fotoId).get(); if (d.exists) foto = d.data().img || ''; } catch (e) {} }
+    const E = v => _esc(v == null ? '' : String(v)), D = dadosCampo || {}, e = (D.equipamentos || []).find(q => q.id === x.equipId) || {};
+    const md = (D.modelos || []).find(m => m.cod === e.codModelo) || {}, fm = (D.familias || []).find(f => f.cod === e.familia) || {}, forn = (D.empresas || []).find(z => z.cod === x.prop) || {};
+    const fr = (D.frentes || []).find(f => f.cod === x.frente), km = x.medidor === 'hodometro', un = km ? ' km' : ' h';
+    const num = v => v === '' || v == null || isNaN(+v) ? '—' : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+    const hm = h => { if (!h && h !== 0) return '—'; const m = Math.round(+h * 60); return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); };
+    const dif = (a, b) => { if (!a || !b) return ''; const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number); let m = h2 * 60 + m2 - h1 * 60 - m1; if (m < 0) m += 1440; return m / 60; };
+    const par = x.paradas || [], tp = par.reduce((t, y) => t + (+y.horas || 0), 0), jor = dif(x.horaIni, x.horaFim), us = new Set(par.map(y => y.grupo + y.cod));
+    const C = (k, v, big) => `<div class="c${big ? ' big' : ''}"><span>${k}</span>${v === '' || v == null ? '—' : v}</div>`, leg = g => COD[g].map((nm, k) => `<div class="lg${us.has(g + (k + 1)) ? ' on' : ''}"><b>${k + 1}</b>${E(nm)}</div>`).join('');
+    const dt = String(x.data).split('-').reverse().join('/'), DS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'], d = new Date(x.data + 'T12:00');
+    const nPD = 'PD-' + String(x.tag || x.placa || '').replace(/\s/g, '') + '-' + String(x.data).replace(/-/g, '');
+    const ob = (window._mobObras || D.obras || []).find(o => o.id === x.obra) || {};
+    w.document.open(); w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Parte diária-${E(x.tag || x.placa)}-${dt.replace(/\//g, '-')}</title><style>
+      @page{size:A4;margin:10mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11.5px;background:#e9e9ec}
+      .pg{background:#fff;max-width:190mm;margin:10px auto;padding:14px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+      .hd{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:2px solid #111;padding-bottom:8px}.hd img{height:36px;max-width:46%;object-fit:contain}.hd b{font-size:15px;display:block;text-align:right}.hd div{text-align:right;font-size:10.5px;color:#444}
+      .dia{display:flex;justify-content:space-between;margin:9px 0 2px;font-size:13px}.dia span{display:block;font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.06em}.dia b{font-size:16px}.dia>div:last-child{text-align:right}.ok{color:#15803D}.ab{color:#B45309}
+      h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;background:#111;color:#fff;padding:4px 8px;margin:10px 0 0;border-radius:3px 3px 0 0}
+      .g{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #bbb;border-top:0}.c{padding:5px 8px;border-right:1px solid #ddd;border-bottom:1px solid #ddd;min-height:34px;word-break:break-word}.c span{display:block;font-size:8.8px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}.c.big{font-size:14px}.s2{grid-column:span 2}.s3{grid-column:span 3}
+      @media (max-width:560px){.g{grid-template-columns:repeat(2,1fr)}.s3{grid-column:span 2}}
+      table{width:100%;border-collapse:collapse;border:1px solid #bbb;border-top:0}th{font-size:9px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #999;padding:4px 6px;background:#f2f2f2}td{border-bottom:1px solid #ddd;padding:4px 6px;vertical-align:top}.n{text-align:right}
+      .leg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}@media (max-width:560px){.leg{grid-template-columns:1fr}}.lt{font-size:9px;font-weight:700;text-transform:uppercase;color:#444;margin-bottom:3px}.lg{display:inline-block;font-size:9.5px;color:#666;margin:0 8px 2px 0}.lg b{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border:1px solid #aaa;border-radius:3px;margin-right:3px;font-size:9px}.lg.on{color:#111;font-weight:700}.lg.on b{background:#111;color:#fff;border-color:#111}
+      .bx{border:1px solid #bbb;border-top:0;padding:7px 8px;min-height:42px;white-space:pre-wrap}.ft{display:flex;gap:10px;align-items:center;margin-top:8px;font-size:10.5px;color:#444}.ft img{width:150px;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #ccc}
+      .ass{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:40px}@media (max-width:560px){.ass{grid-template-columns:1fr 1fr;row-gap:36px}}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px;font-size:10px}.rd{margin-top:10px;font-size:9px;color:#888;text-align:right}
+      .np{position:sticky;top:0;z-index:2;background:#111;padding:8px;display:flex;gap:8px;justify-content:center}.np button{background:#16A34A;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;font-size:14px}.np button.v{background:#444}
+      @media print{.np{display:none}body{background:#fff}.pg{margin:0;box-shadow:none;max-width:none;padding:0}}</style></head><body>
+      <div class="np"><button class="v" onclick="window.close()">Voltar</button><button onclick="window.print()">Salvar / imprimir PDF</button></div>
+      <div class="pg"><div class="hd"><img src="${new URL('marca/obrakontrol_logo_claro.png?v=3', location.href).href}" alt="ObraKontrol" onerror="this.style.display='none'"><div><b>PARTE DIÁRIA DE EQUIPAMENTO</b>${E(nPD)}${ob.nome ? ' · ' + E(ob.nome) : ''}</div></div>
+      <div class="dia"><div><span>Dia</span><b>${dt}</b> ${isNaN(d) ? '' : DS[d.getDay()]}</div><div><span>Situação</span><b class="${x.situacao === 'fechada' ? 'ok' : 'ab'}">${x.situacao === 'fechada' ? 'Fechada' : 'Aberta'}</b></div></div>
+      <h3>Equipamento</h3><div class="g">${C('TAG', '<b>' + E(x.tag) + '</b>', 1)}${C('Placa / série', E([x.placa || e.placa, e.serie].filter(Boolean).join(' · ')))}${C('Família', E(fm.desc || e.familia || ''))}${C('Modelo', E(md.nome || e.codModelo || ''))}
+        <div class="c s2"><span>Fornecedor / proprietário</span>${E(forn.nome || e.prop || x.prop || '')}${forn.cnpj ? ' · CNPJ ' + E(forn.cnpj) : ''}</div>${C('Medidor', km ? 'Hodômetro (km)' : 'Horímetro (h)')}${C('Cobrança', E(e.cobranca || ''))}</div>
+      <h3>Jornada</h3><div class="g"><div class="c s2"><span>Operador / motorista</span>${E(x.operador)}${x.operadorMat ? ' · Mat. ' + E(x.operadorMat) : ''}</div>${C('Horário inicial', '<b>' + E(x.horaIni) + '</b>', 1)}${C('Horário final', '<b>' + E(x.horaFim) + '</b>', 1)}
+        <div class="c s3"><span>Local / frente de serviço</span>${E(x.frente)}${fr && (fr.desc || fr.nome) ? ' · ' + E(fr.desc || fr.nome) : ''}</div>${C('Jornada', jor === '' ? '—' : hm(jor))}</div>
+      <h3>${km ? 'Hodômetro' : 'Horímetro'}</h3><div class="g">${C('Leitura inicial', num(x.horIni) + (x.horIni !== '' && x.horIni != null ? un : ''), 1)}${C('Leitura final', num(x.horFim) + (x.horFim !== '' && x.horFim != null ? un : ''), 1)}${C(km ? 'Rodado' : 'Trabalhado', '<b>' + num(x.trabalhado) + (x.trabalhado !== '' && x.trabalhado != null ? un : '') + '</b>', 1)}${C('Horas paradas', '<b>' + (tp ? hm(tp) : '0h00') + '</b>', 1)}</div>
+      <h3>Paradas e ocorrências</h3><table><thead><tr><th>Cód.</th><th>Descrição</th><th>Início</th><th>Término</th><th class="n">Horas</th><th>Obs.</th></tr></thead><tbody>
+        ${par.length ? par.map(y => `<tr><td><b>${E(y.grupo)}${E(y.cod)}</b></td><td>${E(y.nome)}</td><td>${E(y.ini)}</td><td>${E(y.fim)}</td><td class="n">${y.horas ? hm(y.horas) : '—'}</td><td>${E(y.obs)}</td></tr>`).join('') + `<tr><td colspan="4"><b>Total parado</b></td><td class="n"><b>${hm(tp)}</b></td><td></td></tr>`
+          : '<tr><td colspan="6" style="color:#777;text-align:center">Sem paradas no dia</td></tr>'}</tbody></table>
+      <div class="leg"><div><div class="lt">C · Manutenção corretiva</div>${leg('C')}</div><div><div class="lt">P · Manutenção programada e outras paradas</div>${leg('P')}</div></div>
+      <h3>Observação</h3><div class="bx">${E(x.obs)}</div>
+      ${foto ? `<div class="ft"><img src="${foto}"><div><b>Foto do ${km ? 'hodômetro' : 'horímetro'}</b><br>tirada no fechamento da parte</div></div>` : ''}
+      <div class="ass"><div>${E(x.operador)}<br>Operador / motorista</div><div>${E(x.lancadoPor)}<br>Apontador</div><div><br>Encarregado / fiscal</div><div><br>Fornecedor</div></div>
+      <div class="rd">Lançada no app por ${E(x.lancadoPor)}${x.lancadoEm ? ' em ' + new Date(x.lancadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''} · ObraKontrol</div></div></body></html>`);
+    w.document.close();
+  };
 })();
 </script>
 </body>
