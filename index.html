@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.42 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.43 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18844,6 +18844,86 @@ async function kkApagar(silencioso) {
   window.pageInit = function (id) { const r = pi ? pi.apply(this, arguments) : undefined;
     try { if (id === 'obras' && _exDemo()) { const g = document.querySelector('#page-obras .page-header .btn-group'); if (g && !g.querySelector('.kk-b')) g.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary btn-sm kk-b" onclick="kkPreparar()" title="Só no DEMO: enche a obra escolhida no topo com dados de 6 semanas e cria logins para os participantes">🎬 Preparar kickoff</button><button class="btn btn-outline btn-sm kk-b" onclick="kkApagar()">🗑 Apagar kickoff</button>'); } } catch (e) {}
     return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.43: DOCUMENTO DA PARTE DIÁRIA — folha A4 no modelo da parte diária física (uma por página; imprime 1 ou o filtro todo)
+// ═══════════════════════════════════════════════════════════════
+const _PDD_COD = { C: ['Mangueira estourada', 'Pneu furado', 'Problema ar-condicionado', 'Troca material FPS', 'Serviço de solda', 'Defeito elétrico', 'Aguardando peças', 'Outro'],
+  P: ['Revisão', 'Lubrificação', 'Abastecimento', 'Lavagem de equipamento', 'Chuva', 'Aguardando frente', 'Outro'] };
+async function pdDocumento(ids) {
+  ids = [].concat(ids || []); const l = ids.map(id => (dados.partesDiarias || []).find(x => x.id === id)).filter(Boolean);
+  if (!l.length) { toast('Nenhuma parte diária para imprimir.', 'error'); return; }
+  const w = window.open('', '_blank'); if (!w) return toast('Libere as janelas (pop-up) para imprimir.', 'error');
+  w.document.write('<p style="font-family:Arial;padding:20px">Montando ' + (l.length > 1 ? l.length + ' partes diárias' : 'a parte diária') + '…</p>');
+  const fotos = {}; await Promise.all(l.filter(x => x.fotoId).map(async x => { try { const d = await db.collection('fotos').doc(x.fotoId).get(); if (d.exists) fotos[x.fotoId] = d.data().img; } catch (e) {} }));
+  const num = v => v === '' || v == null || isNaN(+v) ? '—' : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  const hm = h => { if (!h && h !== 0) return '—'; const m = Math.round(+h * 60); return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); };
+  const dif = (a, b) => { if (!a || !b) return ''; const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number); let m = h2 * 60 + m2 - h1 * 60 - m1; if (m < 0) m += 1440; return m / 60; };
+  const DS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  const C = (k, v, big) => `<div class="c${big ? ' big' : ''}"><span>${k}</span>${v === '' || v == null ? '—' : v}</div>`;
+  const pagina = x => {
+    const e = (dados.equipamentos || []).find(q => q.id === x.equipId) || {}, md = (dados.modelos || []).find(m => m.cod === e.codModelo) || {}, fm = (dados.familias || []).find(f => f.cod === e.familia) || {};
+    const forn = (dados.empresas || []).find(z => z.cod === x.prop && (!z.obra || z.obra === x.obra)) || (dados.empresas || []).find(z => z.cod === x.prop) || {};
+    const fr = (dados.frentes || []).find(f => f.cod === x.frente && (!f.obra || f.obra === x.obra)), km = x.medidor === 'hodometro', un = km ? ' km' : ' h';
+    const par = x.paradas || [], tp = par.reduce((t, y) => t + (+y.horas || 0), 0), jor = dif(x.horaIni, x.horaFim), usados = new Set(par.map(y => y.grupo + y.cod));
+    const leg = g => _PDD_COD[g].map((n, k) => `<div class="lg${usados.has(g + (k + 1)) ? ' on' : ''}"><b>${k + 1}</b>${_e(n)}</div>`).join('');
+    const d = new Date(String(x.data) + 'T12:00'), nPD = 'PD-' + (x.tag || x.placa || '').replace(/\s/g, '') + '-' + String(x.data).replace(/-/g, '');
+    return `<section class="pg">
+      <div class="hd">${_pddLogo(x.obra)}<div><b>PARTE DIÁRIA DE EQUIPAMENTO</b><div>${_e(nPD)} · ${_e(getNomeObra(x.obra) || '')}</div></div></div>
+      <div class="dia"><div><span>Dia</span><b>${_abFmtD(x.data)}</b> ${isNaN(d) ? '' : DS[d.getDay()]}</div><div><span>Situação</span><b class="${x.situacao === 'fechada' ? 'ok' : 'ab'}">${x.situacao === 'fechada' ? 'Fechada' : 'Aberta'}</b></div></div>
+      <h3>Equipamento</h3><div class="g g4">${C('TAG', '<b>' + _e(x.tag || '') + '</b>', 1)}${C('Placa / série', _e([x.placa || e.placa, e.serie].filter(Boolean).join(' · ')))}${C('Família', _e(fm.desc || e.familia || ''))}${C('Modelo', _e(md.nome || e.codModelo || ''))}
+        <div class="c s2"><span>Fornecedor / proprietário</span>${_e(forn.nome || forn.razao || x.prop || '')}${forn.cnpj ? ' · CNPJ ' + _e(forn.cnpj) : ''}</div>${C('Medidor', km ? 'Hodômetro (km)' : 'Horímetro (h)')}${C('Cobrança', _e(e.cobranca || ''))}</div>
+      <h3>Jornada</h3><div class="g g4"><div class="c s2"><span>Operador / motorista</span>${_e(x.operador || '')}${x.operadorMat ? ' · Mat. ' + _e(x.operadorMat) : ''}</div>${C('Horário inicial', '<b>' + _e(x.horaIni || '') + '</b>', 1)}${C('Horário final', '<b>' + _e(x.horaFim || '') + '</b>', 1)}
+        <div class="c s3"><span>Local / frente de serviço</span>${_e(x.frente || '')}${fr && (fr.desc || fr.nome) ? ' · ' + _e(fr.desc || fr.nome) : ''}</div>${C('Jornada', jor === '' ? '—' : hm(jor))}</div>
+      <h3>${km ? 'Hodômetro' : 'Horímetro'}</h3><div class="g g4">${C('Leitura inicial', num(x.horIni) + (x.horIni !== '' ? un : ''), 1)}${C('Leitura final', num(x.horFim) + (x.horFim !== '' && x.horFim != null ? un : ''), 1)}${C(km ? 'Rodado' : 'Trabalhado', '<b>' + num(x.trabalhado) + (x.trabalhado !== '' ? un : '') + '</b>', 1)}${C('Horas paradas', '<b>' + (tp ? hm(tp) : '0h00') + '</b>', 1)}</div>
+      <h3>Paradas e ocorrências</h3><table><thead><tr><th>Tipo</th><th>Cód.</th><th>Descrição</th><th>Início</th><th>Término</th><th class="n">Horas</th><th>Observação</th></tr></thead><tbody>
+        ${par.length ? par.map(y => `<tr><td>${y.grupo === 'C' ? 'Manut. corretiva' : 'Programada / outras'}</td><td><b>${_e(y.grupo)}${_e(y.cod)}</b></td><td>${_e(y.nome || '')}</td><td>${_e(y.ini || '')}</td><td>${_e(y.fim || '')}</td><td class="n">${y.horas ? hm(y.horas) : '—'}</td><td>${_e(y.obs || '')}</td></tr>`).join('')
+          : '<tr><td colspan="7" style="color:#777;text-align:center">Sem paradas no dia</td></tr>'}
+        ${par.length ? `<tr><td colspan="5"><b>Total parado</b></td><td class="n"><b>${hm(tp)}</b></td><td></td></tr>` : ''}</tbody></table>
+      <div class="leg"><div><div class="lt">C · Manutenção corretiva</div>${leg('C')}</div><div><div class="lt">P · Manutenção programada e outras paradas</div>${leg('P')}</div></div>
+      <h3>Observação</h3><div class="bx">${_e(x.obs || '')}</div>
+      ${x.fotoId && fotos[x.fotoId] ? `<div class="ft"><img src="${fotos[x.fotoId]}"><div><b>Foto do ${km ? 'hodômetro' : 'horímetro'}</b><br>tirada no app no fechamento da parte</div></div>` : ''}
+      <div class="ass"><div>${_e(x.operador || '')}<br>Operador / motorista</div><div>${_e(x.lancadoPor || '')}<br>Apontador</div><div><br>Encarregado / fiscal da obra</div><div><br>Fornecedor</div></div>
+      <div class="rd">Lançada no app de campo por ${_e(x.lancadoPor || '')}${x.lancadoEm ? ' em ' + new Date(x.lancadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''} · ObraKontrol</div></section>`;
+  };
+  const t = l.length > 1 ? 'Partes diárias (' + l.length + ')' : 'Parte diária-' + (l[0].tag || l[0].placa) + '-' + _abFmtD(l[0].data).replace(/\//g, '-');
+  w.document.open(); w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(t)}</title><style>
+    @page{size:A4;margin:10mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11.5px;background:#e9e9ec}
+    .pg{background:#fff;width:190mm;min-height:277mm;margin:12px auto;padding:10mm;box-shadow:0 2px 12px rgba(0,0,0,.15);page-break-after:always;display:flex;flex-direction:column}.pg:last-child{page-break-after:auto}
+    .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:7px}.hd img{height:42px;max-width:190px;object-fit:contain}.hd b{font-size:17px;display:block;text-align:right}.hd>div:last-child{text-align:right;color:#444}
+    .dia{display:flex;justify-content:space-between;margin:9px 0 2px;font-size:13px}.dia span{display:block;font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.06em}.dia b{font-size:16px}.dia div:last-child{text-align:right}.ok{color:#15803D}.ab{color:#B45309}
+    h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;background:#111;color:#fff;padding:4px 8px;margin:10px 0 0;border-radius:3px 3px 0 0}
+    .g{display:grid;border:1px solid #bbb;border-top:0}.g4{grid-template-columns:repeat(4,1fr)}.c{padding:5px 8px;border-right:1px solid #ddd;border-bottom:1px solid #ddd;min-height:34px}.c span{display:block;font-size:8.8px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}.c.big{font-size:14px}.s2{grid-column:span 2}.s3{grid-column:span 3}
+    table{width:100%;border-collapse:collapse;border:1px solid #bbb;border-top:0}th{font-size:9px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #999;padding:4px 6px;background:#f2f2f2}td{border-bottom:1px solid #ddd;padding:4px 6px;vertical-align:top}.n{text-align:right}
+    .leg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}.lt{font-size:9px;font-weight:700;text-transform:uppercase;color:#444;margin-bottom:3px}.lg{display:inline-block;font-size:9.5px;color:#666;margin:0 8px 2px 0}.lg b{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border:1px solid #aaa;border-radius:3px;margin-right:3px;font-size:9px}.lg.on{color:#111;font-weight:700}.lg.on b{background:#111;color:#fff;border-color:#111}
+    .bx{border:1px solid #bbb;border-top:0;padding:7px 8px;min-height:42px;white-space:pre-wrap}
+    .ft{display:flex;gap:10px;align-items:center;margin-top:8px;font-size:10.5px;color:#444}.ft img{width:150px;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #ccc}
+    .ass{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:auto;padding-top:38px}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px;font-size:10px}
+    .rd{margin-top:10px;font-size:9px;color:#888;text-align:right}
+    .np{position:sticky;top:0;z-index:2;background:#111;color:#fff;padding:8px;text-align:center}.np button{background:#E30613;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+    @media print{.np{display:none}body{background:#fff}.pg{margin:0;box-shadow:none;width:auto;min-height:276mm;padding:0}}</style></head><body>
+    <div class="np"><button onclick="window.print()">Imprimir / salvar PDF</button> <span style="margin-left:10px;font-size:12px;opacity:.8">${l.length} parte(s) diária(s)</span></div>
+    ${l.map(pagina).join('')}</body></html>`); w.document.close();
+}
+function _pddLogo(obra) { let s = ''; try { s = _logoTermo(obra); } catch (e) {} return s ? `<img src="${s}">` : '<div></div>'; }
+function pdImprimirFiltro() { const l = _pdLista(); if (!l.length) { toast('Nada para imprimir com esse filtro.', 'error'); return; }
+  if (l.length > 60 && !confirm('São ' + l.length + ' partes diárias (uma por página). Continuar?')) return; pdDocumento(l.map(x => x.id)); }
+(function () {
+  const oR = window.renderPartesDiarias;
+  window.renderPartesDiarias = renderPartesDiarias = function () {
+    const r = oR.apply(this, arguments);
+    try {
+      const pg = document.getElementById('page-partes-diarias'), hb = pg && pg.querySelector('.page-header');
+      if (hb && !hb.querySelector('.pdd-b')) { const ex = [...hb.querySelectorAll('button')].find(b => /Excel/.test(b.textContent));
+        const html = '<button class="btn btn-outline btn-sm pdd-b" onclick="pdImprimirFiltro()" title="Uma folha por parte diária, com o filtro da tela">🖨 Imprimir</button>';
+        if (ex) ex.insertAdjacentHTML('beforebegin', html + ' '); else hb.insertAdjacentHTML('beforeend', html); }
+      document.querySelectorAll('#tbody-pd tr').forEach(tr => { const b = tr.querySelector('[onclick^="pdExcluir("]'); if (!b || tr.querySelector('.pdd-r')) return;
+        const id = b.getAttribute('onclick').match(/pdExcluir\('([^']+)'/)[1];
+        b.insertAdjacentHTML('beforebegin', `<button class="btn btn-outline btn-sm pdd-r" onclick="pdDocumento('${id}')" title="Abrir a parte diária">🖨</button> `);
+        tr.style.cursor = 'pointer'; tr.addEventListener('click', ev => { if (!ev.target.closest('button')) pdDocumento(id); }); });
+    } catch (e) {}
+    return r;
+  };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
