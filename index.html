@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.41 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.42 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18633,6 +18633,217 @@ async function _pnSalvarSenha() {
       if (u && u.senhaProvisoria && u.authEmail && em === String(u.authEmail).toLowerCase()) setTimeout(_pnTelaSenha, 400); } catch (e) {}
     return r;
   };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.42: KICKOFF NO DEMO — 1 clique enche a obra escolhida com ~6 semanas de operação realista
+// (equipe, equipamentos, frentes, orçamento, apropriações, paradas, diesel com alertas, manutenção, frota,
+// alojamento, partes diárias) e cria logins de participantes (kickoff01…) que entram no painel e no app.
+// Tudo fica marcado kick:true / id kk_… e o botão "Apagar kickoff" remove (logins ficam).
+// ═══════════════════════════════════════════════════════════════
+const _KK_COLS = ['empresas', 'cargos', 'funcionarios', 'familias', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'orcamentos', 'tanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
+  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'partesDiarias', 'mobilizacoes', 'turnos', 'obras'];
+function _kkCpf(n) { const b = String(100000000 + n * 7919 % 899999999).slice(0, 9).split('').map(Number);
+  const dv = s => { const r = s.reduce((t, d, i) => t + d * (s.length + 1 - i), 0) % 11; return r < 2 ? 0 : 11 - r; };
+  b.push(dv(b)); b.push(dv(b)); const c = b.join(''); return c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9); }
+function _kkProg(t) { let o = document.getElementById('kk-prog');
+  if (!t) { if (o) o.remove(); return; }
+  if (!o) { document.body.insertAdjacentHTML('beforeend', '<div id="kk-prog" style="position:fixed;inset:0;z-index:99999;background:rgba(10,12,20,.6);display:flex;align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:22px 26px;min-width:320px;box-shadow:0 20px 60px rgba(0,0,0,.35)"><div style="font-weight:800;font-size:16px;margin-bottom:8px">🎬 Preparando o kickoff</div><div id="kk-prog-t" style="font-size:13px;color:#555"></div></div></div>'); o = document.getElementById('kk-prog'); }
+  document.getElementById('kk-prog-t').textContent = t; }
+async function _kkGravar(lista) {   // [[col, obj], ...] em lotes
+  for (let i = 0; i < lista.length; i += 60) {
+    _kkProg('Gravando ' + Math.min(i + 60, lista.length) + ' de ' + lista.length + ' registros…');
+    await Promise.all(lista.slice(i, i + 60).map(([c, o]) => fbSave(c, o.id, o).catch(e => console.warn('kk', c, e))));
+  }
+}
+async function kkPreparar() {
+  if (!_exDemo()) { toast('Disponível só no ambiente DEMO.', 'error'); return; }
+  const qtdTxt = prompt('Preparar a obra para o kickoff.\n\nVou gerar ~6 semanas de dados (equipe, equipamentos, apropriações, diesel, manutenção, frota, alojamento) e criar logins para os participantes.\n\nQuantos logins de participante? (0 = nenhum)', '15');
+  if (qtdTxt === null) return; const nUsr = Math.max(0, Math.min(40, parseInt(qtdTxt, 10) || 0));
+  try { _kkProg('Limpando o kickoff anterior…'); await kkApagar(true);
+    await _kkGerar(nUsr); }
+  catch (e) { console.error(e); toast('Parou com erro: ' + (e.code || e.message), 'error'); }
+  finally { _kkProg(''); }
+}
+async function _kkGerar(nUsr) {
+  let x = 20261110; const R = () => (x = (x * 9301 + 49297) % 233280) / 233280, RI = (a, b) => a + Math.floor(R() * (b - a + 1)), r2 = v => Math.round(v * 100) / 100, r1 = v => Math.round(v * 10) / 10;
+  const K = { kick: true }, ag = new Date().toISOString(), W = [], sv = (c, o) => { (dados[c] = dados[c] || []).push(o); W.push([c, o]); return o; };
+  // ── obra
+  let obraId = (typeof obraAtiva !== 'undefined' && obraAtiva && obraAtiva.id && obraAtiva.id !== 'todas') ? obraAtiva.id : '';
+  let obra = obraId && (dados.obras || []).find(o => o.id === obraId);
+  if (!obra) { obra = sv('obras', { id: 'kk_obra', cod: 'DEMO', nome: 'Obra Demonstração — Rede Coletora Vila Nova', cliente: 'Saneamento', cidade: 'Mococa/SP', inicio: '2026-09-01', status: 'Ativa', ...K }); obraId = obra.id; }
+  const O = obraId, S = String(obra.cod || obra.sigla || 'DEMO').replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 4) || 'DEMO', X = { ...K, obra: O };
+  const hoje = new Date(_hojeLocal() + 'T12:00'), dia = n => { const d = new Date(hoje); d.setDate(d.getDate() - n); return _hojeLocal(d); };
+  // ── turnos (só se não houver)
+  if (!(dados.turnos || []).length) { sv('turnos', { id: 'kk_t1', cod: 'T1', nome: 'Normal', inicio: '07:00', fim: '17:00', ...K }); sv('turnos', { id: 'kk_t2', cod: 'T2', nome: 'Sábado', inicio: '07:00', fim: '11:00', ...K }); }
+  // ── empresas
+  const EMP = [['TEN', 'TENCO ENGENHARIA E CONSTRUÇÃO LTDA', 'Tenco', 'Própria'], ['ALF', 'ALFA LOCAÇÃO DE EQUIPAMENTOS LTDA', 'Alfa Locações', 'Locadora'], ['BET', 'BETA MÁQUINAS E TERRAPLENAGEM LTDA', 'Beta Máquinas', 'Locadora'], ['GAM', 'GAMA TRANSPORTES LTDA', 'Gama Transportes', 'Locadora'], ['HID', 'HIDROMAQ MANUTENÇÃO DE MÁQUINAS LTDA', 'Hidromaq', 'Oficina']]
+    .map(([cod, nome, fantasia, tipo], i) => sv('empresas', { id: 'kk_emp' + i, cod, nome, fantasia, tipo, cnpj: '00.000.000/000' + (i + 1) + '-0' + (i + 1), resp: '', ...X }));
+  const PROP = EMP[0];
+  // ── cargos
+  const CG = [['ENC', 'Encarregado de obras', 'MOI', 'Não', 46, 6800], ['APO', 'Apontador', 'MOI', 'Não', 24, 3200], ['TST', 'Técnico de segurança', 'MOI', 'Não', 38, 5400], ['PED', 'Pedreiro', 'MOD', 'Não', 27, 3300], ['ENCN', 'Encanador', 'MOD', 'Não', 29, 3500],
+    ['SER', 'Servente', 'MOD', 'Não', 18, 2150], ['OPE', 'Operador de escavadeira', 'MOD', 'Sim', 38, 4900], ['OPR', 'Operador de retroescavadeira', 'MOD', 'Sim', 34, 4300], ['MOT', 'Motorista de caminhão', 'MOD', 'Sim', 30, 3900], ['OPV', 'Operador de rolo', 'MOD', 'Sim', 31, 4000]]
+    .map(([cod, nome, rec, op, ch, sal], i) => sv('cargos', { id: 'kk_cg' + i, cod, nome, recurso: rec, direto: rec === 'MOD' ? 'Sim' : 'Não', operador: op, custoHora: ch, adicHE: 50, adicDF: 100, vinculo: 'CLT', salRef: sal, ...X }));
+  const cg = c => CG.find(z => z.cod === c);
+  // ── funcionários (equipes fixas por frente)
+  const NOMES = ['Gustavo Pinto', 'Ana Paula Ribeiro', 'Marcelo Andrade', 'Juliana Prado', 'Roberto Alves', 'José Carlos Lima', 'Francisco Rodrigues', 'Diego Ferreira', 'Luiz Fernando Costa', 'Carlos Eduardo Santos', 'Rafael Gomes', 'Pedro Augusto Rocha',
+    'Antônio Carlos Lima', 'Paulo Henrique Souza', 'Marcos Vinícius Dias', 'Lucas Martins', 'Felipe Moura', 'André Nunes', 'Tiago Melo', 'Vitor Ramos', 'Sérgio Prado', 'Fábio Ribeiro', 'Edson Batista', 'Wagner Teixeira', 'Leandro Cardoso',
+    'Ricardo Barbosa', 'Gilberto Freitas', 'Valdir Mendes', 'Cláudio Araújo', 'Renato Pires', 'Joel Carvalho', 'Adriano Lopes', 'Fernando Castro', 'Márcio Oliveira', 'Rodrigo Moreira', 'Elias Fonseca', 'Mateus Correia', 'Samuel Leme'];
+  const FUNC = ['ENC', 'ENC', 'ENC', 'TST', 'APO', 'OPE', 'PED', 'PED', 'ENCN', 'SER', 'SER', 'SER', 'MOT', 'OPR', 'PED', 'ENCN', 'SER', 'SER', 'SER', 'MOT', 'ENC', 'ENCN', 'ENCN', 'SER', 'SER', 'SER', 'OPR', 'OPE', 'PED', 'PED', 'SER', 'SER', 'OPV', 'PED', 'SER', 'SER', 'SER', 'MOT'];
+  const FS = NOMES.map((nome, i) => { const c = cg(FUNC[i]);
+    return sv('funcionarios', { id: 'kk_f' + i, mat: String(7001 + i), nome, codFuncao: c.cod, funcao: c.nome, salario: c.salRef + (i % 4) * 120, cpf: _kkCpf(i + 31), direto: c.direto, admissao: dia(70 + (i % 9) * 3), demissao: '', apropriador: [0, 1, 2, 20].includes(i) ? 'Sim' : 'Não',
+      tel: '(19) 9' + String(81000000 + i * 37311).slice(0, 4) + '-' + String(1000 + i * 271).slice(-4), vinculo: 'CLT', empresa: PROP.nome, empresaId: PROP.id, geraApont: ['MOI'].includes(c.recurso) && c.cod !== 'ENC' ? 'Não' : 'Sim', status: 'Ativo', ...X }); });
+  // ── famílias / modelos (reaproveita os que já existem pelo código)
+  const FAM = [['ESC', 'Escavadeira hidráulica', 'Linha amarela'], ['RET', 'Retroescavadeira', 'Linha amarela'], ['CB', 'Caminhão basculante', 'Veículos pesados'], ['ROL', 'Rolo compactador', 'Linha amarela'], ['VL', 'Veículo leve', 'Veículos leves']];
+  FAM.forEach(([cod, desc, cat], i) => { if (!(dados.familias || []).some(f => f.cod === cod)) sv('familias', { id: 'kk_fam' + i, cod, desc, categoria: cat, obra: '', status: 'aprovado', ...K }); });
+  const MOD = [['KK-PC200', 'Komatsu PC200', 'Escavadeira hidráulica', 400, 16, 0], ['KK-3CX', 'JCB 3CX', 'Retroescavadeira', 160, 7, 0], ['KK-2426', 'MB Atego 2426 basculante', 'Caminhão basculante', 275, 0, 2.4], ['KK-CA250', 'Dynapac CA250', 'Rolo compactador', 300, 8, 0]];
+  MOD.forEach(([cod, nome, fam, cap, lh, kml], i) => sv('modelos', { id: 'kk_mod' + i, cod, nome, familia: fam, capTanque: cap, consumoPrev: lh, consumoKmL: kml, obra: '', status: 'aprovado', ...K }));
+  const EQ = [['ESC', 1, 'KK-PC200', 1, 165, 'BET'], ['ESC', 2, 'KK-PC200', 1, 165, 'BET'], ['RET', 1, 'KK-3CX', 1, 110, 'ALF'], ['RET', 2, 'KK-3CX', 1, 110, 'ALF'], ['RET', 3, 'KK-3CX', 1, 110, 'ALF'], ['CB', 1, 'KK-2426', 0, 140, 'GAM'], ['CB', 2, 'KK-2426', 0, 140, 'GAM'], ['ROL', 1, 'KK-CA250', 1, 120, 'BET']]
+    .map(([f, n, m, hor, ch, pc], i) => { const pr = EMP.find(e => e.cod === pc);
+      return sv('equipamentos', { id: 'kk_q' + i, tag: S + '-' + f + '-' + String(n).padStart(2, '0'), placa: f === 'CB' ? 'KKB' + (2100 + i) : '', serie: f !== 'CB' ? 'SN' + (88310 + i * 17) : '', codModelo: m, familia: f, prop: pr.nome, propId: pr.id, dataMob: dia(60 - i), dataDesmob: '',
+        custoHora: ch, valorLoc: ch + 20, franquiaH: 200, cobranca: 'Hora', status: 'Mobilizado', medidor: hor ? 'horimetro' : 'hodometro', ...X }); });
+  const QH = EQ.map((e, i) => e.medidor === 'hodometro' ? 48200 + i * 3100 : 2100 + i * 640);   // leitura atual (vai somando)
+  // ── frentes e serviços
+  const B = { lat: -21.4677, lng: -47.0047 };
+  const FR = [['FR-001', 'Rede coletora — Rua Sete de Setembro', .002, .001], ['FR-002', 'Rede coletora — Av. Brasil', -.006, .004], ['FR-003', 'Ligações domiciliares — Vila Nova', .004, -.008], ['FR-004', 'Poços de visita (PV)', -.002, -.003], ['FR-005', 'Recomposição de pavimento — Centro', .007, .006], ['FR-006', 'Estação elevatória EEE-01', -.009, -.005]]
+    .map(([cod, desc, a, b], i) => sv('frentes', { id: 'kk_fr' + i, cod, desc, resp: NOMES[[0, 1, 2, 0, 20, 1][i]], coord: (B.lat + a).toFixed(5) + ', ' + (B.lng + b).toFixed(5), obs: '', ...X }));
+  const SV = [['SV-01', 'Escavação mecânica de vala', 'm³', 6000, 95, 38], ['SV-02', 'Escoramento de vala', 'm²', 8000, 130, 22], ['SV-03', 'Assentamento de tubo PVC DN150', 'm', 5200, 88, 48], ['SV-04', 'Reaterro compactado de vala', 'm³', 5000, 85, 30],
+    ['SV-05', 'Execução de poço de visita', 'un', 120, 2, 2800], ['SV-06', 'Ligação domiciliar de esgoto', 'un', 900, 11, 420], ['SV-07', 'Recomposição de pavimento asfáltico', 'm²', 4500, 72, 85]]
+    .map(([cod, nome, unidade, qtd, pd, cu], i) => ({ ...sv('tiposServico', { id: 'kk_sv' + i, cod, nome, unidade, meta: pd, uaNomes: [], ...X }), _q: qtd, _pd: pd, _cu: cu }));
+  sv('orcamentos', { id: 'kk_orc', obra: O, nome: 'Executivo', status: 'validada', validadoEm: dia(50) + 'T10:00:00', criadoEm: dia(52), itens: SV.map(s => ({ servico: s.nome, unid: s.unidade, qtd: s._q, prodDia: s._pd, custoUnit: s._cu, equipe: [], equipamentos: [] })), kick: true });
+  SV.forEach(s => { delete s._q; delete s._pd; delete s._cu; });
+  const SVd = Object.fromEntries([['SV-01', 95], ['SV-02', 130], ['SV-03', 88], ['SV-04', 85], ['SV-05', 2], ['SV-06', 11], ['SV-07', 72]]);
+  // ── equipes do dia a dia: frente, apropriador, pessoas, equipamentos, serviços (alterna por semana)
+  const EQP = [{ fr: 0, ap: 0, mo: [5, 6, 7, 8, 9, 10, 11], eq: [0, 5], sv: ['SV-01', 'SV-02'], op: { 0: 5, 5: 12 } },
+    { fr: 1, ap: 1, mo: [13, 14, 15, 16, 17, 18], eq: [2, 6], sv: ['SV-03', 'SV-04'], op: { 2: 13, 6: 19 } },
+    { fr: 2, ap: 2, mo: [21, 22, 23, 24, 25], eq: [3], sv: ['SV-06'], op: { 3: 26 } },
+    { fr: 3, ap: 20, mo: [27, 28, 29, 30, 31], eq: [1], sv: ['SV-05'], op: { 1: 27 } },
+    { fr: 4, ap: 20, mo: [32, 33, 34, 35, 36], eq: [7, 4], sv: ['SV-07'], op: { 7: 32, 4: 37 } }];
+  const CHUVA = new Set([dia(33), dia(19), dia(8)]), QUEBRA = { [dia(26)]: [0, 'Manutenção corretiva — mangueira estourada', 3.5], [dia(12)]: [2, 'Manutenção corretiva — defeito elétrico', 5], [dia(4)]: [6, 'Aguardando peças', 4] };
+  const TQ = [sv('tanques', { id: 'kk_tq1', cod: 'TQ-01', nome: 'Tanque fixo do canteiro', cap: 15000, saldo: 8650, local: 'Canteiro', preco: 6.12, ativo: true, ...X }), sv('tanques', { id: 'kk_tq2', cod: 'CB-01', nome: 'Caminhão comboio', cap: 4000, saldo: 1820, local: 'Móvel', preco: 6.19, ativo: true, ...X })];
+  const ultAbs = EQ.map(() => null), lancou = i => FS[i].nome;
+  let nAp = 0;
+  for (let n = 42; n >= 1; n--) {
+    const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0) continue;
+    const sab = wd === 6, sem = Math.floor(n / 7), pend = n <= 2, st = pend ? 'campo' : 'aprovado', chuva = CHUVA.has(d) && !sab;
+    EQP.forEach((g, gi) => {
+      if (sab && gi > 2) return;
+      const s = SV.find(z => z.cod === g.sv[sem % g.sv.length]), fr = FR[g.fr], hIni = sab ? '07:00' : '07:00', heX = !sab && R() < .35 ? (R() < .5 ? 1 : 2) : 0;
+      const hn = sab ? 4 : 9, hFim = sab ? '11:00' : (heX ? (heX === 1 ? '18:00' : '19:00') : '17:00');
+      const apr = 'kk_ap' + (nAp++), parH = chuva ? (R() < .5 ? 1 : 2) : 0;
+      const qtd = r1(SVd[s.cod] * (sab ? .45 : 1) * (.78 + R() * .4) * (chuva ? .7 : 1) * (heX ? 1.1 : 1)) || 1;
+      const base = { data: d, frente: fr.cod, servico: s.nome, obs: '', prodStatus: 'informada', obra: O, turno: sab ? 'T2' : 'T1', lancadoPor: lancou(g.ap), status: st, lancadoEm: d + 'T' + (sab ? '11:20' : '17:15') + ':00.000Z', apropriacao: apr, kick: true };
+      let k = 0;
+      g.mo.forEach(fi => { if (R() < .05) return; const f = FS[fi];
+        sv('aponMO', { ...base, id: 'kk_am' + nAp + '_' + fi, hora: hIni, horaIni: hIni, horaFim: hFim, hn, he: heX, qtd: k === 0 ? Math.max(1, Math.round(qtd)) : 0, unid: s.unidade, func: f.nome, funcao: f.codFuncao, mat: f.mat, empresa: f.empresa }); k++;
+        if (parH) sv('perdas', { ...base, id: 'kk_pm' + nAp + '_' + fi, tipo: 'Mão de Obra', motivo: 'Chuva', horaIni: '09:10', horaFim: '10:' + String(Math.round((parH - 1) * 60) + 10).padStart(2, '0'), horas: parH, escopo: 'tudo', recurso: f.nome, mat: f.mat, funcao: f.codFuncao }); });
+      g.eq.forEach(qi => { const e = EQ[qi], km = e.medidor === 'hodometro', q = QUEBRA[d] && QUEBRA[d][0] === qi ? QUEBRA[d] : null;
+        const hpar = Math.round(parH + (q ? q[2] : 0) + (!q && R() < .12 ? 1 : 0)), tot = sab ? 4 : 9, hp = Math.max(0, tot - hpar - (R() < .3 ? 1 : 0));
+        QH[qi] = r1(QH[qi] + (km ? 60 + R() * 70 : hp)); const op = FS[g.op[qi]];
+        sv('aponEQ', { ...base, id: 'kk_ae' + nAp + '_' + qi, hora: hIni, horaIni: hIni, horaFim: hFim, fotoHor: '', hp, hpar, motivo: q ? q[1] : chuva ? 'Chuva' : hpar ? 'Aguardando frente' : '', hor: QH[qi], equip: e.tag, equipId: e.id, tipo: e.familia, operador: op ? op.nome : '' });
+        if (parH) sv('perdas', { ...base, id: 'kk_pe' + nAp + '_' + qi, tipo: 'Equipamento', motivo: 'Chuva', horaIni: '09:10', horaFim: '10:30', horas: parH, escopo: 'tudo', recurso: e.tag, equipId: e.id });
+        // diesel: a cada 2–3 dias de uso
+        const u = ultAbs[qi]; if (!u || n <= u.n - RI(2, 3)) { const md = MOD.find(m => m[0] === e.codModelo), lh = md[4], kml = md[5];
+          let lt = u ? (km ? (QH[qi] - u.h) / kml : (QH[qi] - u.h) * lh) : md[3] * .7;
+          if (n === 15 && qi === 0) lt = 470;                   // alerta: acima do tanque
+          if (n === 9 && qi === 2) lt = lt * 1.6;               // alerta: consumo acima do previsto
+          lt = Math.round(Math.max(30, Math.min(lt, n === 15 && qi === 0 ? 470 : md[3]))); const t = TQ[qi === 5 || qi === 6 ? 0 : (qi % 2)];
+          sv('diesel', { id: 'kk_d' + n + '_' + qi, dt: d + ' ' + (sab ? '10:' : '16:') + String(10 + qi * 5).padStart(2, '0'), equip: e.tag, equipId: e.id, litros: lt, hor: String(QH[qi]), tanque: t.cod, tanqueId: t.id, precoL: t.preco, preco: t.preco,
+            lancadoPor: FS[12].nome, status: pend ? 'campo' : 'aprovado', lancadoEm: d + 'T19:00:00.000Z', ...X });
+          ultAbs[qi] = { n, h: QH[qi] }; }
+      });
+    });
+  }
+  // ── partes diárias (últimos 6 dias úteis, 4 máquinas)
+  let pdn = 0; for (let n = 8; n >= 1; n--) { const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;
+    [0, 1, 2, 7].forEach((qi, j) => { const e = EQ[qi], ap = (dados.aponEQ || []).find(a => a.kick && a.equipId === e.id && a.data === d); if (!ap) return;
+      const par = ap.hpar ? [{ grupo: /Chuva/.test(ap.motivo) ? 'P' : 'C', cod: /Chuva/.test(ap.motivo) ? '5' : '6', nome: /Chuva/.test(ap.motivo) ? 'Chuva' : 'Defeito / manutenção', ini: '09:10', fim: '10:30', horas: ap.hpar }] : [];
+      sv('partesDiarias', { id: 'kk_pd' + (pdn++), obra: O, equipId: e.id, tag: e.tag, placa: e.placa, prop: (EMP.find(z => z.id === e.propId) || {}).cod, data: d, operador: ap.operador, horaIni: '07:00', horaFim: '17:00', frente: ap.frente, horIni: r1(ap.hor - ap.hp), horFim: ap.hor, trabalhado: ap.hp, paradas: par, situacao: n <= 1 ? 'aberta' : 'fechada', lancadoPor: ap.operador, kick: true }); }); }
+  // ── manutenção: produtos, planos, ordens
+  const PRD = [['FLT-001', 'Filtro de óleo do motor', 'Filtro', 'un', 128, 6, 2], ['FLT-002', 'Filtro de combustível', 'Filtro', 'un', 96, 4, 2], ['FLT-003', 'Filtro de ar', 'Filtro', 'un', 210, 1, 2], ['OLE-15W40', 'Óleo 15W40', 'Lubrificante', 'Litros', 28.5, 60, 40], ['OLE-HID68', 'Óleo hidráulico 68', 'Lubrificante', 'Litros', 24.9, 35, 40],
+    ['MNG-12', 'Mangueira hidráulica 1/2"', 'Peça', 'un', 340, 3, 1], ['GRX-01', 'Graxa EP2 (balde 20 kg)', 'Lubrificante', 'un', 610, 2, 1], ['BAT-150', 'Bateria 150 Ah', 'Elétrica', 'un', 1180, 0, 1]]
+    .map(([cod, nome, cat, un, p, est, min], i) => sv('produtos', { id: 'kk_pr' + i, cod, nome, categoria: cat, unidade: un, preco: p, estoque: est, estoqueMin: min, ativo: true, ...X }));
+  sv('planosPrev', { id: 'kk_pp1', nome: 'Revisão 250 h — escavadeiras', aplica: 'familia', familia: 'ESC', intervalo: 250, unidade: 'h', aviso: 30, ciclos: [250, 500, 1000], compartimento: 'Sistema de Motor', itens: 'Trocar óleo do motor\nTrocar filtro de óleo\nTrocar filtro de combustível\nLubrificação geral', ativo: true, ...X });
+  sv('planosPrev', { id: 'kk_pp2', nome: 'Revisão 250 h — retroescavadeiras', aplica: 'familia', familia: 'RET', intervalo: 250, unidade: 'h', aviso: 30, ciclos: [250, 500], compartimento: 'Sistema de Motor', itens: 'Trocar óleo do motor\nTrocar filtros\nLubrificação geral', ativo: true, ...X });
+  sv('planosPrev', { id: 'kk_pp3', nome: 'Revisão 10.000 km — veículos', aplica: 'vl', intervalo: 10000, unidade: 'km', aviso: 1000, compartimento: 'Sistema de Motor', itens: 'Óleo e filtros\nFreios\nPneus', ativo: true, obra: '', kick: true });
+  const pc = (i, q) => ({ prodId: PRD[i].id, nome: PRD[i].nome, un: PRD[i].unidade, qtd: q, preco: PRD[i].preco, total: r2(q * PRD[i].preco) });
+  const OSX = [[0, 'Corretiva', 'Corretiva normal', 'Sistema Hidráulico', 26, 3.5, 'Mangueira do braço estourada', 'Troca da mangueira hidráulica e reposição de óleo', 'propria', '', [pc(5, 1), pc(4, 18)], 0, 'finalizada'],
+    [2, 'Corretiva', 'Falha operacional', 'Sistema Elétrico', 12, 5, 'Não dá partida — bateria descarregada (farol ligado a noite toda)', 'Troca da bateria', 'propria', '', [pc(7, 1)], 0, 'finalizada'],
+    [0, 'Preventiva', '', 'Sistema de Motor', 20, 4, 'Revisão 250 h', 'Revisão executada conforme plano', 'propria', '', [pc(0, 1), pc(1, 1), pc(3, 24), pc(6, 1)], 0, 'finalizada', 'kk_pp1', 250],
+    [3, 'Preventiva', '', 'Sistema de Motor', 16, 3, 'Revisão 250 h', 'Revisão executada', 'terceiro', 'Hidromaq', [pc(0, 1), pc(3, 16)], 650, 'finalizada', 'kk_pp2', 250],
+    [5, 'Corretiva', 'Corretiva normal', 'Pneus / Material Rodante', 9, 2.5, 'Pneu traseiro furado', 'Conserto do pneu', 'terceiro', 'Borracharia Central', [], 180, 'finalizada'],
+    [7, 'Corretiva', 'Corretiva normal', 'Mecânica Geral', 30, 6, 'Vibração do cilindro não liga', 'Ajuste no acoplamento do vibrador', 'terceiro', 'Hidromaq', [], 1450, 'finalizada'],
+    [6, 'Corretiva', 'Corretiva normal', 'Sistema de Motor', 4, 0, 'Perda de potência e fumaça preta', '', 'terceiro', 'Hidromaq', [], 0, 'aberta', '', 0, 'Aguardando peças'],
+    [1, 'Corretiva', 'Falha operacional', 'Sistema Hidráulico', 1, 0, 'Vazamento no cilindro da caçamba após batida em tubulação', '', 'propria', '', [], 0, 'aberta', '', 0, 'Em manutenção']];
+  OSX.forEach(([qi, tipo, nat, comp, n, hp, prob, serv, exe, forn, pecas, mo, st, pl, ciclo, etapa], i) => { const e = EQ[qi], ini = dia(n) + 'T' + ['08:20', '09:40', '13:10', '07:30'][i % 4], fim = st === 'finalizada' ? (() => { const t = new Date(ini); t.setMinutes(t.getMinutes() + hp * 60); return _hojeLocal(t) + 'T' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); })() : '';
+    const cp = pecas.reduce((s, p) => s + p.total, 0), plano = (dados.planosPrev || []).find(p => p.id === pl);
+    const o = { id: 'kk_os' + i, num: '', obra: O, alvo: 'eq', equipId: e.id, tag: e.tag, placa: e.placa, modelo: (MOD.find(m => m[0] === e.codModelo) || [])[1], familia: e.familia, famCod: e.familia, medidor: e.medidor === 'hodometro' ? 'km' : 'h', tipo, natureza: nat, compartimento: comp,
+      ciclo: ciclo || '', horCiclo: ciclo ? 250 * Math.ceil((QH[qi] - 200) / 250) : '', planoId: pl || '', planoNome: plano ? plano.nome : '', parado: true, inicio: ini, horIni: r1(QH[qi] - n * 7), problema: prob, executor: exe, fornecedor: forn, mecanico: exe === 'propria' ? 'Valdir Mendes' : '', fotosAbertura: [],
+      status: st, abertaPor: NOMES[[0, 1, 20][i % 3]], abertaEm: ini + ':00', origem: i % 2 ? 'campo' : 'painel', kick: true,
+      ...(st === 'finalizada' ? { fim, horFim: r1(QH[qi] - n * 7 + .5), servico: serv, pecas, custoPecas: r2(cp), custoMO: mo, custoTotal: r2(cp + mo), horasParado: hp, fotosFim: [], finalizadaPor: 'Valdir Mendes', finalizadaEm: fim + ':00' } : {}),
+      ...(etapa ? { etapa, etapas: [{ etapa: 'Aberta', em: ini + ':00', por: NOMES[0] }, { etapa: 'Em diagnóstico', em: ini.slice(0, 11) + '10:30:00', por: 'Valdir Mendes' }, { etapa, em: ini.slice(0, 11) + '15:00:00', por: 'Valdir Mendes' }] } : {}) };
+    (dados.ordensServico = dados.ordensServico || []).push(o); try { o.num = _mnProxNum(O, tipo); } catch (er) { o.num = (tipo === 'Preventiva' ? 'OMP-' : 'OMC-') + S + '-' + String(i + 1).padStart(4, '0'); } W.push(['ordensServico', o]); });
+  // ── frota
+  const RSP = (fi, ini, cat, val) => ({ nome: FS[fi].nome, mat: FS[fi].mat, func: FS[fi].id, funcao: FS[fi].funcao, cnhCat: cat, cnhVal: val, inicio: ini });
+  const VS = [['RTX2B45', 'Fiat Strada', 'Picape', 'Localiza', 3450, 0, 'AB', '2027-12-10'], ['QWE1J34', 'VW Saveiro', 'Picape', 'Movida', 3100, 1, 'B', '2028-02-01'], ['XYZ9A87', 'Toyota Hilux', 'Picape', 'Unidas', 6900, 2, 'AB', '2029-01-01'], ['TCA0G94', 'VW Polo Track', 'Carro', 'Localiza', 2650, 3, 'B', dia(-12)], ['KLM3C21', 'Renault Master', 'Van', 'Movida', 7800, 20, 'D', '2027-05-01']]
+    .map(([placa, modelo, tipo, loc, vm, fi, cat, val], i) => sv('frota', { id: 'kk_v' + i, tag: S + '-VL-' + String(i + 1).padStart(2, '0'), placa, modelo, tipo, locadora: loc, status: 'Em uso', valorMes: vm, fimContrato: i === 3 ? dia(-9) : '2027-0' + (3 + i) + '-01', crlvVal: '2027-0' + (4 + i) + '-30', mobData: dia(55 - i * 3), kmMob: 12000 + i * 4100, resp: [RSP(fi, dia(55 - i * 3), cat, val)], ...X }));
+  VS.forEach((v, i) => { let km = v.kmMob; for (let n = 52 - i * 3; n >= 1; n -= RI(5, 8)) { const l = RI(35, 58) * (v.tipo === 'Van' ? 1.3 : 1); km += Math.round(l * (v.tipo === 'Van' ? 8 : v.modelo === 'Toyota Hilux' ? 9 : 11)); sv('abastVeic', { id: 'kk_av' + i + '_' + n, obra: O, veicId: v.id, data: dia(n), litros: Math.round(l), valor: r2(l * 6.29), km, ...K }); } });
+  sv('multas', { id: 'kk_mu1', obra: O, veicId: VS[0].id, placa: VS[0].placa, data: dia(21), valor: 195.23, tipo: 'Excesso de velocidade (até 20%)', gravidade: 'Média', pontos: 4, status: 'Aberta', responsavel: VS[0].resp[0].nome, desconto: '', ...K });
+  sv('multas', { id: 'kk_mu2', obra: O, veicId: VS[2].id, placa: VS[2].placa, data: dia(37), valor: 293.47, tipo: 'Avançar sinal vermelho', gravidade: 'Gravíssima', pontos: 7, status: 'Paga', responsavel: VS[2].resp[0].nome, desconto: 'sim', descontoData: dia(10), ...K });
+  // ── alojamento
+  const MOR = (ix, ent) => ix.map(i => ({ id: 'kk_m' + i, func: FS[i].id, nome: FS[i].nome, mat: FS[i].mat, funcao: FS[i].funcao, entrada: ent }));
+  sv('republicas', { id: 'kk_r1', cod: 'REP-001', nome: 'República Centro', tipo: 'República', endereco: 'Rua Barão de Monte Santo, 410', vagas: 6, responsavel: 'Maria Souza', aluguel: 3200, agua: 160, luz: 320, internet: 110, inicio: dia(60), fim: '2027-06-30', moradores: MOR([5, 6, 8, 13, 15], dia(58)), ...X });
+  sv('republicas', { id: 'kk_r2', cod: 'REP-002', nome: 'Alojamento do canteiro', tipo: 'Alojamento', endereco: 'Canteiro de obras', vagas: 12, responsavel: PROP.fantasia, aluguel: 0, agua: 400, luz: 900, internet: 150, extras: [{ desc: 'Limpeza', valor: 1200 }], moradores: MOR([9, 10, 11, 16, 17, 18, 23, 24, 25, 30], dia(56)), ...X });
+  // ── mobilizações (registro de chegada de 2 máquinas e 1 veículo)
+  sv('mobilizacoes', { id: 'kk_mb1', tipo: 'mobilizacao', tag: EQ[7].tag, equipId: EQ[7].id, data: dia(53), hora: '08:20', familiaNome: 'Rolo compactador', modeloNome: 'Dynapac CA250', empresaNome: 'BETA MÁQUINAS E TERRAPLENAGEM LTDA', hor: '2780', comb: '3/4',
+    checklist: [{ t: 'Nível do óleo do motor', st: 'ok' }, { t: 'Pneus ou esteiras', st: 'ok' }, { t: 'Vazamentos', st: 'nok', obs: 'Vazamento leve no cilindro' }], avarias: [{ desc: 'Amassado no capô' }], nomeRec: NOMES[0], nomeEnt: 'Motorista da locadora', cpfEnt: '529.982.247-25', lancadoPor: NOMES[0], validadoEm: dia(53) + 'T08:40:00', ...X });
+  sv('mobilizacoes', { id: 'kk_mb2', tipo: 'mobilizacao', tag: EQ[4].tag, equipId: EQ[4].id, data: dia(48), hora: '09:10', familiaNome: 'Retroescavadeira', modeloNome: 'JCB 3CX', empresaNome: 'ALFA LOCAÇÃO DE EQUIPAMENTOS LTDA', hor: '4660', comb: '1/2',
+    checklist: [{ t: 'Nível do óleo do motor', st: 'ok' }, { t: 'Pneus ou esteiras', st: 'nok', obs: 'Pneu traseiro gasto' }], avarias: [], nomeRec: NOMES[1], nomeEnt: 'Motorista da locadora', cpfEnt: '529.982.247-25', lancadoPor: NOMES[1], validadoEm: dia(48) + 'T09:30:00', ...X });
+  sv('mobilizacoes', { id: 'kk_mb3', tipo: 'veiculo_entrada', veicId: VS[3].id, placa: VS[3].placa, data: VS[3].mobData, hora: '10:05', modeloNome: VS[3].modelo, tipoVeic: 'Carro', locadora: 'Localiza', km: String(VS[3].kmMob), comb: 'Cheio', fotos: {}, avarias: [{ desc: 'Risco no para-choque' }],
+    nomeObra: NOMES[1], nomeLoc: 'Carlos (Localiza)', cpfLoc: '529.982.247-25', lancadoPor: NOMES[1], validadoEm: VS[3].mobData + 'T10:20:00', ...X });
+  // ── perfil e logins dos participantes (entram no painel e no app com o mesmo login)
+  if (nUsr) {
+    const telas = {}; _telasCatalogo().forEach(gr => gr.itens.forEach(([t]) => { if (!['mm-aprov', 'tipos-perdas', 'forn-banco', 'ua'].includes(t)) telas[t] = true; }));
+    const pf = { id: 'kk_pf', nome: 'Kickoff', tipo: 'painel', cor: 'blue', desc: 'participante da apresentação (painel + app)', telas, perms: { dashboards: true, cadastros: true, apontamentos: true, relatorios: true, qrcodes: true, config: false, almoxarifado: true, aprovacao: true, abastecimento: true, mobilizacao: true, manutencao: true, frota: true }, kick: true };
+    dados.perfis = (dados.perfis || []).filter(p => p.nome !== 'Kickoff'); dados.perfis.push(pf); W.push(['perfis', pf]);
+    for (let i = 1; i <= nUsr; i++) {
+      const login = 'kickoff' + String(i).padStart(2, '0'), id = 'kk_u' + i; _kkProg('Criando login ' + login + '…');
+      const em = _preCampo() + login + '@' + _DOMINIO_PAINEL;
+      try { await criarAcessoFirebase(em, 'Demo@2026'); } catch (e) { if (e.code !== 'auth/email-already-in-use') { console.warn(login, e); continue; } }
+      const u = { id, nome: 'Participante ' + String(i).padStart(2, '0'), email: login + '@kickoff.obrakontrol.com.br', login, authEmail: em, senhaProvisoria: false, senhaDefinida: true, mat: '', perfil: 'Kickoff', obra: O, status: 'Ativo', master: false, perms: { ...pf.perms }, empresa: PROP.id, cargo: 'Participante', tel: '', kick: true };
+      USUARIOS = (USUARIOS || []).filter(z => z.id !== id); USUARIOS.push(u); W.push(['usuarios', u]);
+    }
+  }
+  await _kkGravar(W);
+  try { window._absCache = { k: '', m: {} }; } catch (e) {}
+  _kkProg('');
+  try { selecionarObra(O, obra.nome); } catch (e) {}
+  try { showPage('dashboard', document.querySelector(`[onclick*="showPage('dashboard'"]`)); } catch (e) {}
+  const nMO = W.filter(w => w[0] === 'aponMO').length, nEQ = W.filter(w => w[0] === 'aponEQ').length;
+  kkResumo(obra, nUsr, nMO, nEQ, W.filter(w => w[0] === 'diesel').length);
+}
+function kkResumo(obra, nUsr, nMO, nEQ, nD) {
+  const L = _accLinks();
+  const txt = `ObraKontrol · KICKOFF\n\nObra: ${obra.nome}\n\n📊 Painel: ${L.painel}\n📲 App de campo: ${L.campo}\n\n👤 Login: kickoff01 a kickoff${String(nUsr || 0).padStart(2, '0')} (cada um pega um número)\n🔑 Senha: Demo@2026\n\nNo app: Apropriação (frente → equipe → equipamentos), Parada, Abastecimento, Movimentação e Manutenção. Tudo que você lançar aparece no painel para aprovação.`;
+  if (!document.getElementById('modal-kk')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-kk"><div class="modal" style="max-width:560px"><div class="modal-header"><div class="modal-title">🎬 Kickoff pronto</div><button class="modal-close" onclick="closeModal('modal-kk')">×</button></div><div class="modal-body" id="kk-body"></div><div class="modal-footer"><button class="btn btn-outline" onclick="navigator.clipboard.writeText(document.getElementById('kk-msg').value).then(()=>toast('Copiado.'))">📋 Copiar</button><button class="btn btn-primary" onclick="closeModal('modal-kk')">Fechar</button></div></div></div>`);
+  document.getElementById('kk-body').innerHTML = `<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Gerado: <b>${nMO}</b> apontamentos de mão de obra, <b>${nEQ}</b> de equipamentos, <b>${nD}</b> abastecimentos, 8 ordens de manutenção, 5 veículos, 2 alojamentos${nUsr ? ' e <b>' + nUsr + '</b> logins' : ''}. Os 2 últimos dias ficaram <b>pendentes de aprovação</b> para você aprovar ao vivo.</div>
+    <label class="form-label">Mensagem para os participantes</label><textarea class="form-control" id="kk-msg" rows="12" style="width:100%;font-size:13px">${_e(txt)}</textarea>`;
+  openModal('modal-kk');
+}
+async function kkApagar(silencioso) {
+  if (!silencioso && !confirm('Apagar todos os dados gerados para o kickoff?\n\n(Os logins kickoff01… continuam, mas ficam sem obra.)')) return;
+  const ps = [];
+  _KK_COLS.forEach(col => { (dados[col] || []).filter(x => x && (x.kick || String(x.id).startsWith('kk_'))).forEach(x => ps.push(fbDelete(col, x.id).catch(() => {}))); dados[col] = (dados[col] || []).filter(x => !(x && (x.kick || String(x.id).startsWith('kk_')))); });
+  // ordens/planos/produtos que ainda não estão em memória (carregados à parte)
+  for (const col of ['ordensServico', 'planosPrev', 'produtos', 'partesDiarias']) { try { const s = await db.collection(col).where('kick', '==', true).get(); s.docs.forEach(d => ps.push(fbDelete(col, d.id).catch(() => {}))); } catch (e) {} }
+  for (let i = 0; i < ps.length; i += 80) { if (!silencioso) _kkProg('Apagando ' + Math.min(i + 80, ps.length) + ' de ' + ps.length + '…'); await Promise.all(ps.slice(i, i + 80)); }
+  _kkProg('');
+  if (!silencioso) { toast('Dados do kickoff apagados.'); try { renderObras(); } catch (e) {} }
+}
+(function () {   // botões na tela Obras (só no DEMO)
+  const pi = window.pageInit;
+  window.pageInit = function (id) { const r = pi ? pi.apply(this, arguments) : undefined;
+    try { if (id === 'obras' && _exDemo()) { const g = document.querySelector('#page-obras .page-header .btn-group'); if (g && !g.querySelector('.kk-b')) g.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary btn-sm kk-b" onclick="kkPreparar()" title="Só no DEMO: enche a obra escolhida no topo com dados de 6 semanas e cria logins para os participantes">🎬 Preparar kickoff</button><button class="btn btn-outline btn-sm kk-b" onclick="kkApagar()">🗑 Apagar kickoff</button>'); } } catch (e) {}
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
