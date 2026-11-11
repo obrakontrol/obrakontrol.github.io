@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.15</div>
+  <div class="login-versao">ObraKontrol Campo · v3.16</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -5647,6 +5647,9 @@ async function pdEscolher(equipId) {
   pdRender();
 }
 function pdCampo(k, v) { pd[k] = v; _pdRasc(); }
+// v3.16 (PROVISÓRIO até todas as frentes estarem cadastradas): na Parte Diária a frente aceita texto livre
+function pdFrenteTxt(v) { v = String(v || '').trim(); const frs = _daObraCampo(dadosCampo.frentes || []).filter(f => f.cod);
+  const fr = frs.find(f => v === f.cod || v === f.cod + ' · ' + (f.desc || f.nome || '') || v.toUpperCase() === String(f.cod).toUpperCase()); pdCampo('frente', fr ? fr.cod : v); }
 function _pdRasc() { if (!pd || !pd.equipId) return; try { const { foto, _ult, ...r } = pd; localStorage.setItem('pd_rasc_pd_' + pd.equipId + '_' + pd.data, JSON.stringify(r)); } catch (e) {} }
 function pdRender() {
   const el = document.getElementById('pd-content'); if (!el || !pd) return; const e = _pdEq(), E = _pdE, km = _medKmC(e), un = km ? 'km' : 'h', med = km ? 'Hodômetro' : 'Horímetro';
@@ -5664,7 +5667,7 @@ function pdRender() {
       <div class="form-group"><label class="form-label">Operador *</label><input class="form-control" list="pd-ops" value="${E(pd.operador)}" oninput="pdCampo('operador',this.value)" placeholder="Nome do operador"/><datalist id="pd-ops">${fs.map(f => `<option value="${E(f.nome)}">`).join('')}</datalist></div>
       <div style="display:flex;gap:10px"><div class="form-group" style="flex:1"><label class="form-label">Horário inicial *</label><input class="form-control" type="time" value="${E(pd.horaIni)}" onchange="pdCampo('horaIni',this.value)"/></div>
         <div class="form-group" style="flex:1"><label class="form-label">Horário final</label><input class="form-control" type="time" value="${E(pd.horaFim)}" onchange="pdCampo('horaFim',this.value)"/></div></div>
-      <div class="form-group"><label class="form-label">Local / frente de serviço *</label><div style="display:flex;gap:8px"><select class="form-control" style="flex:1" onchange="pdCampo('frente',this.value)"><option value="">Escolha a frente…</option>${frs.map(f => `<option value="${E(f.cod)}" ${f.cod === pd.frente ? 'selected' : ''}>${E(f.cod + (f.desc || f.nome ? ' · ' + (f.desc || f.nome) : ''))}</option>`).join('')}</select><button type="button" class="btn btn-outline" style="width:auto;padding:0 14px" onclick="abrirQR('pdfrente')">QR</button></div></div>
+      <div class="form-group"><label class="form-label">Local / frente de serviço *</label><div style="display:flex;gap:8px"><input class="form-control" style="flex:1" list="pd-fr-dl" value="${E((frs.find(f => f.cod === pd.frente) ? pd.frente + ((frs.find(f => f.cod === pd.frente).desc || frs.find(f => f.cod === pd.frente).nome) ? ' · ' + (frs.find(f => f.cod === pd.frente).desc || frs.find(f => f.cod === pd.frente).nome) : '') : pd.frente) || '')}" placeholder="Escolha ou digite o local…" autocomplete="off" oninput="pdFrenteTxt(this.value)"><datalist id="pd-fr-dl">${frs.map(f => `<option value="${E(f.cod + (f.desc || f.nome ? ' · ' + (f.desc || f.nome) : ''))}"></option>`).join('')}</datalist><button type="button" class="btn btn-outline" style="width:auto;padding:0 14px" onclick="abrirQR('pdfrente')">QR</button></div></div>
     </div></div>
     <div class="card"><div class="card-body">
       <div style="display:flex;gap:10px"><div class="form-group" style="flex:1"><label class="form-label">${med} inicial (${un})</label><input class="form-control" type="number" inputmode="decimal" step="0.1" value="${E(pd.horIni)}" oninput="pdCampo('horIni',this.value)"/></div>
