@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.47 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.48 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -19150,6 +19150,95 @@ function _kkProgramacao(O, sv) {
     else { qtd = Math.round(feito * (1.12 + R() * .25)); causa = C[i % C.length]; }
     sv('programacao', { id: 'kk_pg' + i, obra: O, semana, frente, servico, unid, qtd, obs: '', ...(causa ? { causa } : {}), criadoEm: semana + 'T08:00:00', criadoPor: 'Planejamento', kick: true }); });
 }
+// ═══════════════════════════════════════════════════════════════
+// v4.48: ORÇAMENTO PREVISTO POR PLANILHA — "⬇ Modelo" (já vem com os serviços, funções e famílias da obra)
+// e "⬆ Importar" (cria ou substitui o RASCUNHO da obra; depois é só conferir e Validar).
+// Abas: Serviços · Salários previstos · Diesel previsto · Como preencher
+// ═══════════════════════════════════════════════════════════════
+const _ORCX = { s: 'Serviços', sal: 'Salários previstos', die: 'Diesel previsto', aj: 'Como preencher' };
+function _orcxNorm(t) { return String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function _orcxNum(v) { if (typeof v === 'number') return v; const s = String(v == null ? '' : v).replace(/R\$|\s/g, ''); if (!s) return 0;
+  return parseFloat(/,\d{1,3}$/.test(s) || (s.includes(',') && !s.includes('.')) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '')) || 0; }
+function _orcxLista(txt) { return String(txt || '').split(/[;\n]+/).map(x => x.trim()).filter(Boolean).map(x => { const m = x.match(/^(.+?)\s*[:=x×]\s*([\d.,]+)$/i); return m ? { cod: m[1].trim(), qtd: _orcxNum(m[2]) } : { cod: x, qtd: 1 }; }); }
+function orcModelo() {
+  const obra = _orcObraSel(); if (!obra) { toast('Escolha a obra.', 'error'); return; }
+  const base = (orcVersoes(obra).filter(v => v.status !== 'validada').pop()) || orcVigente(obra);
+  const cs = (dados.cargos || []).filter(c => !c.obra || c.obra === obra), fs = (dados.familias || []).filter(f => !f.obra || f.obra === obra);
+  const tsv = (dados.tiposServico || []).filter(t => !t.obra || t.obra === obra);
+  const lst = l => (l || []).map(x => (x.funcao || x.familia) + ':' + x.qtd).join('; ');
+  const S = [['Serviço *', 'Unidade *', 'Qtd. prevista *', 'Produção por dia *', 'Custo unitário (R$)', 'Equipe por dia (código:qtd; …)', 'Equipamentos por dia (código:qtd; …)']];
+  if (base && (base.itens || []).length) base.itens.forEach(i => S.push([i.servico, i.unid || '', +i.qtd || '', +i.prodDia || '', +i.custoUnit || '', lst(i.equipe), lst(i.equipamentos)]));
+  else if (tsv.length) tsv.forEach(t => S.push([t.nome || t.desc || t.cod, t.unidade || '', '', '', '', '', '']));
+  else S.push(['Escavação mecânica de vala', 'm³', 6000, 95, 38, 'ENC:1; OPE:1; SER:3', 'ESC:1; CB:2']);
+  const salB = (base && base.salarios) || [], dieB = (base && base.diesel) || [];
+  const SA = [['Código da função *', 'Função', 'Salário previsto (R$) *']].concat(cs.map(c => [c.cod, c.nome || '', ((salB.find(x => x.funcao === c.cod) || {}).salario) || '']));
+  const DI = [['Código da família *', 'Família', 'Consumo (L/h) *', 'Preço do diesel (R$/L) *']].concat(fs.map(f => { const d = dieB.find(x => x.familia === f.cod) || {}; return [f.cod, f.desc || '', d.lh || '', d.precoL || '']; }));
+  const AJ = [['Como preencher o orçamento previsto'], [''],
+    ['1. Aba Serviços: uma linha por serviço. Os campos com * são obrigatórios.'],
+    ['   · Serviço: se ainda não existir em Tipos de Serviço, ele é criado na importação (com a unidade informada).'],
+    ['   · Produção por dia: quanto a equipe faz por dia (é a meta que aparece no app).'],
+    ['   · Custo unitário: R$ por unidade (m³, m, un…). Custo total = quantidade × custo unitário.'],
+    ['   · Equipe e equipamentos por dia: códigos separados por ponto e vírgula. Ex.: ENC:1; PED:2; SER:3  e  ESC:1; CB:2 (opcional).'],
+    ['2. Abas Salários e Diesel: premissas de custo (opcionais). Linha sem valor é ignorada.'],
+    ['3. No painel: Orçamento previsto → escolha a obra → ⬆ Importar. A planilha vira o RASCUNHO da obra (substitui o rascunho, se já houver).'],
+    ['4. Confira na tela e clique em Validar. A versão validada passa a valer no app (meta e avanço) e no Avanço da obra.'], [''],
+    ['Códigos de função desta obra:'], ...cs.map(c => ['   ' + c.cod + ' — ' + (c.nome || '')]), [''],
+    ['Códigos de família desta obra:'], ...fs.map(f => ['   ' + f.cod + ' — ' + (f.desc || '')])];
+  const wb = XLSX.utils.book_new(), sh = (rows, w) => { const s = XLSX.utils.aoa_to_sheet(rows); s['!cols'] = w.map(x => ({ wch: x })); return s; };
+  XLSX.utils.book_append_sheet(wb, sh(S, [38, 10, 15, 17, 18, 32, 32]), _ORCX.s);
+  XLSX.utils.book_append_sheet(wb, sh(SA, [20, 34, 22]), _ORCX.sal);
+  XLSX.utils.book_append_sheet(wb, sh(DI, [20, 34, 16, 22]), _ORCX.die);
+  XLSX.utils.book_append_sheet(wb, sh(AJ, [110]), _ORCX.aj);
+  const o = (dados.obras || []).find(x => x.id === obra) || {};
+  XLSX.writeFile(wb, 'Orcamento previsto - ' + String(o.cod || o.nome || 'obra').replace(/[\\/:*?"<>|]+/g, '-') + '.xlsx');
+}
+function orcImportar() {
+  if (!_ehAdmin()) { toast('Só o Admin importa o orçamento.', 'error'); return; }
+  if (!_orcObraSel()) { toast('Escolha a obra.', 'error'); return; }
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv';
+  inp.onchange = () => { const f = inp.files[0]; if (!f) return; const r = new FileReader(); r.onload = e => { try { _orcxProcessar(XLSX.read(e.target.result, { type: 'binary', cellDates: true })); } catch (x) { toast('Não consegui ler a planilha: ' + x.message, 'error'); } }; r.readAsBinaryString(f); };
+  inp.click();
+}
+async function _orcxProcessar(wb) {
+  const obra = _orcObraSel(), avisos = [], aba = n => { const k = wb.SheetNames.find(s => _orcxNorm(s) === _orcxNorm(n)) || (n === _ORCX.s ? wb.SheetNames[0] : null); return k ? XLSX.utils.sheet_to_json(wb.Sheets[k], { header: 1, defval: '' }) : []; };
+  const cs = (dados.cargos || []).filter(c => !c.obra || c.obra === obra), fs = (dados.familias || []).filter(f => !f.obra || f.obra === obra);
+  const acha = (l, cod) => l.find(x => _orcxNorm(x.cod) === _orcxNorm(cod));
+  const tsv = (dados.tiposServico || []).filter(t => !t.obra || t.obra === obra), novosTS = [], itens = [], vistos = new Set();
+  aba(_ORCX.s).slice(1).forEach((r, i) => {
+    const [sv, un, q, pd, cu, eqp, eqs] = r, ln = 'Serviços, linha ' + (i + 2), nome = String(sv || '').trim(); if (!nome && !q && !pd) return;
+    if (!nome) { avisos.push(ln + ': sem serviço — ignorada.'); return; }
+    const qtd = _orcxNum(q), prodDia = _orcxNum(pd); if (!qtd || !prodDia) { avisos.push(ln + ' (' + nome + '): falta quantidade ou produção por dia — ignorada.'); return; }
+    if (vistos.has(_orcxNorm(nome))) { avisos.push(ln + ': "' + nome + '" repetido — ficou só a primeira.'); return; } vistos.add(_orcxNorm(nome));
+    let t = tsv.find(x => _orcxNorm(x.nome || x.desc || x.cod) === _orcxNorm(nome)) || novosTS.find(x => _orcxNorm(x.nome) === _orcxNorm(nome));
+    if (!t) { t = { nome, unidade: String(un || '').trim() }; novosTS.push(t); }
+    const equipe = [], equipamentos = [];
+    _orcxLista(eqp).forEach(x => { const c = acha(cs, x.cod); if (c) equipe.push({ funcao: c.cod, qtd: x.qtd }); else avisos.push(ln + ': função "' + x.cod + '" não existe nesta obra — ignorada.'); });
+    _orcxLista(eqs).forEach(x => { const f = acha(fs, x.cod); if (f) equipamentos.push({ familia: f.cod, qtd: x.qtd }); else avisos.push(ln + ': família "' + x.cod + '" não existe — ignorada.'); });
+    itens.push({ servico: t.nome || t.desc || t.cod, unid: String(un || t.unidade || '').trim(), qtd, prodDia, custoUnit: _orcxNum(cu), equipe, equipamentos });
+  });
+  const salarios = [], diesel = [];
+  aba(_ORCX.sal).slice(1).forEach((r, i) => { const [cod, , v] = r; if (!cod || !_orcxNum(v)) return; const c = acha(cs, cod); if (c) salarios.push({ funcao: c.cod, salario: _orcxNum(v) }); else avisos.push('Salários, linha ' + (i + 2) + ': função "' + cod + '" não existe — ignorada.'); });
+  aba(_ORCX.die).slice(1).forEach((r, i) => { const [cod, , lh, pr] = r; if (!cod || (!_orcxNum(lh) && !_orcxNum(pr))) return; const f = acha(fs, cod); if (f) diesel.push({ familia: f.cod, lh: _orcxNum(lh), precoL: _orcxNum(pr) }); else avisos.push('Diesel, linha ' + (i + 2) + ': família "' + cod + '" não existe — ignorada.'); });
+  if (!itens.length) { toast('Nenhum serviço válido na planilha.' + (avisos.length ? ' ' + avisos[0] : ''), 'error'); return; }
+  const vs = orcVersoes(obra), rasc = vs.find(v => v.status !== 'validada'), tot = itens.reduce((t, i) => t + i.qtd * i.custoUnit, 0);
+  const msg = `Importar o orçamento previsto de ${getNomeObra(obra) || 'obra'}?\n\n${itens.length} serviço(s) · custo total ${_moeda(tot)}\n${salarios.length} salário(s) previsto(s) · ${diesel.length} família(s) com diesel\n${novosTS.length ? novosTS.length + ' tipo(s) de serviço novo(s) será(ão) criado(s): ' + novosTS.map(t => t.nome).join(', ') + '\n' : ''}\n${rasc ? 'Vai SUBSTITUIR o rascunho "' + rasc.nome + '".' : 'Vai criar uma versão nova como RASCUNHO.'} Depois confira e clique em Validar.${avisos.length ? '\n\nAvisos (' + avisos.length + '):\n· ' + avisos.slice(0, 8).join('\n· ') + (avisos.length > 8 ? '\n· …' : '') : ''}`;
+  if (!confirm(msg)) return;
+  // tipos de serviço novos
+  let n = Math.max(0, ...(dados.tiposServico || []).map(t => parseInt(String(t.cod || '').replace(/\D/g, ''), 10) || 0));
+  for (const t of novosTS) { const reg = { id: 'ts' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), cod: 'SV-' + String(++n).padStart(2, '0'), nome: t.nome, unidade: t.unidade, obra, uaNomes: [] };
+    (dados.tiposServico = dados.tiposServico || []).push(reg); try { await fbSave('tiposServico', reg.id, reg); } catch (e) {} }
+  let v = rasc;
+  if (!v) { const nome = !vs.length ? 'Proposta' : !vs.some(x => /^Executivo/.test(x.nome)) ? 'Executivo' : 'Revisão ' + (vs.filter(x => /^Revisão/.test(x.nome)).length + 1);
+    v = { id: 'orc' + Date.now().toString(36), obra, nome, tipo: nome.split(' ')[0], status: 'rascunho', criadoEm: new Date().toISOString(), criadoPor: usuarioLogado?.nome || '', baseadaEm: '' }; (dados.orcamentos = dados.orcamentos || []).push(v); }
+  Object.assign(v, { itens, salarios, diesel, importadoEm: new Date().toISOString(), importadoPor: usuarioLogado?.nome || '' });
+  _orc.ver = v.id; await _orcGravar(v); renderOrcamento();
+  toast('Orçamento importado no rascunho "' + v.nome + '" (' + itens.length + ' serviços). Confira e clique em Validar.' + (avisos.length ? ' ' + avisos.length + ' aviso(s).' : ''));
+}
+(function () {
+  const g = document.querySelector('#page-orcamento .page-header .btn-group'), nv = document.getElementById('orc-btn-nova');
+  if (g && !document.getElementById('orc-btn-mod')) (nv || g.lastElementChild).insertAdjacentHTML('beforebegin',
+    '<button class="btn btn-outline btn-sm" id="orc-btn-mod" onclick="orcModelo()" title="Planilha modelo, já com os serviços, funções e famílias da obra">⬇ Modelo</button><button class="btn btn-outline btn-sm" id="orc-btn-imp" onclick="orcImportar()" title="Importa a planilha como rascunho do orçamento">⬆ Importar</button>');
+})();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
