@@ -191,7 +191,7 @@ textarea.form-control{resize:vertical;min-height:72px}
   body.imprimindo-dash div{overflow:visible!important;max-height:none!important}
   body.imprimindo-dash .card{break-inside:avoid}
   body.imprimindo-dash #app, body.imprimindo-dash .app, body.imprimindo-dash .layout{display:block!important;height:auto!important}
-  @page{size:A4 landscape;margin:10mm}
+  @page{size:A4 landscape;margin:10mm}html,body,*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
 /* ═════ v2.39 DASHBOARDS (tema TENCO) ═════ */
@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.43 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.44 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -12656,7 +12656,7 @@ function imprimirFrentesA4() {
       <div class="lado"><img class="qr" src="${qr}" alt="QR ${_e(f.cod)}"><div class="inst">Aponte a câmera do app <b>ObraKontrol Campo</b><br>para abrir esta frente</div></div></section>`;
   }).join('');
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Placas QR das frentes</title><style>
-    @page{size:A4 landscape;margin:0}*{box-sizing:border-box}html,body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 landscape;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}html,body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .pg{width:297mm;height:210mm;padding:12mm 14mm;display:flex;gap:10mm;align-items:stretch;page-break-after:always;break-after:page;overflow:hidden}
     .pg:last-child{page-break-after:auto;break-after:auto}
     .info{flex:1;min-width:0;display:flex;flex-direction:column;border-right:1.2mm solid #E30613;padding-right:10mm}
@@ -17576,7 +17576,7 @@ async function rdoBaixar(ids) {
   const pags = []; for (const x of l) { const FT = (await Promise.all((x.fotos || []).map(foto))).filter(Boolean); pags.push(_rdoPagina(x, FT)); }
   const nome = l.length === 1 ? 'RDO ' + _rdoBR(l[0].data) + ' ' + (l[0].frente || '') : 'RDOs ' + _rdoBR(l[0].data) + ' a ' + _rdoBR(l[l.length - 1].data);
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(nome)}</title><style>
-    @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:14px;font-size:12px}
+    @page{size:A4;margin:12mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:14px;font-size:12px}
     .pg{break-after:page;page-break-after:always}.pg:last-child{break-after:auto;page-break-after:auto}
     .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:8px}.hd img{height:46px;max-width:200px;object-fit:contain}
     .tt{text-align:right}.tt b{font-size:18px;display:block}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.meta div{border:1px solid #ccc;border-radius:6px;padding:6px 8px}.meta span{display:block;font-size:9.5px;color:#666;text-transform:uppercase;letter-spacing:.05em}
@@ -18050,7 +18050,7 @@ async function mnImprimir(id) {
   const nome = 'Ordem de Manutenção-' + (o.num || o.id) + '-' + String(o.fim || o.inicio || '').slice(0, 10).split('-').reverse().join('-');
   let logo = ''; try { logo = _logoTermo(o.obra); } catch (e) {}
   w.document.open(); w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(nome)}</title><style>
-    @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:14px;font-size:12px}
+    @page{size:A4;margin:12mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:14px;font-size:12px}
     .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:8px}.hd img{height:44px;max-width:200px;object-fit:contain}.hd b{font-size:18px;display:block;text-align:right}
     .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.meta div{border:1px solid #ccc;border-radius:6px;padding:6px 8px}.meta span{display:block;font-size:9.5px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
     h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;background:#111;color:#fff;padding:5px 8px;margin:14px 0 0;border-radius:4px 4px 0 0}.bx{border:1px solid #ccc;border-top:0;padding:8px;min-height:36px;white-space:pre-wrap}
