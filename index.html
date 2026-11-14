@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.48 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.49 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -19238,6 +19238,77 @@ async function _orcxProcessar(wb) {
   const g = document.querySelector('#page-orcamento .page-header .btn-group'), nv = document.getElementById('orc-btn-nova');
   if (g && !document.getElementById('orc-btn-mod')) (nv || g.lastElementChild).insertAdjacentHTML('beforebegin',
     '<button class="btn btn-outline btn-sm" id="orc-btn-mod" onclick="orcModelo()" title="Planilha modelo, já com os serviços, funções e famílias da obra">⬇ Modelo</button><button class="btn btn-outline btn-sm" id="orc-btn-imp" onclick="orcImportar()" title="Importa a planilha como rascunho do orçamento">⬆ Importar</button>');
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.49: PROGRAMAÇÃO SEMANAL POR PLANILHA — "⬇ Modelo" (semana da tela, já com frentes e serviços) e "⬆ Importar"
+// (atualiza o que já existe na semana para a mesma frente + serviço; o resto é criado). Abas: Programação · Listas · Como preencher
+// ═══════════════════════════════════════════════════════════════
+function _pgxData(v) {
+  if (v instanceof Date && !isNaN(v)) return _hojeLocal(new Date(v.getFullYear(), v.getMonth(), v.getDate(), 12));
+  if (typeof v === 'number' && v > 30000) { const d = new Date(Math.round((v - 25569) * 864e5)); return _hojeLocal(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12)); }
+  const s = String(v || '').trim(); let m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
+}
+function pgModelo() {
+  const obra = _pgObraSel('pg-obra'); if (!obra) { toast('Escolha a obra.', 'error'); return; }
+  const frs = _pgFrentesObra(obra), svs = _pgServicosObra(obra), vig = orcVigente(obra), meta = s => { const i = vig && (vig.itens || []).find(x => x.servico === s); return i && i.prodDia ? +i.prodDia * 6 : ''; };
+  const dataBR = d => d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4);
+  let base = _pgItens(obra, _pgSem), qtdBase = true;
+  if (!base.length) { base = _pgItens(obra, _pgAdd(_pgSem, -7)); qtdBase = false; }
+  const P = [['Semana (segunda-feira) *', 'Frente *', 'Serviço *', 'Quantidade programada *', 'Unid.', 'Observação', 'Referência: meta do orçamento na semana']];
+  if (base.length) base.sort((a, b) => (a.frente + a.servico).localeCompare(b.frente + b.servico)).forEach(p => P.push([dataBR(_pgSem), p.frente, p.servico, qtdBase ? +p.qtd || '' : '', p.unid || '', qtdBase ? p.obs || '' : '', meta(p.servico)]));
+  else frs.forEach(f => P.push([dataBR(_pgSem), f.cod, '', '', '', '', '']));
+  const L = [['Frentes desta obra', '', '', 'Serviços desta obra', 'Unid.', 'Meta do orçamento por dia', 'Meta na semana (6 dias)']];
+  for (let i = 0; i < Math.max(frs.length, svs.length); i++) { const f = frs[i], s = svs[i], it = s && vig && (vig.itens || []).find(x => x.servico === s.nome);
+    L.push([f ? f.cod : '', f ? f.desc || f.nome || '' : '', '', s ? s.nome : '', s ? s.unid : '', it && it.prodDia ? +it.prodDia : '', it && it.prodDia ? +it.prodDia * 6 : '']); }
+  const AJ = [['Como preencher a programação semanal'], [''],
+    ['1. Uma linha por frente + serviço. Campos com * são obrigatórios.'],
+    ['2. Semana: a data da SEGUNDA-FEIRA da semana (dd/mm/aaaa). Pode pôr qualquer dia: o sistema leva para a segunda daquela semana. Em branco = a semana aberta na tela.'],
+    ['   A semana vai de segunda a sábado; o domingo conta na semana que terminou. Dá para programar várias semanas na mesma planilha.'],
+    ['3. Frente: o código (ex.: FR-001). Serviço: o nome exatamente como na aba Listas.'],
+    ['4. Quantidade: o total programado para a semana, na unidade do serviço. A coluna de referência mostra a meta do orçamento × 6 dias.'],
+    ['5. No painel: Programação semanal → escolha a obra → ⬆ Importar. Se a frente + serviço já estiver programada naquela semana, a quantidade é atualizada.'],
+    ['   O "feito" e o PPC são calculados sozinhos pelo que o pessoal lança no app.']];
+  const wb = XLSX.utils.book_new(), sh = (rows, w) => { const s = XLSX.utils.aoa_to_sheet(rows); s['!cols'] = w.map(x => ({ wch: x })); return s; };
+  XLSX.utils.book_append_sheet(wb, sh(P, [24, 12, 38, 22, 8, 34, 34]), 'Programação');
+  XLSX.utils.book_append_sheet(wb, sh(L, [14, 40, 3, 38, 8, 24, 24]), 'Listas');
+  XLSX.utils.book_append_sheet(wb, sh(AJ, [130]), 'Como preencher');
+  const o = (dados.obras || []).find(x => x.id === obra) || {};
+  XLSX.writeFile(wb, 'Programacao semanal - ' + String(o.cod || o.nome || 'obra').replace(/[\\/:*?"<>|]+/g, '-') + ' - semana ' + _pgSem.slice(8, 10) + '-' + _pgSem.slice(5, 7) + '.xlsx');
+}
+function pgImportar() {
+  if (!_pgObraSel('pg-obra')) { toast('Escolha a obra.', 'error'); return; }
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv';
+  inp.onchange = () => { const f = inp.files[0]; if (!f) return; const r = new FileReader(); r.onload = e => { try { _pgxProcessar(XLSX.read(e.target.result, { type: 'binary', cellDates: true })); } catch (x) { toast('Não consegui ler a planilha: ' + x.message, 'error'); } }; r.readAsBinaryString(f); };
+  inp.click();
+}
+async function _pgxProcessar(wb) {
+  const obra = _pgObraSel('pg-obra'), nm = wb.SheetNames.find(s => _orcxNorm(s) === 'programacao') || wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[nm], { header: 1, defval: '' }).slice(1), frs = _pgFrentesObra(obra), svs = _pgServicosObra(obra);
+  const avisos = [], itens = new Map();
+  rows.forEach((r, i) => { const [sem, fr, sv, q, , obs] = r, ln = 'Linha ' + (i + 2); if (!String(fr).trim() && !String(sv).trim() && !q) return;
+    const d = sem === '' ? _pgSem : _pgxData(sem); if (!d) { avisos.push(ln + ': data da semana inválida — ignorada.'); return; }
+    const f = frs.find(x => _orcxNorm(x.cod) === _orcxNorm(fr)) || frs.find(x => _orcxNorm(x.desc || x.nome) === _orcxNorm(fr)); if (!f) { avisos.push(ln + ': frente "' + fr + '" não existe nesta obra — ignorada.'); return; }
+    const s = svs.find(x => _orcxNorm(x.nome) === _orcxNorm(sv)); if (!s) { avisos.push(ln + ': serviço "' + sv + '" não existe nesta obra — ignorada.'); return; }
+    const qtd = _orcxNum(q); if (!(qtd > 0)) { avisos.push(ln + ' (' + f.cod + ' · ' + s.nome + '): sem quantidade — ignorada.'); return; }
+    const seg = _pgSeg(d), k = seg + '|' + f.cod + '|' + s.nome; if (itens.has(k)) avisos.push(ln + ': ' + f.cod + ' · ' + s.nome + ' repetido na mesma semana — ficou a última linha.');
+    itens.set(k, { semana: seg, frente: f.cod, servico: s.nome, unid: s.unid, qtd, obs: String(obs || '').trim() }); });
+  const L = [...itens.values()]; if (!L.length) { toast('Nada válido para importar.' + (avisos.length ? ' ' + avisos[0] : ''), 'error'); return; }
+  const sems = [...new Set(L.map(x => x.semana))].sort(), exist = x => (dados.programacao || []).find(p => p.obra === obra && p.semana === x.semana && p.frente === x.frente && p.servico === x.servico);
+  const nAt = L.filter(exist).length;
+  if (!confirm(`Importar a programação de ${getNomeObra(obra) || 'obra'}?\n\n${L.length} item(ns) em ${sems.length} semana(s): ${sems.map(_pgTxtSemana).join(', ')}\n${L.length - nAt} novo(s) · ${nAt} atualizado(s)${avisos.length ? '\n\nAvisos (' + avisos.length + '):\n· ' + avisos.slice(0, 8).join('\n· ') + (avisos.length > 8 ? '\n· …' : '') : ''}`)) return;
+  const agora = new Date().toISOString(), quem = usuarioLogado ? usuarioLogado.nome : '', l = dados.programacao || (dados.programacao = []);
+  const regs = L.map((x, i) => { const a = exist(x); return a ? { ...a, qtd: x.qtd, unid: x.unid || a.unid, obs: x.obs || a.obs || '', atualizadoEm: agora, atualizadoPor: quem }
+    : { id: 'pg' + Date.now().toString(36) + i + Math.random().toString(36).slice(2, 4), obra, ...x, criadoEm: agora, criadoPor: quem, atualizadoEm: agora, atualizadoPor: quem, origem: 'planilha' }; });
+  for (let i = 0; i < regs.length; i += 40) await Promise.all(regs.slice(i, i + 40).map(r => fbSave('programacao', r.id, r).catch(() => {})));
+  regs.forEach(r => { const j = l.findIndex(p => p.id === r.id); if (j >= 0) l[j] = r; else l.push(r); });
+  _pgSem = sems.includes(_pgSem) ? _pgSem : sems[0]; renderProgramacao(); try { _agendarResumoObras(); } catch (e) {}
+  toast('Programação importada: ' + regs.length + ' item(ns).' + (avisos.length ? ' ' + avisos.length + ' aviso(s).' : ''));
+}
+(function () {
+  const g = document.querySelector('#page-programacao .page-header .btn-group'); if (!g || document.getElementById('pg-btn-mod')) return;
+  const ex = [...g.querySelectorAll('button')].find(b => /Excel/.test(b.textContent));
+  (ex || g.firstElementChild).insertAdjacentHTML(ex ? 'afterend' : 'afterend', '<button class="btn btn-outline btn-sm" id="pg-btn-mod" onclick="pgModelo()" title="Planilha modelo da semana aberta na tela, com as frentes e serviços da obra">⬇ Modelo</button><button class="btn btn-outline btn-sm" id="pg-btn-imp" onclick="pgImportar()" title="Sobe a programação da planilha">⬆ Importar</button>');
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
