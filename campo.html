@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.18</div>
+  <div class="login-versao">ObraKontrol Campo · v3.19</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -4760,6 +4760,20 @@ async function abrirFrenteHoje(cod) {
 // ══════════════════════════════════════════════════════════════
 function _fhGestor() { const u = usuarioCampo || {}; return ['Admin', 'Supervisor', 'Gerência', 'Gerencia'].includes(u.perfil) || !!(u.perms && u.perms.dashboards); }
 function _fhN(v, d) { return (+v || 0).toLocaleString('pt-BR', { maximumFractionDigits: d == null ? 1 : d }); }
+// v3.19: programação da semana (planejamento) — programado x feito; o painel manda o feito até ontem e o app soma o de hoje
+function _fhSemana(res, frCod, ts) {
+  const s = res && res.semana; if (!s || !s.itens) return '';
+  const hj = _hojeISO(), d = new Date(hj + 'T12:00'), w = d.getDay(); d.setDate(d.getDate() - (w === 0 ? 6 : w - 1)); const seg = _hojeISO(d);
+  if (s.seg !== seg) return '';
+  const it = s.itens.filter(x => x.frente === frCod); if (!it.length) return '';
+  const fmt = x => x.slice(8, 10) + '/' + x.slice(5, 7), velho = s.ate && s.ate < hj;
+  const rows = it.map(x => { const hoje = (ts || []).filter(t => t.servico === x.servico).reduce((a, t) => a + (parseFloat(t.qtd) || 0), 0), tot = (+x.feito || 0) + hoje, pc = x.prog ? Math.round(tot / x.prog * 100) : 0;
+    return `<div style="margin:10px 0 2px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13.5px"><b style="font-weight:700">${_esc(x.servico)}</b><span style="white-space:nowrap"><b>${_fhN(tot)}</b> / ${_fhN(x.prog)} ${_esc(x.unid)}</span></div>
+      <div class="fx-bar" style="margin-top:6px"><i style="width:${Math.min(100, pc)}%;${pc >= 100 ? 'background:linear-gradient(90deg,#16a34a,#22c55e)' : ''}"></i></div>
+      <div class="fx-small" style="margin-top:3px">${pc}% da programação${hoje ? ' · hoje +' + _fhN(hoje) + ' ' + _esc(x.unid) : ''}</div></div>`; }).join('');
+  return `<div class="fx-card"><div class="fx-h"><span>Programação da semana</span><span>${fmt(s.seg)} a ${fmt(s.fim || s.seg)}</span></div>${rows}
+    <div class="fx-small" style="margin-top:6px">Programado pelo planejamento · feito = lançado na semana${velho ? ' (atualizado em ' + fmt(s.ate) + ')' : ''}</div></div>`;
+}
 function _fhR(v) { return (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function _fhMin(h) { if (!h) return null; const [a, b] = String(h).split(':').map(Number); return a * 60 + (b || 0); }
 abrirFrenteHoje = async function (cod) {
@@ -4818,6 +4832,7 @@ abrirFrenteHoje = async function (cod) {
     ${eqs.length ? `<div class="fx-card"><div class="fx-h"><span>Equipamentos</span><span>situação agora</span></div>${eqs.map(e => { const p = eqPar(e), enc = e.t.status !== 'aberto';
       const v = enc ? 'encerrado' : p ? 'parado ' + Math.max(0, minAgora - (_fhMin(p.ini) || minAgora)) + ' min' : 'desde ' + _esc(e.t.horaIni || '');
       return `<div class="fx-row"><span class="fx-dot ${enc ? 'c' : p ? 'a' : 'g'}"></span><div class="fx-t">${_esc(e.tag)}${eqInfo(e) ? ' · ' + _esc(eqInfo(e)) : ''}<div>${p ? _esc(p.motivo || 'Parado') + ' desde ' + _esc(p.ini || '') : _esc(e.op || 'sem operador informado')}</div></div><span class="fx-v">${v}</span></div>`; }).join('')}</div>` : ''}
+    ${_fhSemana(res, fr ? fr.cod : cod, ts)}
     ${avanco ? `<div class="fx-card"><div class="fx-h"><span>Avanço do serviço na obra</span><span>${_esc(res.versao || 'orçamento')}</span></div>${avanco}<div class="fx-small" style="margin-top:6px">Acumulado aprovado no painel${res.atualizadoEm ? ' · atualizado ' + new Date(res.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</div></div>` : ''}
     ${fotos.length ? `<div class="fx-card"><div class="fx-h"><span>Fotos de hoje</span><span>${fotos.length}</span></div><div class="fx-fotos">${fotos.map(f => `<div class="fh-f" data-fh="${_esc(f)}"></div>`).join('')}</div></div>` : ''}
     ${ts.length ? `<div class="fx-card"><div class="fx-h"><span>Equipes do dia</span><span>${ts.length}</span></div>${ts.map(t => `<div class="fx-row"><span class="fx-dot ${t.status === 'aberto' ? 'g' : 'c'}"></span><div class="fx-t">${_esc(t.servico || '—')}<div>${_esc(t.apontador || '')} · ${_esc(t.horaIni || '')}${t.horaFim ? '–' + _esc(t.horaFim) : ''} · ${(t.mo || []).length} pessoa(s)</div></div><span class="fx-v">${t.status === 'aberto' ? 'aberto' : t.qtd ? _fhN(t.qtd) + ' ' + _esc(t.unid || '') : 'encerrado'}</span></div>`).join('')}</div>` : ''}

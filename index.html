@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.46 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.47 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18714,8 +18714,8 @@ async function _kkGerar(nUsr) {
   const B = { lat: -21.4677, lng: -47.0047 };
   const FR = [['FR-001', 'Rede coletora — Rua Sete de Setembro', .002, .001], ['FR-002', 'Rede coletora — Av. Brasil', -.006, .004], ['FR-003', 'Ligações domiciliares — Vila Nova', .004, -.008], ['FR-004', 'Poços de visita (PV)', -.002, -.003], ['FR-005', 'Recomposição de pavimento — Centro', .007, .006], ['FR-006', 'Estação elevatória EEE-01', -.009, -.005]]
     .map(([cod, desc, a, b], i) => sv('frentes', { id: 'kk_fr' + i, cod, desc, resp: NOMES[[0, 1, 2, 0, 20, 1][i]], coord: (B.lat + a).toFixed(5) + ', ' + (B.lng + b).toFixed(5), obs: '', ...X }));
-  const SV = [['SV-01', 'Escavação mecânica de vala', 'm³', 6000, 95, 38], ['SV-02', 'Escoramento de vala', 'm²', 8000, 130, 22], ['SV-03', 'Assentamento de tubo PVC DN150', 'm', 5200, 88, 48], ['SV-04', 'Reaterro compactado de vala', 'm³', 5000, 85, 30],
-    ['SV-05', 'Execução de poço de visita', 'un', 120, 2, 2800], ['SV-06', 'Ligação domiciliar de esgoto', 'un', 900, 11, 420], ['SV-07', 'Recomposição de pavimento asfáltico', 'm²', 4500, 72, 85]]
+  const SV = [['SV-01', 'Escavação mecânica de vala', 'm³', 6000, 95, 38], ['SV-02', 'Escoramento de vala', 'm²', 8000, 130, 22], ['SV-03', 'Assentamento de tubo PVC DN150', 'm', 5200, 88, 32], ['SV-04', 'Reaterro compactado de vala', 'm³', 5000, 85, 33],
+    ['SV-05', 'Execução de poço de visita', 'un', 120, 2, 980], ['SV-06', 'Ligação domiciliar de esgoto', 'un', 900, 11, 145], ['SV-07', 'Recomposição de pavimento asfáltico', 'm²', 4500, 72, 36]]
     .map(([cod, nome, unidade, qtd, pd, cu], i) => ({ ...sv('tiposServico', { id: 'kk_sv' + i, cod, nome, unidade, meta: pd, uaNomes: [], ...X }), _q: qtd, _pd: pd, _cu: cu }));
   sv('orcamentos', { id: 'kk_orc', obra: O, nome: 'Executivo', status: 'validada', validadoEm: dia(50) + 'T10:00:00', criadoEm: dia(52), itens: SV.map(s => ({ servico: s.nome, unid: s.unidade, qtd: s._q, prodDia: s._pd, custoUnit: s._cu, equipe: [], equipamentos: [] })), kick: true });
   SV.forEach(s => { delete s._q; delete s._pd; delete s._cu; });
@@ -18761,6 +18761,7 @@ async function _kkGerar(nUsr) {
       });
     });
   }
+  try { _kkProgramacao(O, sv); } catch (e) { console.warn('kk prog', e); }   // v4.47
   // ── partes diárias (últimos 6 dias úteis, 4 máquinas)
   let pdn = 0; for (let n = 8; n >= 1; n--) { const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;
     [0, 1, 2, 7].forEach((qi, j) => { const e = EQ[qi], ap = (dados.aponEQ || []).find(a => a.kick && a.equipId === e.id && a.data === d); if (!ap) return;
@@ -18934,6 +18935,221 @@ function pdImprimirFiltro() { const l = _pdLista(); if (!l.length) { toast('Nada
     return r;
   };
 })();
+// ═══════════════════════════════════════════════════════════════
+// v4.47: PROGRAMAÇÃO SEMANAL (planejamento / Lean) + AVANÇO DA OBRA
+// · Programação: por semana (segunda a sábado; domingo conta na semana que terminou), o planejamento lança
+//   quanto vai fazer de cada serviço em cada frente. Feito = produção lançada na semana (pendente + aprovada).
+//   PPC = itens concluídos (feito ≥ programado) ÷ itens programados. Itens não cumpridos levam a causa.
+// · Avanço da obra: por serviço do orçamento vigente — orçado x executado acumulado (aprovado), % físico,
+//   produtividade e custo unitário real x previsto, previsão de término e a semana (programado x feito).
+// · O resumo vai para o app (resumoObra.semana) e aparece no "Ver frente".
+// ═══════════════════════════════════════════════════════════════
+const PG_CAUSAS = ['Material', 'Mão de obra', 'Equipamento', 'Projeto / interferência', 'Chuva / clima', 'Frente não liberada', 'Serviço anterior atrasado', 'Programação superestimada', 'Outro'];
+function _pgSeg(d) { const x = new Date((d || _hojeLocal()) + 'T12:00'); const w = x.getDay(); x.setDate(x.getDate() - (w === 0 ? 6 : w - 1)); return _hojeLocal(x); }
+function _pgAdd(d, n) { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + n); return _hojeLocal(x); }
+function _pgFmt(d) { return d.slice(8, 10) + '/' + d.slice(5, 7); }
+function _pgTxtSemana(seg) { return _pgFmt(seg) + ' a ' + _pgFmt(_pgAdd(seg, 5)) + '/' + seg.slice(0, 4); }
+const _pgSv = a => a.tipoServico || a.servico || '';
+const _pgOk = a => a && a.status !== 'rejeitado' && a.status !== 'descartado';
+// produção lançada (pendente + aprovada) por frente|serviço numa semana (seg..dom)
+function _pgFeito(obra, seg, ate) {
+  const fim = _pgAdd(seg, 6), m = {};
+  (dados.aponMO || []).forEach(a => { if (a.obra !== obra || !_pgOk(a) || a.data < seg || a.data > fim || (ate && a.data >= ate)) return; const q = parseFloat(a.qtd) || 0; if (!q) return;
+    const k = (a.frente || '') + '|' + _pgSv(a); m[k] = (m[k] || 0) + q; });
+  return m;
+}
+function _pgItens(obra, seg) { return (dados.programacao || []).filter(p => p.obra === obra && p.semana === seg); }
+function _pgSituacao(prog, feito, passada) { if (!prog) return ['—', 'gray']; const p = feito / prog; if (p >= 1) return ['Concluído', 'green']; if (passada) return ['Não cumprido', 'red']; return feito ? ['Em andamento', 'blue'] : ['Não iniciado', 'gray']; }
+function _pgPPC(obra, seg) { const it = _pgItens(obra, seg); if (!it.length) return null; const f = _pgFeito(obra, seg); const ok = it.filter(p => (f[p.frente + '|' + p.servico] || 0) >= (+p.qtd || 0) && +p.qtd > 0).length; return { ok, n: it.length, pct: Math.round(ok / it.length * 100) }; }
+function _pgObraSel(id) { const s = document.getElementById(id); return (s && s.value) || (typeof obraAtiva !== 'undefined' && obraAtiva && obraAtiva.id !== 'todas' ? obraAtiva.id : '') || ''; }
+function _pgObrasOpts(id) { const s = document.getElementById(id); if (!s) return; const v = _pgObraSel(id), ob = (dados.obras || []).filter(o => o.status !== 'Encerrada');
+  s.innerHTML = '<option value="">Escolha a obra…</option>' + ob.map(o => `<option value="${_e(o.id)}" ${o.id === v ? 'selected' : ''}>${_e((o.cod ? o.cod + ' · ' : '') + (o.nome || ''))}</option>`).join(''); if (!v && ob.length === 1) s.value = ob[0].id; }
+function _pgServicosObra(obra) { const vig = orcVigente(obra), m = new Map();
+  ((vig && vig.itens) || []).forEach(i => m.set(i.servico, i.unid || ''));
+  (dados.tiposServico || []).filter(t => !t.obra || t.obra === obra).forEach(t => { if (!m.has(t.nome)) m.set(t.nome, t.unidade || ''); });
+  return [...m.entries()].map(([nome, unid]) => ({ nome, unid })).sort((a, b) => a.nome.localeCompare(b.nome)); }
+function _pgFrentesObra(obra) { return (dados.frentes || []).filter(f => f.obra === obra).sort((a, b) => String(a.cod).localeCompare(String(b.cod))); }
+let _pgSem = _pgSeg();
+function _pgIr(id) { showPage(id, document.querySelector('.sidebar .nav-item[onclick*="showPage(\'' + id + '\'"]')); }
+
+// ── TELA: Programação semanal
+function renderProgramacao() {
+  _pgObrasOpts('pg-obra'); const obra = _pgObraSel('pg-obra'), corpo = document.getElementById('pg-corpo'); if (!corpo) return;
+  document.getElementById('pg-sem').textContent = 'Semana ' + _pgTxtSemana(_pgSem) + (_pgSem === _pgSeg() ? ' · atual' : '');
+  if (!obra) { corpo.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-3);padding:30px">Escolha a obra para ver ou montar a programação.</div></div>'; return; }
+  const it = _pgItens(obra, _pgSem), f = _pgFeito(obra, _pgSem), hoje = _hojeLocal(), passada = _pgAdd(_pgSem, 5) < hoje, ppc = _pgPPC(obra, _pgSem);
+  const ant = _pgPPC(obra, _pgAdd(_pgSem, -7)), frs = _pgFrentesObra(obra), nomeFr = c => ((frs.find(x => x.cod === c) || {}).desc || '');
+  const atras = it.filter(p => { const fe = f[p.frente + '|' + p.servico] || 0; return passada ? fe < (+p.qtd || 0) : false; });
+  const k = (v, l, s, c) => `<div class="card"><div class="card-body" style="padding:14px 16px"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)">${l}</div><div style="font-size:26px;font-weight:800;margin-top:4px;${c ? 'color:' + c : ''}">${v}</div><div style="font-size:12px;color:var(--text-3)">${s || ''}</div></div></div>`;
+  const ppcCor = p => p == null ? '' : p >= 80 ? '#16A34A' : p >= 60 ? '#D97706' : '#DC2626';
+  const grupos = {}; it.forEach(p => (grupos[p.frente] = grupos[p.frente] || []).push(p));
+  const linhas = Object.keys(grupos).sort().map(fr => grupos[fr].sort((a, b) => a.servico.localeCompare(b.servico)).map((p, i) => {
+    const fe = f[p.frente + '|' + p.servico] || 0, pr = +p.qtd || 0, pc = pr ? Math.round(fe / pr * 100) : 0, [st, cor] = _pgSituacao(pr, fe, passada);
+    return `<tr>${i === 0 ? `<td rowspan="${grupos[fr].length}" style="vertical-align:top"><b>${_e(fr)}</b><div style="font-size:12px;color:var(--text-3)">${_e(nomeFr(fr))}</div></td>` : ''}
+      <td>${_e(p.servico)}</td><td style="text-align:right;white-space:nowrap"><b>${_n1(pr)}</b> ${_e(p.unid || '')}</td><td style="text-align:right;white-space:nowrap">${_n1(fe)} ${_e(p.unid || '')}</td>
+      <td style="min-width:120px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:8px;border-radius:6px;background:var(--border)"><div style="height:100%;border-radius:6px;width:${Math.min(100, pc)}%;background:${pc >= 100 ? '#16A34A' : passada ? '#DC2626' : '#2563EB'}"></div></div><b style="font-size:12px;min-width:36px;text-align:right">${pc}%</b></div></td>
+      <td><span class="tag tag-${cor}">${st}</span>${p.causa ? `<div style="font-size:11.5px;color:var(--text-3);margin-top:2px">${_e(p.causa)}${p.causaObs ? ' · ' + _e(p.causaObs) : ''}</div>` : ''}</td>
+      <td style="white-space:nowrap;text-align:right"><button class="btn btn-outline btn-sm" onclick="pgEditar('${_e(p.id)}')">${passada && fe < pr && !p.causa ? 'Causa' : 'Editar'}</button> <button class="btn btn-outline btn-sm" onclick="pgExcluir('${_e(p.id)}')" title="Excluir">🗑</button></td></tr>`; }).join('')).join('');
+  corpo.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:12px">
+      ${k(ppc ? ppc.pct + '%' : '—', passada ? 'PPC da semana' : 'PPC parcial · semana em andamento', ppc ? ppc.ok + ' de ' + ppc.n + ' itens concluídos' + (passada ? '' : ' até agora') : 'nada programado', passada ? ppcCor(ppc && ppc.pct) : '')}
+      ${k(ant ? ant.pct + '%' : '—', 'PPC da semana anterior', ant ? ant.ok + ' de ' + ant.n + ' itens' : 'sem programação', ppcCor(ant && ant.pct))}
+      ${k(it.length, 'Itens programados', Object.keys(grupos).length + ' frente(s)')}
+      ${k(passada ? atras.length : '—', 'Não cumpridos', passada ? atras.filter(p => !p.causa).length + ' sem causa informada' : 'a semana ainda não terminou', passada && atras.length ? '#DC2626' : '')}</div>
+    <div class="card"><div class="card-body">
+      ${it.length ? `<div class="table-wrap"><table><thead><tr><th>Frente</th><th>Serviço</th><th style="text-align:right">Programado</th><th style="text-align:right">Feito</th><th>%</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+        <div style="font-size:11.5px;color:var(--text-3);margin-top:8px">Feito = produção lançada no app nesta semana (pendentes e aprovados). PPC = itens concluídos ÷ itens programados. Domingo conta na semana que terminou.</div>`
+      : `<div style="text-align:center;padding:26px;color:var(--text-3)">Nada programado para esta semana.<div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-primary" onclick="pgEditar()">+ Programar serviço</button>${_pgItens(obra, _pgAdd(_pgSem, -7)).length ? '<button class="btn btn-outline" onclick="pgCopiarAnterior()">Copiar a semana anterior</button>' : ''}</div></div>`}
+    </div></div>`;
+}
+function pgSemana(d) { _pgSem = d === 0 ? _pgSeg() : _pgAdd(_pgSem, d * 7); renderProgramacao(); }
+function pgEditar(id) {
+  const obra = _pgObraSel('pg-obra'); if (!obra) { toast('Escolha a obra.', 'error'); return; }
+  const p = id ? (dados.programacao || []).find(x => x.id === id) : null, frs = _pgFrentesObra(obra), svs = _pgServicosObra(obra);
+  const passada = _pgAdd(_pgSem, 5) < _hojeLocal(), fe = p ? (_pgFeito(obra, p.semana)[p.frente + '|' + p.servico] || 0) : 0, mostraCausa = p && (passada || p.causa) && fe < (+p.qtd || 0);
+  if (!document.getElementById('modal-pg')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-pg"><div class="modal" style="max-width:520px"><div class="modal-header"><span class="modal-title" id="pg-m-tit"></span><button class="modal-close" onclick="closeModal('modal-pg')">×</button></div><div class="modal-body" id="pg-m-body"></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-pg')">Cancelar</button><button class="btn btn-primary" onclick="pgSalvar()">Salvar</button></div></div></div>`);
+  document.getElementById('pg-m-tit').textContent = (p ? 'Editar programação' : 'Programar serviço') + ' · semana ' + _pgTxtSemana(p ? p.semana : _pgSem);
+  document.getElementById('pg-m-body').innerHTML = `<input type="hidden" id="pg-id" value="${_e(p ? p.id : '')}">
+    <div class="form-group"><label class="form-label">Frente de serviço *</label><select class="form-control" id="pg-frente"><option value="">Escolha…</option>${frs.map(f => `<option value="${_e(f.cod)}" ${p && p.frente === f.cod ? 'selected' : ''}>${_e(f.cod + (f.desc ? ' · ' + f.desc : ''))}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Serviço *</label><select class="form-control" id="pg-serv" onchange="document.getElementById('pg-un').textContent=this.selectedOptions[0]?.dataset.u||''"><option value="">Escolha…</option>${svs.map(s => `<option value="${_e(s.nome)}" data-u="${_e(s.unid)}" ${p && p.servico === s.nome ? 'selected' : ''}>${_e(s.nome)}${s.unid ? ' (' + _e(s.unid) + ')' : ''}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Quantidade programada na semana *</label><div style="display:flex;gap:8px;align-items:center"><input class="form-control" id="pg-qtd" type="number" min="0" step="any" value="${p ? _e(p.qtd) : ''}" style="max-width:180px"><b id="pg-un">${_e(p ? p.unid || '' : '')}</b></div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:4px" id="pg-dica"></div></div>
+    ${mostraCausa ? `<div class="form-group"><label class="form-label">Causa de não cumprimento</label><select class="form-control" id="pg-causa"><option value="">—</option>${PG_CAUSAS.map(c => `<option ${p.causa === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+      <input class="form-control" id="pg-causa-obs" placeholder="Detalhe (opcional)" style="margin-top:6px" value="${_e(p.causaObs || '')}"><div style="font-size:12px;color:var(--text-3);margin-top:4px">Feito ${_n1(fe)} de ${_n1(p.qtd)} ${_e(p.unid || '')}.</div></div>` : ''}
+    <div class="form-group"><label class="form-label">Observação</label><input class="form-control" id="pg-obs" value="${_e(p ? p.obs || '' : '')}" placeholder="Ex.: depende da liberação do trecho"></div>`;
+  const dica = () => { const sv = document.getElementById('pg-serv').value, vig = orcVigente(obra), it = vig && (vig.itens || []).find(i => i.servico === sv);
+    document.getElementById('pg-dica').textContent = it && it.prodDia ? 'Referência do orçamento: ' + _n1(it.prodDia) + ' ' + (it.unid || '') + '/dia → ' + _n1(it.prodDia * 6) + ' ' + (it.unid || '') + ' em 6 dias' : ''; };
+  document.getElementById('pg-serv').addEventListener('change', dica); dica();
+  openModal('modal-pg');
+}
+async function pgSalvar() {
+  const g = k => document.getElementById(k), obra = _pgObraSel('pg-obra'), id = g('pg-id').value, ant = id ? (dados.programacao || []).find(x => x.id === id) : null;
+  const frente = g('pg-frente').value, serv = g('pg-serv').value, qtd = parseFloat(String(g('pg-qtd').value).replace(',', '.'));
+  if (!frente || !serv || !(qtd > 0)) { toast('Preencha frente, serviço e quantidade.', 'error'); return; }
+  const semana = ant ? ant.semana : _pgSem;
+  if ((dados.programacao || []).some(x => x.id !== id && x.obra === obra && x.semana === semana && x.frente === frente && x.servico === serv)) { toast('Esse serviço já está programado nessa frente nesta semana. Edite o que já existe.', 'error'); return; }
+  const un = (_pgServicosObra(obra).find(s => s.nome === serv) || {}).unid || '';
+  const reg = { ...(ant || {}), id: id || 'pg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), obra, semana, frente, servico: serv, unid: un, qtd, obs: g('pg-obs').value.trim(),
+    ...(g('pg-causa') ? { causa: g('pg-causa').value, causaObs: g('pg-causa-obs').value.trim() } : {}), atualizadoEm: new Date().toISOString(), atualizadoPor: usuarioLogado ? usuarioLogado.nome : '' };
+  if (!ant) { reg.criadoEm = reg.atualizadoEm; reg.criadoPor = reg.atualizadoPor; }
+  try { await fbSave('programacao', reg.id, reg); } catch (e) { toast('Não consegui salvar: ' + (e.code || e.message), 'error'); return; }
+  const l = dados.programacao || (dados.programacao = []), i = l.findIndex(x => x.id === reg.id); if (i >= 0) l[i] = reg; else l.push(reg);
+  closeModal('modal-pg'); renderProgramacao(); _agendarResumoObras(); toast('Programação salva.');
+}
+async function pgExcluir(id) { const p = (dados.programacao || []).find(x => x.id === id); if (!p || !confirm('Tirar ' + p.servico + ' (' + p.frente + ') da programação desta semana?')) return;
+  try { await fbDelete('programacao', id); } catch (e) {} dados.programacao = (dados.programacao || []).filter(x => x.id !== id); renderProgramacao(); _agendarResumoObras(); }
+async function pgCopiarAnterior() {
+  const obra = _pgObraSel('pg-obra'), de = _pgItens(obra, _pgAdd(_pgSem, -7)), ja = _pgItens(obra, _pgSem); if (!de.length) return;
+  const novos = de.filter(p => !ja.some(x => x.frente === p.frente && x.servico === p.servico)).map((p, i) => ({ id: 'pg' + Date.now().toString(36) + i, obra, semana: _pgSem, frente: p.frente, servico: p.servico, unid: p.unid, qtd: p.qtd, obs: '', criadoEm: new Date().toISOString(), criadoPor: usuarioLogado ? usuarioLogado.nome : '' }));
+  await Promise.all(novos.map(n => fbSave('programacao', n.id, n).catch(() => {}))); (dados.programacao = dados.programacao || []).push(...novos);
+  renderProgramacao(); _agendarResumoObras(); toast(novos.length + ' item(ns) copiado(s). Ajuste as quantidades se precisar.'); }
+function pgExcel() {
+  const obra = _pgObraSel('pg-obra'); if (!obra) return toast('Escolha a obra.', 'error');
+  const sems = [...new Set((dados.programacao || []).filter(p => p.obra === obra).map(p => p.semana))].sort();
+  const rows = [['Semana', 'Frente', 'Serviço', 'Unid.', 'Programado', 'Feito', '%', 'Situação', 'Causa', 'Detalhe', 'Observação']];
+  sems.forEach(s => { const f = _pgFeito(obra, s), pas = _pgAdd(s, 5) < _hojeLocal(); _pgItens(obra, s).forEach(p => { const fe = f[p.frente + '|' + p.servico] || 0;
+    rows.push([_pgTxtSemana(s), p.frente, p.servico, p.unid || '', +p.qtd || 0, +fe.toFixed(2), p.qtd ? Math.round(fe / p.qtd * 100) : 0, _pgSituacao(+p.qtd, fe, pas)[0], p.causa || '', p.causaObs || '', p.obs || '']); }); });
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Programação'); XLSX.writeFile(wb, 'Programacao_semanal_' + (getNomeObra(obra) || obra).replace(/[^\w-]+/g, '_').slice(0, 40) + '.xlsx');
+}
+
+// ── TELA: Avanço da obra
+function _avDados(obra) {
+  const r = _resumoObra(obra); if (!r) return null;
+  const seg = _pgSeg(), f = _pgFeito(obra, seg), it = _pgItens(obra, seg), hoje = new Date(_hojeLocal() + 'T12:00');
+  r.servicos.forEach(s => { const resta = Math.max(0, s.qtd - s.exec); s.pct = s.qtd ? s.exec / s.qtd * 100 : 0; s.custoReal = s.custoUnitReal * s.exec; s.custoPrevExec = s.custoUnitPrev * s.exec;
+    s.diasResta = s.prodReal ? Math.ceil(resta / s.prodReal) : null; if (s.diasResta != null) { const d = new Date(hoje); let n = s.diasResta; while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0) n--; } s.fimPrev = _hojeLocal(d); }
+    const pr = it.filter(p => p.servico === s.servico); s.semProg = pr.reduce((t, p) => t + (+p.qtd || 0), 0); s.semFeito = Object.entries(f).filter(([k]) => k.split('|')[1] === s.servico).reduce((t, [, v]) => t + v, 0); });
+  return r;
+}
+function renderAvanco() {
+  _pgObrasOpts('av-obra'); const obra = _pgObraSel('av-obra'), corpo = document.getElementById('av-corpo'); if (!corpo) return;
+  if (!obra) { corpo.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-3);padding:30px">Escolha a obra.</div></div>'; return; }
+  const r = orcVigente(obra) ? _avDados(obra) : null;
+  if (!r) { corpo.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;color:var(--text-3);padding:30px">Esta obra ainda não tem orçamento validado.<div style="margin-top:10px"><button class="btn btn-primary" onclick="_pgIr('orcamento')">Ir para o Orçamento previsto</button></div></div></div>`; return; }
+  const S = r.servicos, vOrc = S.reduce((t, s) => t + s.qtd * s.custoUnitPrev, 0), vExec = S.reduce((t, s) => t + s.custoPrevExec, 0), cReal = S.reduce((t, s) => t + s.custoReal, 0);
+  const pFis = vOrc ? vExec / vOrc * 100 : 0, desvio = cReal - vExec, ppc = _pgPPC(obra, _pgSeg());
+  const k = (v, l, s, c) => `<div class="card"><div class="card-body" style="padding:14px 16px"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)">${l}</div><div style="font-size:24px;font-weight:800;margin-top:4px;${c ? 'color:' + c : ''}">${v}</div><div style="font-size:12px;color:var(--text-3)">${s || ''}</div></div></div>`;
+  const bar = (p, c) => `<div style="display:flex;align-items:center;gap:6px;min-width:120px"><div style="flex:1;height:8px;border-radius:6px;background:var(--border)"><div style="height:100%;border-radius:6px;width:${Math.min(100, p)}%;background:${c}"></div></div><b style="font-size:12px;min-width:38px;text-align:right">${Math.round(p)}%</b></div>`;
+  const cmp = (real, prev, menorMelhor, fmt) => !real ? '—' : `<b>${fmt(real)}</b><div style="font-size:11.5px;color:${(menorMelhor ? real <= prev : real >= prev) ? '#16A34A' : '#DC2626'}">prev. ${fmt(prev)}</div>`;
+  const m2 = v => 'R$ ' + (+v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  corpo.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:12px">
+      ${k(pFis.toFixed(1).replace('.', ',') + '%', 'Avanço físico da obra', 'ponderado pelo valor orçado de cada serviço')}
+      ${k(_moeda(cReal), 'Custo real acumulado', 'mão de obra + equipamentos (aprovado)')}
+      ${k((desvio > 0 ? '+' : '') + _moeda(desvio), 'Desvio de custo', 'real − previsto do que já foi feito', desvio > 0 ? '#DC2626' : '#16A34A')}
+      ${(() => { const pa = _pgPPC(obra, _pgAdd(_pgSeg(), -7)); return ppc ? k(ppc.pct + '%', 'PPC parcial · semana atual', ppc.ok + ' de ' + ppc.n + ' itens até agora' + (pa ? ' · anterior ' + pa.pct + '%' : '')) : pa ? k(pa.pct + '%', 'PPC da semana anterior', pa.ok + ' de ' + pa.n + ' itens', pa.pct >= 80 ? '#16A34A' : pa.pct >= 60 ? '#D97706' : '#DC2626') : k('—', 'PPC da semana', 'sem programação'); })()}</div>
+    <div class="card"><div class="card-body"><div class="table-wrap"><table><thead><tr><th>Serviço</th><th style="text-align:right">Orçado</th><th style="text-align:right">Executado</th><th>Avanço físico</th><th style="text-align:right">Produtividade /dia</th><th style="text-align:right">Custo unitário</th><th style="text-align:right">Custo real</th><th>Término previsto</th><th style="text-align:right">Semana · prog. x feito</th></tr></thead><tbody>
+      ${S.map(s => `<tr><td><b>${_e(s.servico)}</b></td><td style="text-align:right;white-space:nowrap">${_n1(s.qtd)} ${_e(s.unid)}</td><td style="text-align:right"><b>${_n1(s.exec)}</b> ${_e(s.unid)}<div style="font-size:11.5px;color:var(--text-3)">${s.dias} dia(s) com produção</div></td>
+        <td>${bar(s.pct, '#2563EB')}</td><td style="text-align:right">${cmp(s.prodReal, s.prodDia, false, v => _n1(v))}</td><td style="text-align:right">${cmp(s.custoUnitReal, s.custoUnitPrev, true, m2)}</td>
+        <td style="text-align:right">${s.custoReal ? _moeda(s.custoReal) : '—'}</td><td>${s.pct >= 100 ? '<span class="tag tag-green">Concluído</span>' : s.fimPrev ? _abFmtD(s.fimPrev) + `<div style="font-size:11.5px;color:var(--text-3)">${s.diasResta} dia(s) útil(eis) no ritmo atual</div>` : '<span style="color:var(--text-3)">sem produção</span>'}</td>
+        <td style="text-align:right">${s.semProg ? `<b>${_n1(s.semFeito)}</b> / ${_n1(s.semProg)} ${_e(s.unid)}<div style="font-size:11.5px;color:var(--text-3)">${Math.round(s.semFeito / s.semProg * 100)}%</div>` : s.semFeito ? _n1(s.semFeito) + ' ' + _e(s.unid) + '<div style="font-size:11.5px;color:var(--text-3)">sem programação</div>' : '—'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="font-size:11.5px;color:var(--text-3);margin-top:8px">Orçamento vigente: <b>${_e(r.versao || '—')}</b>. Executado e custos = apontamentos aprovados desde o início da obra (o diesel e o material não entram no custo unitário). Término previsto = o que falta ÷ média real por dia, contando segunda a sábado. A semana conta pendentes e aprovados. É o mesmo cálculo que aparece no "Ver frente" do app.</div></div></div>`;
+}
+function avExcel() {
+  const obra = _pgObraSel('av-obra'), r = obra && _avDados(obra); if (!r) return toast('Escolha uma obra com orçamento validado.', 'error');
+  const rows = [['Serviço', 'Unid.', 'Orçado', 'Executado', 'Avanço %', 'Dias com produção', 'Prod./dia real', 'Prod./dia prevista', 'Custo unit. real', 'Custo unit. previsto', 'Custo real', 'Término previsto', 'Semana programado', 'Semana feito']]
+    .concat(r.servicos.map(s => [s.servico, s.unid, s.qtd, s.exec, +s.pct.toFixed(1), s.dias, s.prodReal, s.prodDia, s.custoUnitReal, s.custoUnitPrev, +s.custoReal.toFixed(2), s.fimPrev ? _abFmtD(s.fimPrev) : '', s.semProg, +s.semFeito.toFixed(2)]));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Avanço'); XLSX.writeFile(wb, 'Avanco_da_obra_' + (getNomeObra(obra) || obra).replace(/[^\w-]+/g, '_').slice(0, 40) + '.xlsx');
+}
+
+// ── resumo para o app: a semana (programado x feito até ontem) por frente
+(function () {
+  const oR = _resumoObra;
+  _resumoObra = function (obra) {
+    let r = null; try { r = oR.apply(this, arguments); } catch (e) {}
+    const seg = _pgSeg(), hoje = _hojeLocal(), it = _pgItens(obra, seg);
+    if (!r && !it.length) return null;
+    r = r || { obra, versao: '', servicos: [] };
+    const f = _pgFeito(obra, seg, hoje);   // até ontem: a produção de hoje o app soma pelos turnos do dia
+    r.semana = { seg, fim: _pgAdd(seg, 5), ate: hoje, itens: it.map(p => ({ frente: p.frente, servico: p.servico, unid: p.unid || '', prog: +p.qtd || 0, feito: +(f[p.frente + '|' + p.servico] || 0).toFixed(2) })) };
+    return r;
+  };
+})();
+
+// ── menu, telas, dados
+(function () {
+  const $ = id => document.getElementById(id), sb = document.querySelector('.sidebar');
+  const ref = $('page-orcamento');
+  if (ref && !$('page-programacao')) ref.insertAdjacentHTML('afterend', `
+    <div class="page" id="page-programacao"><div class="page-header"><div><div class="page-title">Programação semanal</div><div class="page-sub">O que cada frente vai produzir na semana (segunda a sábado) · acompanhamento do PPC</div></div>
+      <div class="btn-group"><select class="form-control" id="pg-obra" onchange="renderProgramacao()" style="min-width:220px"></select><button class="btn btn-outline btn-sm" onclick="pgExcel()">⬇ Excel</button><button class="btn btn-outline btn-sm" onclick="pgCopiarAnterior()">Copiar semana anterior</button><button class="btn btn-primary btn-sm" onclick="pgEditar()">+ Programar serviço</button></div></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" onclick="pgSemana(-1)" aria-label="Semana anterior">◀</button><b id="pg-sem" style="min-width:230px;text-align:center"></b><button class="btn btn-outline btn-sm" onclick="pgSemana(1)" aria-label="Próxima semana">▶</button><button class="btn btn-outline btn-sm" onclick="pgSemana(0)">Semana atual</button></div>
+      <div id="pg-corpo"></div></div>
+    <div class="page" id="page-avanco"><div class="page-header"><div><div class="page-title">Avanço da obra</div><div class="page-sub">Previsto x realizado do projeto inteiro, por serviço do orçamento vigente</div></div>
+      <div class="btn-group"><select class="form-control" id="av-obra" onchange="renderAvanco()" style="min-width:220px"></select><button class="btn btn-outline btn-sm" onclick="avExcel()">⬇ Excel</button></div></div>
+      <div id="av-corpo"></div></div>`);
+  const orcNav = sb && sb.querySelector(`.nav-item[onclick*="showPage('orcamento'"]`);
+  if (orcNav && !sb.querySelector(`.nav-item[onclick*="showPage('programacao'"]`)) orcNav.insertAdjacentHTML('afterend', `
+    <div class="nav-item" onclick="showPage('programacao',this)" title="Programação semanal"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><polyline points="8 14 11 17 16 12"/></svg><span>Programação semanal</span></div>
+    <div class="nav-item" onclick="showPage('avanco',this)" title="Avanço da obra"><svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg><span>Avanço da obra</span></div>`);
+  dados.programacao = dados.programacao || [];
+  try { _COLS_AO_VIVO.push('programacao'); } catch (e) {}
+  const carregar = async fn => { if (!(db && _firebaseReady)) return; const r = await fbLoadAll('programacao').catch(() => null); if (r) dados.programacao = r; fn(); };
+  const oInit = window.pageInit; window.pageInit = function (id) { const r = oInit ? oInit.apply(this, arguments) : undefined;
+    if (id === 'programacao') { renderProgramacao(); carregar(renderProgramacao); }
+    if (id === 'avanco') { renderAvanco(); carregar(renderAvanco); }
+    return r; };
+  const oSel = window.selecionarObra; if (oSel) window.selecionarObra = function () { const r = oSel.apply(this, arguments); try { const a = document.querySelector('.page.active')?.id;
+    const o = typeof obraAtiva !== 'undefined' && obraAtiva && obraAtiva.id !== 'todas' ? obraAtiva.id : '';
+    if (a === 'page-programacao') { if (o && $('pg-obra')) $('pg-obra').value = o; renderProgramacao(); } if (a === 'page-avanco') { if (o && $('av-obra')) $('av-obra').value = o; renderAvanco(); } } catch (e) {} return r; };
+  // carrega a programação já na entrada (o resumo do app precisa dela)
+  setTimeout(() => carregar(() => { try { _agendarResumoObras(); } catch (e) {} }), 3000);
+})();
+
+// kickoff: programação das semanas geradas (passadas com PPC realista + semana atual)
+(function () {
+  try { if (!_KK_COLS.includes('programacao')) _KK_COLS.push('programacao'); } catch (e) {}
+})();
+function _kkProgramacao(O, sv) {
+  let x = 777; const R = () => (x = (x * 9301 + 49297) % 233280) / 233280, hoje = _hojeLocal(), atual = _pgSeg(hoje), m = {};
+  (dados.aponMO || []).filter(a => a.kick && a.obra === O && +a.qtd).forEach(a => { const k = _pgSeg(a.data) + '|' + a.frente + '|' + _pgSv(a) + '|' + (a.unid || ''); m[k] = (m[k] || 0) + (+a.qtd); });
+  const C = ['Chuva / clima', 'Equipamento', 'Material', 'Frente não liberada', 'Mão de obra'];
+  Object.entries(m).forEach(([k, feito], i) => { const [semana, frente, servico, unid] = k.split('|');
+    let qtd, causa = '';
+    if (semana === atual) { const meta = (((orcVigente(O) || {}).itens || []).find(it => it.servico === servico) || {}).prodDia || 0; qtd = Math.max(Math.round(feito * 1.2), Math.round(meta * 6 * (.9 + R() * .15))); }
+    else if (R() < .72) qtd = Math.max(1, Math.round(feito * (.86 + R() * .12)));
+    else { qtd = Math.round(feito * (1.12 + R() * .25)); causa = C[i % C.length]; }
+    sv('programacao', { id: 'kk_pg' + i, obra: O, semana, frente, servico, unid, qtd, obs: '', ...(causa ? { causa } : {}), criadoEm: semana + 'T08:00:00', criadoPor: 'Planejamento', kick: true }); });
+}
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
