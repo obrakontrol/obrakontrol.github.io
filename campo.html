@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.19</div>
+  <div class="login-versao">ObraKontrol Campo · v3.20</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -4760,6 +4760,18 @@ async function abrirFrenteHoje(cod) {
 // ══════════════════════════════════════════════════════════════
 function _fhGestor() { const u = usuarioCampo || {}; return ['Admin', 'Supervisor', 'Gerência', 'Gerencia'].includes(u.perfil) || !!(u.perms && u.perms.dashboards); }
 function _fhN(v, d) { return (+v || 0).toLocaleString('pt-BR', { maximumFractionDigits: d == null ? 1 : d }); }
+// v3.20: números da frente — "agora" (pessoas e máquinas trabalhando, máquinas paradas) e, com turno encerrado, o total do dia
+function _fhNums(ts, ab, eqs, eqPar, pessoas, nTrab) {
+  const mn = h => { const m = String(h || '').match(/(\d+):(\d+)/); return m ? +m[1] * 60 + +m[2] : null; };
+  const pDia = new Set(ts.flatMap(t => (t.mo || []).map(x => x.id || x.nome))).size, mDia = eqs.length;
+  const hParDia = ts.reduce((a, t) => a + (t.paradas || []).filter(p => p.fim).reduce((b, p) => { const h = +p.horas || ((mn(p.fim) ?? 0) - (mn(p.ini) ?? 0)) / 60; return b + (h > 0 ? h : 0); }, 0), 0);
+  const nPar = eqs.filter(e => e.t.status === 'aberto' && eqPar(e)).length, enc = ts.filter(t => t.status !== 'aberto').length;
+  const k = (v, l, c) => `<div class="fx-k ${c || ''}"><b>${v}</b><span>${l}</span></div>`;
+  const hh = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); };
+  if (!ab.length && ts.length) return `<div class="fx-card"><div class="fx-h"><span>Dia encerrado</span><span>${enc} turno(s)</span></div><div class="fx-ks">${k(pDia, 'pessoas no dia', 'ok')}${k(mDia, 'máquinas no dia')}${k(hParDia ? hh(hParDia) : '0h', 'horas paradas', hParDia ? 'warn' : '')}</div></div>`;
+  return `<div class="fx-card"><div class="fx-h"><span>Agora</span><span>${ab.length} turno(s) aberto(s)</span></div><div class="fx-ks">${k(pessoas, 'pessoas trabalhando', 'ok')}${k(nTrab, 'máquinas trabalhando')}${k(nPar, 'máquinas paradas', nPar ? 'warn' : '')}</div>
+    ${enc ? `<div class="fx-small" style="margin-top:8px">No dia até agora: <b>${pDia}</b> pessoa(s) · <b>${mDia}</b> máquina(s)${hParDia ? ' · <b>' + hh(hParDia) + '</b> parado' : ''} · ${enc} turno(s) encerrado(s)</div>` : ''}</div>`;
+}
 // v3.19: programação da semana (planejamento) — programado x feito; o painel manda o feito até ontem e o app soma o de hoje
 function _fhSemana(res, frCod, ts) {
   const s = res && res.semana; if (!s || !s.itens) return '';
@@ -4828,14 +4840,14 @@ abrirFrenteHoje = async function (cod) {
   const sub = ab.length ? `${ab.length} equipe(s) trabalhando agora` : ts.length ? 'Nenhuma equipe aberta agora' : 'Nenhum apontamento hoje';
   el.innerHTML = topo(dia.charAt(0).toUpperCase() + dia.slice(1) + ' · ' + sub) + `<div class="fx-wrap">
     ${ts.length ? (servs.length > 1 ? multi() : servs.map(card).join('')) : '<div class="fx-card fx-vazio">Nenhum apontamento nesta frente hoje.</div>'}
-    <div class="fx-card"><div class="fx-ks"><div class="fx-k ok"><b>${pessoas}</b><span>pessoas agora</span></div><div class="fx-k"><b>${nTrab}</b><span>trabalhando</span></div><div class="fx-k ${parAb.length ? 'warn' : ''}"><b>${parAb.length}</b><span>parada(s) agora</span></div></div></div>
+    ${_fhNums(ts, ab, eqs, eqPar, pessoas, nTrab)}
     ${eqs.length ? `<div class="fx-card"><div class="fx-h"><span>Equipamentos</span><span>situação agora</span></div>${eqs.map(e => { const p = eqPar(e), enc = e.t.status !== 'aberto';
       const v = enc ? 'encerrado' : p ? 'parado ' + Math.max(0, minAgora - (_fhMin(p.ini) || minAgora)) + ' min' : 'desde ' + _esc(e.t.horaIni || '');
       return `<div class="fx-row"><span class="fx-dot ${enc ? 'c' : p ? 'a' : 'g'}"></span><div class="fx-t">${_esc(e.tag)}${eqInfo(e) ? ' · ' + _esc(eqInfo(e)) : ''}<div>${p ? _esc(p.motivo || 'Parado') + ' desde ' + _esc(p.ini || '') : _esc(e.op || 'sem operador informado')}</div></div><span class="fx-v">${v}</span></div>`; }).join('')}</div>` : ''}
     ${_fhSemana(res, fr ? fr.cod : cod, ts)}
     ${avanco ? `<div class="fx-card"><div class="fx-h"><span>Avanço do serviço na obra</span><span>${_esc(res.versao || 'orçamento')}</span></div>${avanco}<div class="fx-small" style="margin-top:6px">Acumulado aprovado no painel${res.atualizadoEm ? ' · atualizado ' + new Date(res.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</div></div>` : ''}
     ${fotos.length ? `<div class="fx-card"><div class="fx-h"><span>Fotos de hoje</span><span>${fotos.length}</span></div><div class="fx-fotos">${fotos.map(f => `<div class="fh-f" data-fh="${_esc(f)}"></div>`).join('')}</div></div>` : ''}
-    ${ts.length ? `<div class="fx-card"><div class="fx-h"><span>Equipes do dia</span><span>${ts.length}</span></div>${ts.map(t => `<div class="fx-row"><span class="fx-dot ${t.status === 'aberto' ? 'g' : 'c'}"></span><div class="fx-t">${_esc(t.servico || '—')}<div>${_esc(t.apontador || '')} · ${_esc(t.horaIni || '')}${t.horaFim ? '–' + _esc(t.horaFim) : ''} · ${(t.mo || []).length} pessoa(s)</div></div><span class="fx-v">${t.status === 'aberto' ? 'aberto' : t.qtd ? _fhN(t.qtd) + ' ' + _esc(t.unid || '') : 'encerrado'}</span></div>`).join('')}</div>` : ''}
+    ${ts.length ? `<div class="fx-card"><div class="fx-h"><span>Equipes do dia</span><span>${ts.length}</span></div>${ts.map(t => `<div class="fx-row"><span class="fx-dot ${t.status === 'aberto' ? 'g' : 'c'}"></span><div class="fx-t">${_esc(t.servico || '—')}<div>${_esc(t.apontador || '')} · ${_esc(t.horaIni || '')}${t.horaFim ? '–' + _esc(t.horaFim) : ''} · ${(t.mo || []).length} pessoa(s)</div></div><span class="fx-v"${t.status !== 'aberto' && t.qtd ? ' style="font-size:15px;color:var(--text)"' : ''}>${t.status === 'aberto' ? 'aberto' : t.qtd ? _fhN(t.qtd) + ' ' + _esc(t.unid || '') : 'encerrado'}</span></div>`).join('')}</div>` : ''}
     ${ev.length ? `<div class="fx-card"><div class="fx-h"><span>Linha do dia</span></div><div class="fx-tl">${ev.map(x => `<div class="fx-ev ${x.w ? 'w' : x.ok ? 'ok' : ''}"><b>${_esc(x.h || '')}</b>${x.txt}</div>`).join('')}</div></div>` : ''}
     <div class="fh-rod">Atualizado às ${new Date().toTimeString().slice(0, 5)} · toque em ↻ Atualizar</div></div>`;
   el.querySelectorAll('[data-fh]').forEach(async d => { try { const x = await db.collection('fotos').doc(d.dataset.fh).get(); const f = x.exists ? x.data() : null; if (f && f.img) { d.style.backgroundImage = `url('${f.img}')`; d.onclick = () => { const ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px'; ov.innerHTML = `<img src="${f.img}" style="max-width:100%;max-height:100%;border-radius:10px"/>`; ov.onclick = () => ov.remove(); document.body.appendChild(ov); }; } } catch (e) {} });
