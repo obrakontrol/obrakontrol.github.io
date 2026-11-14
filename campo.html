@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.21</div>
+  <div class="login-versao">ObraKontrol Campo · v3.22</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -3934,7 +3934,9 @@ function mobRender() {
   let h = '';
   if (p === 0) {
     const obras = usuarioCampo.obra ? [] : (window._mobObras || []);
-    const fams = (dadosCampo.familias || []).filter(f => !mob.obra || !f.obra || f.obra === mob.obra);
+    // v3.22: família é catálogo — aparecem todas (uma por código; a da obra/geral tem preferência)
+    const fams = (() => { const m = new Map(); (dadosCampo.familias || []).filter(f => f.cod && !/reprov|recus/i.test(f.status || '')).forEach(f => { const pri = !f.obra || f.obra === mob.obra || f.obra === (usuarioCampo && usuarioCampo.obra); const a = m.get(f.cod); if (!a || (pri && !a.pri)) m.set(f.cod, { ...f, pri }); });
+      return [...m.values()].sort((a, b) => String(a.desc || a.cod).localeCompare(String(b.desc || b.cod), 'pt-BR')); })();
     const mods = (dadosCampo.modelos || []).filter(m => (!mob.obra || !m.obra || m.obra === mob.obra) && (!mob.familia || !m.familia || m.familia === mob.familia));
     const emps = (dadosCampo.empresas || []).filter(e => !mob.obra || !e.obra || e.obra === mob.obra);
     const tag = mob.obra || usuarioCampo.obra ? mobTag(mob.obra, mob.familia) : '';
@@ -4275,8 +4277,9 @@ async function atualizarCadastrosCampo(avisar) {
 // ══════════════════════════════════════════════════════════════
 // v2.76: obras independentes — só a obra do apropriador (a mesma matrícula ou TAG pode existir em outra obra)
 function _daObraCampo(l) { const o = (usuarioCampo && usuarioCampo.obra) || ''; return !o ? (l || []) : (l || []).filter(x => !x.obra || x.obra === o); }
-function _eqRotulo(e) { const m = (dadosCampo.modelos || []).find(x => x.cod === e.codModelo), id = e.placa || (e.chassi ? 'chassi …' + String(e.chassi).slice(-6) : e.serie ? 'série ' + e.serie : '');
-  return [e.tag || e.placa, (m && m.nome) || e.codModelo || '', id].filter(Boolean).join(' · '); }
+// v3.22: rótulo do equipamento = TAG · Família (sem modelo)
+function _famDe(e) { const fs = dadosCampo.familias || []; const f = fs.find(x => x.cod === e.familia && (!x.obra || x.obra === e.obra)) || fs.find(x => x.cod === e.familia); return (f && (f.desc || f.nome)) || e.familia || ''; }
+function _eqRotulo(e) { return [e.tag || e.placa, _famDe(e)].filter(Boolean).join(' · '); }
 function _soDig(v) { return String(v || '').replace(/\D/g, ''); }
 function _funcPorCracha(texto) {
   const t = String(texto || '').trim(), fs = _daObraCampo(dadosCampo.funcionarios || []);
