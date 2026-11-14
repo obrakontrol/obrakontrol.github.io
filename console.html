@@ -63,6 +63,10 @@ input:disabled{opacity:.7}
 .chk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px}
 .chk label{display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;min-height:30px}
 .chk input{width:18px;height:18px;min-height:0;accent-color:var(--red)}
+.prod-h{grid-column:1/-1;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-top:6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+tr.grp td{background:var(--bg);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);padding-top:14px}
+tr.grp td .sub{text-transform:none;letter-spacing:0;font-weight:500}
+.prod-tag{display:inline-block;font-size:10.5px;font-weight:700;color:var(--text-3);margin-right:6px;text-transform:uppercase;letter-spacing:.05em}
 .box{border:1px dashed var(--border);border-radius:12px;padding:14px;margin-top:6px}
 .hint{font-size:12px;color:var(--text-3);margin-top:4px}
 .toast{position:fixed;right:16px;bottom:16px;background:#141414;color:#fff;border-left:4px solid var(--green);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:600;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:360px}
@@ -100,7 +104,7 @@ input:disabled{opacity:.7}
     <input id="lg-senha" type="password" autocomplete="current-password">
     <div class="err" id="lg-err"></div>
     <button class="btn btn-p" style="width:100%" id="lg-btn">Entrar</button>
-    <div class="ver">ObraKontrol Console · v1.9</div>
+    <div class="ver">ObraKontrol Console · v1.10</div>
   </form>
 </div>
 
@@ -141,7 +145,7 @@ input:disabled{opacity:.7}
     </div>
     <div class="card tw">
       <table>
-        <thead><tr><th>Cliente</th><th>Situação</th><th>Módulos</th><th style="text-align:right">Usuários</th><th style="text-align:right">Obras</th><th>Desde</th><th style="text-align:right">Ações</th></tr></thead>
+        <thead><tr><th>Cliente</th><th>Situação</th><th>Produtos e módulos</th><th style="text-align:right">Usuários</th><th style="text-align:right">Obras</th><th>Desde</th><th style="text-align:right">Ações</th></tr></thead>
         <tbody id="tb"><tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:28px">Carregando…</td></tr></tbody>
       </table>
     </div>
@@ -227,7 +231,7 @@ input:disabled{opacity:.7}
 </div>
 
 <script>
-const VERSAO = 'v1.9';
+const VERSAO = 'v1.10';
 const firebaseConfig = {
   apiKey: "AIzaSyBShR-XvPrUiFtnndFXJV7IYrrTG90BS5o",
   authDomain: "obrakontrol-205c4.firebaseapp.com",
@@ -252,7 +256,7 @@ const OK_MOD_PADRAO = {
   orcamento:     { nome: 'Orçamento previsto', situacao: 'disponivel', padrao: true },
   republicas:    { nome: 'Repúblicas e alojamentos', situacao: 'dev', padrao: false, desc: 'Cadastro de repúblicas e alojamentos, vagas, moradores e custo por pessoa' },
   mobilizacao:   { nome: 'Mobilização de equipamentos', situacao: 'dev', padrao: false, desc: 'App de campo: TAG automática, horímetro, checklist, fotos, avarias e termo assinado ao mobilizar' },
-  medicoes:      { nome: 'Medições de Terceiros', situacao: 'disponivel', padrao: false, desc: 'Portal do fornecedor + alçadas de aprovação + BM em PDF · endereço próprio por cliente' },
+  medicoes:      { nome: 'Medições de Terceiros', produto: 'medicoes', situacao: 'disponivel', padrao: false, desc: 'Portal do fornecedor + alçadas de aprovação + BM em PDF · endereço próprio por cliente' },
   frota:         { nome: 'Gestão de frota (veículos leves)', situacao: 'dev', padrao: false, desc: 'Veículos alugados por obra, responsável com CNH, termo de responsabilidade e avisos de vencimento' },
 };
 window.OK_MODULOS = JSON.parse(JSON.stringify(OK_MOD_PADRAO));
@@ -272,6 +276,10 @@ function okModuloAtivo(k, obraId) {
 }
 
 const MODULOS = Object.entries(OK_MOD_PADRAO).map(([k, v]) => [k, v.nome]);
+// Produtos do ObraKontrol: cada um é um sistema à parte (o console só liga e desliga)
+const PRODUTOS = [['apropriacao', 'Controle de Apropriação', 'Painel de gestão + app de campo · mão de obra, equipamentos, abastecimento…'],
+  ['medicoes', 'Medições de Terceiros', 'Portal do fornecedor + gestão de alçadas · sistema e endereço próprios (obrakontrol-medicoes.web.app)']];
+const produtoDe = k => (OK_MOD_PADRAO[k] || {}).produto || 'apropriacao';
 const SIT = { dev: ['🔧 Em desenvolvimento', 't-gray'], teste: ['🧪 Em teste', 't-amber'], disponivel: ['✅ Disponível', 't-green'] };
 // coleções que vão para a gaveta do cliente na migração
 const COLS = ['obras','empresas','ua','cargos','turnos','equipes','funcionarios','familias','modelos','equipamentos','frentes','tiposServico','tiposPerdas',
@@ -337,13 +345,14 @@ function render() {
   $('k-usu').textContent = CLIENTES.reduce((s, c) => s + c._usu, 0);
   $('k-obras').textContent = CLIENTES.reduce((s, c) => s + (c._obras || 0), 0);
   $('tb').innerHTML = CLIENTES.length ? CLIENTES.sort((a, b) => String(a.nomeCurto || a.nome).localeCompare(String(b.nomeCurto || b.nome))).map((c, i) => {
-    const disp = MODULOS.filter(([k]) => (OK_MODULOS[k] || {}).situacao !== 'dev');
-    const mods = disp.filter(([k]) => modLigado(c, k));
+    const disp = MODULOS.filter(([k]) => (OK_MODULOS[k] || {}).situacao !== 'dev' && produtoDe(k) === 'apropriacao');
+    const mods = disp.filter(([k]) => modLigado(c, k)), med = modLigado(c, 'medicoes');
     return `<tr>
       <td><div style="display:flex;gap:10px;align-items:center"><div class="av" style="background:${CORES[i % CORES.length]}">${esc(String(c.nomeCurto || c.nome || c.id).slice(0, 2).toUpperCase())}</div>
         <div><b>${esc(c.nomeCurto || c.nome || c.id)}</b><div class="sub">${esc(c.nome || '')} · código <b>${esc(c.id)}</b></div></div></div></td>
       <td><span class="tag ${st(c.status || 'Ativo')}">${esc(c.status || 'Ativo')}</span></td>
-      <td><div class="mods">${mods.length === disp.length ? '<span>Todos</span>' : mods.map(([, l]) => `<span>${esc(l)}</span>`).join('') || '<span>Nenhum</span>'}</div></td>
+      <td><div class="mods"><span class="prod-tag">Apropriação</span>${mods.length === disp.length ? '<span>Todos</span>' : mods.map(([, l]) => `<span>${esc(l)}</span>`).join('') || '<span>Nenhum</span>'}</div>
+        <div class="mods" style="margin-top:4px"><span class="prod-tag">Medições</span><span>${med ? 'Ligado' : 'Desligado'}</span></div></td>
       <td style="text-align:right;font-variant-numeric:tabular-nums">${c._usu}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums">${c._obras || 0}</td>
       <td class="sub">${c.inicio ? esc(c.inicio.split('-').reverse().join('/')) : '—'}</td>
@@ -413,8 +422,8 @@ function abrirCliente(id) {
   set('c-inicio', c?.inicio || (c ? '' : new Date().toISOString().slice(0, 10))); set('c-contato', c?.contato); set('c-tel', c?.tel); set('c-email', c?.email);
   set('c-tol', c?.config?.tolConsumo ?? ''); set('c-obs', c?.obs);
   $('c-id').disabled = !!c; $('c-id-ex').textContent = c?.id || 'codigo';
-  $('c-mods').innerHTML = MODULOS.map(([k, l]) => { const dev = (OK_MODULOS[k] || {}).situacao === 'dev';
-    return `<label style="${dev ? 'opacity:.6' : ''}"><input type="checkbox" data-m="${k}" ${dev ? 'disabled' : ''} ${!dev && (c ? modLigado(c, k) : (OK_MODULOS[k] || {}).padrao) ? 'checked' : ''}> ${esc(l)}${dev ? ' <span class="tag t-gray" style="font-size:10px">em desenvolvimento</span>' : ''}</label>`; }).join('');
+  $('c-mods').innerHTML = PRODUTOS.map(([pk, pn]) => `<div class="prod-h">${esc(pn)}</div>` + MODULOS.filter(([k]) => produtoDe(k) === pk).map(([k, l]) => { const dev = (OK_MODULOS[k] || {}).situacao === 'dev';
+    return `<label style="${dev ? 'opacity:.6' : ''}"><input type="checkbox" data-m="${k}" ${dev ? 'disabled' : ''} ${!dev && (c ? modLigado(c, k) : (OK_MODULOS[k] || {}).padrao) ? 'checked' : ''}> ${esc(l)}${dev ? ' <span class="tag t-gray" style="font-size:10px">em desenvolvimento</span>' : ''}</label>`; }).join('')).join('');
   ['a-nome', 'a-email', 'a-senha'].forEach(k => $(k).value = '');
   $('c-admin-bloco').style.display = c && c._usu ? 'none' : '';
   $('c-links').style.display = c ? '' : 'none';
@@ -611,13 +620,13 @@ function modLigado(c, k) { const cat = OK_MODULOS[k] || {}; if (cat.situacao ===
 // ── MÓDULOS: situação e liberação
 function renderModulos() {
   const tb = $('tb-mod'); if (!tb) return;
-  tb.innerHTML = MODULOS.map(([k, l]) => { const m = OK_MODULOS[k] || {}, sit = m.situacao || 'disponivel';
+  tb.innerHTML = PRODUTOS.map(([pk, pn, pd]) => `<tr class="grp"><td colspan="4">${esc(pn)} <span class="sub">· ${esc(pd)}</span></td></tr>` + MODULOS.filter(([k]) => produtoDe(k) === pk).map(([k, l]) => { const m = OK_MODULOS[k] || {}, sit = m.situacao || 'disponivel';
     const libs = clientesReais().map(c => { const on = modLigado(c, k), lim = (c.modulosObra || {})[k];
       return `<span class="${on ? 'on' : ''}">${esc(c.nomeCurto || c.id)}${on && lim && lim.length ? ' · ' + lim.length + ' obra(s)' : ''}${on ? '' : ' · desligado'}</span>`; }).join('');
     return `<tr><td><b>${esc(l)}</b>${m.desc ? `<div class="sub">${esc(m.desc)}</div>` : ''}</td>
       <td><select class="sit" aria-label="Situação de ${esc(l)}" onchange="mudarSituacao('${k}', this.value)">${Object.entries(SIT).map(([v, [t]]) => `<option value="${v}" ${v === sit ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
       <td>${sit === 'dev' ? '<span class="sub">Só no ambiente DEMO</span>' : `<div class="lib">${libs || '<span>nenhum cliente</span>'}</div>`}</td>
-      <td style="text-align:right;white-space:nowrap">${sit === 'dev' ? `<button class="btn btn-sm" onclick="aba('ambiente')">Testar no DEMO</button>` : `<button class="btn btn-sm btn-p" onclick="abrirLib('${k}')">Liberar para clientes e obras</button>`}</td></tr>`; }).join('');
+      <td style="text-align:right;white-space:nowrap">${sit === 'dev' ? `<button class="btn btn-sm" onclick="aba('ambiente')">Testar no DEMO</button>` : `<button class="btn btn-sm btn-p" onclick="abrirLib('${k}')">Liberar para clientes e obras</button>`}</td></tr>`; }).join('')).join('');
 }
 async function mudarSituacao(k, v) {
   const nome = (OK_MODULOS[k] || {}).nome || k;
@@ -668,9 +677,22 @@ function renderAmbiente(abrir) {
   const outros = clientesReais();
   bt.innerHTML = `${outros.length ? `<select class="sit" id="amb-origem" aria-label="Copiar dados de">${outros.map(c => `<option value="${esc(c.id)}">${esc(c.nomeCurto || c.id)}</option>`).join('')}</select><button class="btn" onclick="copiarParaDemo()">Copiar dados de teste para o DEMO</button>` : ''}
     <button class="btn" onclick="criarRepublicasExemplo()">Criar repúblicas de exemplo</button>
-    <button class="btn" onclick="window.open(base() + 'index.html?c=demo', '_blank')">Abrir em nova aba ↗</button>`;
+    <button class="btn" onclick="window.open(base() + 'index.html?c=demo', '_blank')">Abrir em nova aba ↗</button>
+    <button class="btn" title="Medições de Terceiros do ambiente DEMO (sistema à parte)" onclick="medicoesDemo()">Medições do DEMO ↗</button>`;
   if (abrir && !$('amb-frame')) corpo.innerHTML = `<iframe id="amb-frame" title="Painel do ambiente DEMO" src="${base()}index.html?c=demo"></iframe>`;
   else if (!$('amb-frame')) corpo.innerHTML = '';
+}
+/** Medições de Terceiros no ambiente DEMO: cria na primeira vez (você como admin) e abre o Portal de Gestão. */
+async function medicoesDemo() {
+  try {
+    const [st] = await medApi('status', { clientes: ['demo'] });
+    if (!st.existe || !st.ativo) {
+      if (!st.existe && !confirm('Criar o Medições de Terceiros do ambiente DEMO?\n\nÉ um portal separado, vazio, para testar. Você entra como administradora.')) return;
+      const r = await medApi('ligar', { cliente: 'demo', nome: 'Ambiente de desenvolvimento', nomeCurto: 'DEMO', adminEmail: auth.currentUser.email, adminNome: 'Desenvolvedor' });
+      if (r.criado) { mostrarAcessoMed('DEMO', r); return; }
+    }
+    window.open(st.url + '?p=gestao', '_blank');
+  } catch (e) { toast('Medições: ' + e.message, true); }
 }
 async function criarDemo() {
   try {
