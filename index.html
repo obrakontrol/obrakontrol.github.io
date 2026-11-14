@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.49 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.50 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18648,7 +18648,7 @@ async function _pnSalvarSenha() {
 // alojamento, partes diárias) e cria logins de participantes (kickoff01…) que entram no painel e no app.
 // Tudo fica marcado kick:true / id kk_… e o botão "Apagar kickoff" remove (logins ficam).
 // ═══════════════════════════════════════════════════════════════
-const _KK_COLS = ['empresas', 'cargos', 'funcionarios', 'familias', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'orcamentos', 'tanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
+const _KK_COLS = ['empresas', 'cargos', 'funcionarios', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'orcamentos', 'tanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
   'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'partesDiarias', 'mobilizacoes', 'turnos', 'obras'];
 function _kkCpf(n) { const b = String(100000000 + n * 7919 % 899999999).slice(0, 9).split('').map(Number);
   const dv = s => { const r = s.reduce((t, d, i) => t + d * (s.length + 1 - i), 0) % 11; return r < 2 ? 0 : 11 - r; };
@@ -18702,7 +18702,7 @@ async function _kkGerar(nUsr) {
       tel: '(19) 9' + String(81000000 + i * 37311).slice(0, 4) + '-' + String(1000 + i * 271).slice(-4), vinculo: 'CLT', empresa: PROP.nome, empresaId: PROP.id, geraApont: ['MOI'].includes(c.recurso) && c.cod !== 'ENC' ? 'Não' : 'Sim', status: 'Ativo', ...X }); });
   // ── famílias / modelos (reaproveita os que já existem pelo código)
   const FAM = [['ESC', 'Escavadeira hidráulica', 'Linha amarela'], ['RET', 'Retroescavadeira', 'Linha amarela'], ['CB', 'Caminhão basculante', 'Veículos pesados'], ['ROL', 'Rolo compactador', 'Linha amarela'], ['VL', 'Veículo leve', 'Veículos leves']];
-  FAM.forEach(([cod, desc, cat], i) => { if (!(dados.familias || []).some(f => f.cod === cod)) sv('familias', { id: 'kk_fam' + i, cod, desc, categoria: cat, obra: '', status: 'aprovado', ...K }); });
+  FAM.forEach(([cod, desc, cat], i) => { if (!(dados.familias || []).some(f => f.cod === cod && _mmBanco(f))) sv('familias', { id: 'kk_fam' + i, cod, desc, categoria: cat, obra: '', status: 'aprovado', ...K }); });   // v4.50: precisa estar no banco
   const MOD = [['KK-PC200', 'Komatsu PC200', 'Escavadeira hidráulica', 400, 16, 0], ['KK-3CX', 'JCB 3CX', 'Retroescavadeira', 160, 7, 0], ['KK-2426', 'MB Atego 2426 basculante', 'Caminhão basculante', 275, 0, 2.4], ['KK-CA250', 'Dynapac CA250', 'Rolo compactador', 300, 8, 0]];
   MOD.forEach(([cod, nome, fam, cap, lh, kml], i) => sv('modelos', { id: 'kk_mod' + i, cod, nome, familia: fam, capTanque: cap, consumoPrev: lh, consumoKmL: kml, obra: '', status: 'aprovado', ...K }));
   const EQ = [['ESC', 1, 'KK-PC200', 1, 165, 'BET'], ['ESC', 2, 'KK-PC200', 1, 165, 'BET'], ['RET', 1, 'KK-3CX', 1, 110, 'ALF'], ['RET', 2, 'KK-3CX', 1, 110, 'ALF'], ['RET', 3, 'KK-3CX', 1, 110, 'ALF'], ['CB', 1, 'KK-2426', 0, 140, 'GAM'], ['CB', 2, 'KK-2426', 0, 140, 'GAM'], ['ROL', 1, 'KK-CA250', 1, 120, 'BET']]
@@ -19309,6 +19309,43 @@ async function _pgxProcessar(wb) {
   const g = document.querySelector('#page-programacao .page-header .btn-group'); if (!g || document.getElementById('pg-btn-mod')) return;
   const ex = [...g.querySelectorAll('button')].find(b => /Excel/.test(b.textContent));
   (ex || g.firstElementChild).insertAdjacentHTML(ex ? 'afterend' : 'afterend', '<button class="btn btn-outline btn-sm" id="pg-btn-mod" onclick="pgModelo()" title="Planilha modelo da semana aberta na tela, com as frentes e serviços da obra">⬇ Modelo</button><button class="btn btn-outline btn-sm" id="pg-btn-imp" onclick="pgImportar()" title="Sobe a programação da planilha">⬆ Importar</button>');
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.50: FAMÍLIA SEMPRE NO BANCO — a tela Famílias avisa quando um equipamento/veículo usa uma família que não está
+// no banco padrão (sem obra, aprovada) e cria com um clique. O kickoff passa a garantir as famílias dele no banco.
+// Aprovações: recarrega famílias e modelos ao abrir (o aviso e a lista contavam com dados diferentes).
+// ═══════════════════════════════════════════════════════════════
+function _famFaltando() {
+  const banco = new Set((dados.familias || []).filter(_mmBanco).map(f => String(f.cod).toUpperCase())), m = new Map();
+  [...(dados.equipamentos || []), ...(dados.frota || [])].forEach(e => { const c = String(e.familia || '').trim(); if (!c || banco.has(c.toUpperCase())) return;
+    if (!m.has(c)) { const doc = (dados.familias || []).find(f => f.cod === c), mo = (dados.modelos || []).find(x => x.cod === e.codModelo);
+      const desc = (doc && doc.desc) || (mo && mo.familia && mo.familia !== c ? mo.familia : '') || c;
+      m.set(c, { cod: c, desc, n: 0, categoria: (doc && doc.categoria) || (/ve[ií]culo leve|picape|pick|carro|utilit/i.test(desc) ? 'Veículos leves' : /caminh|[oô]nibus|van|carreta|basculante|comboio|munck|pipa/i.test(desc) ? 'Veículos pesados' : 'Linha amarela') }); }
+    m.get(c).n++; });
+  return [...m.values()];
+}
+async function famCriarFaltando() {
+  const l = _famFaltando(); if (!l.length) return;
+  if (!confirm('Criar no banco padrão ' + l.length + ' família(s) usada(s) pelos equipamentos?\n\n' + l.map(x => x.cod + ' · ' + x.desc + ' (' + x.categoria + ')').join('\n') + '\n\nDepois dá para editar a descrição e a categoria.')) return;
+  for (const x of l) { const doc = (dados.familias || []).find(f => f.cod === x.cod && !_mmBanco(f));
+    const reg = doc ? Object.assign(doc, { obra: '', status: 'aprovado', desc: doc.desc || x.desc, categoria: doc.categoria || x.categoria, aprovadoEm: new Date().toISOString() })
+      : { id: 'fam' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), cod: x.cod, desc: x.desc, categoria: x.categoria, obra: '', status: 'aprovado', criadoEm: new Date().toISOString() };
+    if (!doc) (dados.familias = dados.familias || []).push(reg); try { await fbSave('familias', reg.id, reg); } catch (e) {} }
+  renderFamilias(); toast(l.length + ' família(s) criada(s) no banco.');
+}
+(function () {
+  const oF = window.renderFamilias;
+  renderFamilias = window.renderFamilias = function () { const r = oF.apply(this, arguments);
+    try { const pg = document.getElementById('page-familias'), l = _famFaltando(); let el = document.getElementById('fam-falta');
+      if (!l.length || !_ehMaster()) { if (el) el.remove(); return r; }
+      if (!el) { const h = pg.querySelector('.page-header'); h.insertAdjacentHTML('afterend', '<div id="fam-falta"></div>'); el = document.getElementById('fam-falta'); }
+      el.innerHTML = `<div class="mm-av" style="border-color:#DC2626;background:#FEF2F2;color:#7F1D1D">⚠ <b>${l.length}</b> família(s) usada(s) por equipamentos não está(ão) no banco padrão: ${l.map(x => '<b>' + _e(x.cod) + '</b> ' + _e(x.desc) + ' (' + x.n + ')').join(', ')}. <button class="btn btn-primary btn-sm" onclick="famCriarFaltando()">Criar no banco</button></div>`;
+    } catch (e) {} return r; };
+  // Aprovações: recarrega antes de listar
+  const oI = window.pageInit; window.pageInit = function (id) { const r = oI.apply(this, arguments);
+    if ((id === 'mm-aprov' || id === 'familias' || id === 'modelos') && db && _firebaseReady) Promise.all(['familias', 'modelos'].map(c => fbLoadAll(c).catch(() => null))).then(([f, m]) => { if (f) dados.familias = f; if (m) dados.modelos = m;
+      try { if (id === 'mm-aprov') renderMmAprov(); if (id === 'familias') renderFamilias(); if (id === 'modelos') renderModelos(); } catch (e) {} });
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
