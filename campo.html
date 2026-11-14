@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.20</div>
+  <div class="login-versao">ObraKontrol Campo · v3.21</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7373,6 +7373,33 @@ function _manPrevLista() {
       <div class="ass"><div>${E(x.operador)}<br>Operador / motorista</div><div>${E(x.lancadoPor)}<br>Apontador</div><div><br>Encarregado / fiscal</div><div><br>Fornecedor</div></div>
       <div class="rd">Lançada no app por ${E(x.lancadoPor)}${x.lancadoEm ? ' em ' + new Date(x.lancadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''} · ObraKontrol</div></div></body></html>`);
     w.document.close();
+  };
+})();
+
+// v3.21: o mesmo operador / motorista não pode ficar em dois equipamentos da mesma apropriação
+(function () {
+  const usadoEm = (fid, exceto) => { for (const [id, v] of ap.eq) if (id !== exceto && v && v.operadorId === fid) { const e = (dadosCampo.equipamentos || []).find(x => x.id === id) || {}; return e.tag || e.placa || 'outro equipamento'; } return ''; };
+  const oOp = window.apOperador;
+  window.apOperador = function (eqId, fid) {
+    const ja = fid && usadoEm(fid, eqId);
+    if (ja) { const f = (dadosCampo.funcionarios || []).find(x => x.id === fid); toast((f ? f.nome : 'Essa pessoa') + ' já está como operador do ' + ja + '. Escolha outra pessoa.', 'err'); apRenderEQ(); return; }
+    return oOp.apply(this, arguments);
+  };
+  const oEQ = apRenderEQ;
+  apRenderEQ = function () {
+    const r = oEQ.apply(this, arguments);
+    document.querySelectorAll('#ap-eq-lista select.op-sel').forEach(sel => {
+      const m = /apOperador\('([^']+)'/.exec(sel.getAttribute('onchange') || ''); if (!m) return;
+      [...sel.options].forEach(o => { if (!o.value || o.selected) return; const ja = usadoEm(o.value, m[1]); if (ja) { o.disabled = true; if (!/· já no /.test(o.textContent)) o.textContent += ' · já no ' + ja; } });
+    });
+    return r;
+  };
+  const oSalvar = salvarApropriacao;
+  salvarApropriacao = async function () {
+    const vis = new Map(), dup = [];
+    for (const [id, v] of ap.eq) { if (!v || !v.operadorId) continue; if (vis.has(v.operadorId)) dup.push(v.operador); else vis.set(v.operadorId, id); }
+    if (dup.length) { toast('Operador repetido em dois equipamentos: ' + [...new Set(dup)].join(', ') + '. Cada equipamento precisa de um operador diferente.', 'err'); apTab('eq'); return; }
+    return oSalvar.apply(this, arguments);
   };
 })();
 </script>
