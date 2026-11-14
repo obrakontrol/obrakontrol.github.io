@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.45 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.46 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18822,6 +18822,7 @@ async function _kkGerar(nUsr) {
     }
   }
   await _kkGravar(W);
+  try { _roHash && delete _roHash[O]; _publicarResumoObras(); } catch (e) {}   // v4.46: "Frente hoje" do app já mostra meta e avanço
   try { window._absCache = { k: '', m: {} }; } catch (e) {}
   _kkProg('');
   try { selecionarObra(O, obra.nome); } catch (e) {}
