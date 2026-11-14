@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.44 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.45 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -12632,6 +12632,14 @@ function novaObra() {
   const oGer = window.gerarQRs || gerarQRs;
   window.gerarQRs = function () { const r = oGer.apply(this, arguments); _qrBtnA4(); return r; };
 })();
+// v4.45: nome do arquivo PDF = o que está no QR (1 item: "Placa QR - FR-001 - Rede coletora…"; vários: "Placas QR - LT15 - FR-001, FR-002, FR-003")
+function _qrNomeArq(tipo, itens) {
+  const lim = t => String(t || '').replace(/[\\/:*?"<>|·]+/g, '-').replace(/\s+/g, ' ').trim();
+  if (itens.length === 1) { const [c, d] = itens[0]; return lim(tipo + ' - ' + c + (d ? ' - ' + d : '')).slice(0, 120); }
+  const obras = [...new Set(itens.map(x => x[2]).filter(Boolean))], cods = itens.map(x => x[0]);
+  const lista = cods.length <= 6 ? cods.join(', ') : cods.slice(0, 3).join(', ') + ' e mais ' + (cods.length - 3);
+  return lim(tipo.replace('Placa', 'Placas').replace('Etiqueta', 'Etiquetas') + (obras.length === 1 ? ' - ' + obras[0] : '') + ' - ' + lista).slice(0, 140);
+}
 function _qrBtnA4() { const b = document.getElementById('qr-btn-a4'); if (b) b.style.display = (_qrUltimos || []).some(x => x.col === 'frentes') ? '' : 'none'; }
 function _qrDataUrl(texto, tam) {
   const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(d);
@@ -12655,7 +12663,7 @@ function imprimirFrentesA4() {
       <div class="rod">ObraKontrol</div></div>
       <div class="lado"><img class="qr" src="${qr}" alt="QR ${_e(f.cod)}"><div class="inst">Aponte a câmera do app <b>ObraKontrol Campo</b><br>para abrir esta frente</div></div></section>`;
   }).join('');
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Placas QR das frentes</title><style>
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(_qrNomeArq('Placa QR', lista.map(f => [f.cod, f.desc || f.nome || '', ((dados.obras || []).find(x => x.id === f.obra) || {}).cod])))}</title><style>
     @page{size:A4 landscape;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}html,body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .pg{width:297mm;height:210mm;padding:12mm 14mm;display:flex;gap:10mm;align-items:stretch;page-break-after:always;break-after:page;overflow:hidden}
     .pg:last-child{page-break-after:auto;break-after:auto}
@@ -16863,7 +16871,7 @@ function imprimirEtiquetasEq(tam) {
   ['P', 'M', 'G'].forEach(k => { const L = its.filter(x => x.tam === k), c = _ETQ[k], n = c.por[0] * c.por[1];
     for (let i = 0; i < L.length; i += n) pags += `<section class="pg pg-${k}">${L.slice(i, i + n).map(etq).join('')}</section>`; });
   const temG = its.some(x => x.tam === 'G'), temPM = its.some(x => x.tam !== 'G');
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Etiquetas QR · equipamentos e veículos</title><style>
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(_qrNomeArq('Etiqueta QR', its.map(x => [x.tag, x.mod.split(' · ')[0] || '', x.o.cod])))}</title><style>
     @page{size:A4;margin:0}@page g{size:A4 landscape;margin:0}
     *{box-sizing:border-box}html,body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#e9e9ec}
     .pg{width:210mm;height:297mm;background:#fff;margin:8mm auto;display:grid;align-content:start;justify-content:center;page-break-after:always;break-after:page}
