@@ -100,7 +100,7 @@ input:disabled{opacity:.7}
     <input id="lg-senha" type="password" autocomplete="current-password">
     <div class="err" id="lg-err"></div>
     <button class="btn btn-p" style="width:100%" id="lg-btn">Entrar</button>
-    <div class="ver">ObraKontrol Console · v1.8</div>
+    <div class="ver">ObraKontrol Console · v1.9</div>
   </form>
 </div>
 
@@ -227,7 +227,7 @@ input:disabled{opacity:.7}
 </div>
 
 <script>
-const VERSAO = 'v1.8';
+const VERSAO = 'v1.9';
 const firebaseConfig = {
   apiKey: "AIzaSyBShR-XvPrUiFtnndFXJV7IYrrTG90BS5o",
   authDomain: "obrakontrol-205c4.firebaseapp.com",
@@ -252,6 +252,7 @@ const OK_MOD_PADRAO = {
   orcamento:     { nome: 'Orçamento previsto', situacao: 'disponivel', padrao: true },
   republicas:    { nome: 'Repúblicas e alojamentos', situacao: 'dev', padrao: false, desc: 'Cadastro de repúblicas e alojamentos, vagas, moradores e custo por pessoa' },
   mobilizacao:   { nome: 'Mobilização de equipamentos', situacao: 'dev', padrao: false, desc: 'App de campo: TAG automática, horímetro, checklist, fotos, avarias e termo assinado ao mobilizar' },
+  medicoes:      { nome: 'Medições de Terceiros', situacao: 'disponivel', padrao: false, desc: 'Portal do fornecedor + alçadas de aprovação + BM em PDF · endereço próprio por cliente' },
   frota:         { nome: 'Gestão de frota (veículos leves)', situacao: 'dev', padrao: false, desc: 'Veículos alugados por obra, responsável com CNH, termo de responsabilidade e avisos de vencimento' },
 };
 window.OK_MODULOS = JSON.parse(JSON.stringify(OK_MOD_PADRAO));
@@ -347,10 +348,58 @@ function render() {
       <td style="text-align:right;font-variant-numeric:tabular-nums">${c._obras || 0}</td>
       <td class="sub">${c.inicio ? esc(c.inicio.split('-').reverse().join('/')) : '—'}</td>
       <td style="text-align:right;white-space:nowrap"><button class="btn btn-sm" onclick="abrirCliente('${esc(c.id)}')">Editar</button>
+        ${modLigado(c, 'medicoes') ? `<button class="btn btn-sm" title="Portal de Medições de Terceiros" onclick="abrirMedicoes('${esc(c.id)}')">Medições ↗</button>` : ''}
         <button class="btn btn-sm btn-p" onclick="entrarComo('${esc(c.id)}')">Entrar no painel ↗</button></td></tr>`; }).join('')
     : '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:28px">Nenhum cliente ainda.</td></tr>';
 }
 function base() { return location.href.replace(/[^/]*([?#].*)?$/, ''); }
+
+// ── MEDIÇÕES DE TERCEIROS (módulo com servidor próprio: ligar aqui cria/reativa o portal do cliente)
+const MED_URL = 'https://obrakontrol-medicoes.web.app';
+async function medApi(acao, dados) {
+  const tok = await auth.currentUser.getIdToken();
+  const r = await fetch(MED_URL + '/dev/' + acao, { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(dados || {}) });
+  let j; try { j = await r.json(); } catch (e) { throw new Error('Medições não respondeu (' + r.status + ').'); }
+  if (!j.ok) throw new Error(j.erro || 'Erro no Medições.');
+  return j.dados;
+}
+function abrirMedicoes(id) { window.open(MED_URL + '/m/' + encodeURIComponent(id) + '?p=gestao', '_blank'); }
+async function adminPadrao(id) {
+  try { const s = await db.collection('acessos').where('cliente', '==', id).where('perfil', '==', 'Admin').limit(1).get(); if (!s.empty) return s.docs[0].id; } catch (e) {}
+  const c = CLIENTES.find(x => x.id === id); return (c && c.email) || '';
+}
+/** Liga/desliga o Medições do cliente no servidor do módulo. */
+async function medSync(id, on) {
+  const c = CLIENTES.find(x => x.id === id) || { id }, nomeC = c.nomeCurto || c.nome || id;
+  if (!on) { await medApi('desligar', { cliente: id }); toast('Medições desligado para ' + nomeC + ' (dados guardados).'); return; }
+  const [st] = await medApi('status', { clientes: [id] });
+  let adminEmail = '', adminNome = '';
+  if (!st.existe) {
+    adminEmail = (prompt('Medições de Terceiros para ' + nomeC + '\n\nE-mail do administrador do cliente no Medições (ele recebe a senha provisória):', await adminPadrao(id)) || '').trim().toLowerCase();
+    if (!adminEmail) { toast('Medições não criado: faltou o e-mail do administrador. Ligue de novo quando tiver.', true); return; }
+    const ac = await db.collection('acessos').doc(adminEmail).get().catch(() => null); adminNome = ac && ac.exists ? (ac.data().nome || '') : '';
+  }
+  const r = await medApi('ligar', { cliente: id, nome: c.nome || nomeC, nomeCurto: nomeC, adminEmail, adminNome });
+  if (r.criado) mostrarAcessoMed(nomeC, r); else toast('Medições ligado para ' + nomeC + '.');
+}
+function mostrarAcessoMed(nomeC, r) {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
+  d.innerHTML = `<div class="card" style="max-width:520px;width:100%;padding:22px">
+    <b style="font-size:17px">Medições de Terceiros criado · ${esc(nomeC)}</b>
+    <p class="sub" style="margin:6px 0 14px">Guarde a senha provisória: ela não aparece de novo. O administrador também recebe por e-mail (quando o envio de e-mail estiver ligado).</p>
+    <div class="sub">Portal de Gestão</div><div style="font-weight:700;word-break:break-all;margin-bottom:10px">${esc(r.url)}?p=gestao</div>
+    <div class="sub">Portal do Fornecedor</div><div style="font-weight:700;word-break:break-all;margin-bottom:10px">${esc(r.url)}</div>
+    <div class="sub">Administrador</div><div style="font-weight:700;margin-bottom:10px">${esc(r.admin)}</div>
+    <div class="sub">Senha provisória</div><div style="font-weight:800;font-size:20px;letter-spacing:1px;margin-bottom:16px">${esc(r.senha)}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn" id="med-cp">Copiar acesso</button><button class="btn" id="med-ab">Abrir portal ↗</button><button class="btn btn-p" id="med-ok">Fechar</button></div></div>`;
+  document.body.appendChild(d);
+  const txt = `Portal de Medições — ${nomeC}\nGestão: ${r.url}?p=gestao\nFornecedor: ${r.url}\nUsuário: ${r.admin}\nSenha provisória: ${r.senha}`;
+  d.querySelector('#med-cp').onclick = () => navigator.clipboard.writeText(txt).then(() => toast('Acesso copiado'), () => toast('Não consegui copiar', true));
+  d.querySelector('#med-ab').onclick = () => window.open(r.url + '?p=gestao', '_blank');
+  d.querySelector('#med-ok').onclick = () => d.remove();
+}
 function entrarComo(id) { window.open(base() + 'index.html?c=' + encodeURIComponent(id), '_blank'); }
 
 // ── cadastro do cliente
@@ -386,8 +435,14 @@ async function salvarCliente() {
   if (!editando) obj.criadoEm = new Date().toISOString();
   const b = $('btn-salvar'); b.disabled = true; b.textContent = 'Salvando…';
   try {
+    const medAntes = editando ? modLigado(CLIENTES.find(x => x.id === id) || {}, 'medicoes') : false;
     await db.collection('clientes').doc(id).set(obj, { merge: true });
     if (aEmail) await criarAdmin(id, aNome || aEmail.split('@')[0], aEmail, aSenha);
+    if (modulos.medicoes !== undefined && !!modulos.medicoes !== medAntes) {
+      const cl = CLIENTES.find(x => x.id === id); if (cl) cl.modulos = { ...(cl.modulos || {}), medicoes: !!modulos.medicoes };
+      else CLIENTES.push({ id, ...obj });
+      try { await medSync(id, !!modulos.medicoes); } catch (e) { toast('Cliente salvo, mas o Medições respondeu: ' + e.message, true); }
+    }
     toast('Cliente ' + obj.nomeCurto + ' salvo' + (aEmail ? ' com o administrador ' + aEmail : '') + '.');
     fechar(); carregar();
   } catch (e) { toast('Não consegui salvar: ' + (e.code || e.message), true); }
@@ -594,10 +649,12 @@ async function salvarLib() {
   try {
     for (const el of document.querySelectorAll('#lib-corpo .cli-lib')) {
       const c = el.dataset.c, on = el.querySelector('.lib-on').checked, algumas = el.querySelector('input[value="algumas"]').checked;
+      const antes = modLigado(CLIENTES.find(x => x.id === c) || {}, k);
       const obras = algumas ? [...el.querySelectorAll('.lib-obra:checked')].map(x => x.value) : [];
       if (on && algumas && !obras.length) { toast('Marque pelo menos uma obra para ' + c.toUpperCase() + ', ou escolha "Todas as obras".', true); b.disabled = false; b.textContent = 'Salvar liberação'; return; }
       await db.collection('clientes').doc(c).set({ modulos: { [k]: on }, modulosObra: { [k]: obras }, atualizadoEm: new Date().toISOString() }, { merge: true });
       const cl = CLIENTES.find(x => x.id === c); if (cl) { cl.modulos = { ...(cl.modulos || {}), [k]: on }; cl.modulosObra = { ...(cl.modulosObra || {}), [k]: obras }; }
+      if (k === 'medicoes' && on !== antes) { try { await medSync(c, on); } catch (e) { toast('Liberação salva, mas o Medições respondeu: ' + e.message, true); } }
     }
     toast('Liberação salva. Os usuários veem a mudança ao entrar de novo ou apertar Atualizar.'); fecharLib(); renderModulos(); render();
   } catch (e) { toast('Não consegui salvar: ' + (e.code || e.message), true); }
