@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.50 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.51 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -5723,7 +5723,8 @@ function renderMO() {
   } else {
     grid.innerHTML = entries.map(([nome,g]) => {
       const iniciais       = nome.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-      const temPendente    = g.apontamentos.some(a=>a.status==='campo');
+      const nPend          = g.apontamentos.filter(a=>a.status==='campo').length, temPendente = nPend > 0;
+      const nGrPend        = temPendente ? _aprGrupos('campo').filter(x => (x.apontador || 'Escritório') === nome).length : 0;   // v4.51: quantos turnos faltam aprovar
       const avBg           = temPendente ? 'var(--amber-light)' : 'var(--green-light)';
       const avCo           = temPendente ? 'var(--amber)' : 'var(--green-dark)';
       const frentePrincipal= [...g.frentes].filter(f=>f&&f!=='—')[0] || '—';
@@ -5742,7 +5743,7 @@ function renderMO() {
         +       '<div class="mo-card-cargo">Apontador de Campo</div>'
         +       '<div class="mo-card-empresa">'+(g.apontamentos[0]?.empresa||'—')+'</div>'
         +     '</div>'
-        +     '<div>'+(temPendente ? tag('Pendente','amber') : tag('Aprovado','green'))+'</div>'
+        +     '<div style="text-align:right">'+(temPendente ? tag('Pendente','amber') + '<div style="font-size:11px;color:var(--amber);margin-top:3px;white-space:nowrap">'+nPend+' de '+g.apontamentos.length+' lançamentos</div>' : tag('Aprovado','green'))+'</div>'
         +   '</div>'
         + '</div>'
         + '<div class="mo-card-mid">'
@@ -5767,7 +5768,7 @@ function renderMO() {
         +     '<button class="mo-icon-btn" title="Exportar apontador" data-mo-action="exportar" data-mo-nome="'+nome+'"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>'
         +   '</div>'
         +   '<div>'
-        +   (temPendente ? '<button class="mo-process-btn mo-process-green" onclick="processarApontadorMO(&quot;'+nome+'&quot;)">✓ Aprovar</button>' : '<button class="mo-process-btn mo-process-done" style="opacity:.5" disabled>✓ Aprovado</button>')
+        +   (temPendente ? '<button class="mo-process-btn mo-process-green" title="Aprova o que ainda está pendente deste apontador" onclick="processarApontadorMO(&quot;'+nome+'&quot;)">✓ Aprovar '+(nGrPend > 1 ? nGrPend+' turnos' : nGrPend === 1 ? '1 turno' : '')+'</button>' : '<button class="mo-process-btn mo-process-done" style="opacity:.5" disabled>✓ Aprovado</button>')
         +   '</div>'
         + '</div>'
         + '</div>';
@@ -5803,6 +5804,8 @@ async function processarApontadorMO(nome) {
   if (!gs.length) { toast('Nada pendente de ' + nome + '.', 'error'); return; }
   if (!confirm('Aprovar ' + gs.length + ' apontamento(s) de ' + nome + ' sem revisar um por um?\n\nPara conferir antes, use a tela Aprovação.')) return;
   await aprAprovar(gs.map(g => g.chave)); renderMO();
+  const rest = (dados.aponMO || []).filter(a => (a.lancadoPor || 'Escritório') === nome && a.status === 'campo').length;
+  if (rest) toast('Ainda há ' + rest + ' lançamento(s) pendente(s) de ' + nome + ' fora do filtro de obra. Escolha "Todas as obras" no topo para aprovar.', 'error');
 }
 async function processarTodosMO() {
   const gs = _aprGrupos('campo');
