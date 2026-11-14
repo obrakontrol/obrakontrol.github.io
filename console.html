@@ -86,6 +86,13 @@ tr.grp td .sub{text-transform:none;letter-spacing:0;font-weight:500}
 .sit{border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;padding:6px 8px;min-height:34px;font-weight:600;width:auto}
 .lib{display:flex;flex-wrap:wrap;gap:4px}.lib span{font-size:11.5px;border-radius:6px;padding:2px 8px;background:var(--gray-l);color:var(--text-2)}
 .lib span.on{background:var(--green-l);color:var(--green)}
+/* abas de produto (Controle de Apropriação | Medições de Terceiros) */
+.ptabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
+.ptabs button{border:1px solid var(--border);background:var(--card);color:var(--text-2);font-weight:700;font-size:13.5px;padding:9px 16px;border-radius:999px;min-height:40px;display:flex;align-items:center;gap:8px}
+.ptabs button:hover{border-color:var(--text-3)}
+.ptabs button.on{background:var(--red);border-color:var(--red);color:#fff}
+.ptabs button .n{font-size:11px;font-weight:800;opacity:.75}
+.pdesc{font-size:12.5px;color:var(--text-3);margin:-8px 0 14px}
 #amb-frame{width:100%;height:calc(100vh - 230px);min-height:520px;border:1px solid var(--border);border-radius:14px;background:#000;display:block}
 .cli-lib{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px}
 .cli-lib .obras{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:8px 0 0 28px}
@@ -104,7 +111,7 @@ tr.grp td .sub{text-transform:none;letter-spacing:0;font-weight:500}
     <input id="lg-senha" type="password" autocomplete="current-password">
     <div class="err" id="lg-err"></div>
     <button class="btn btn-p" style="width:100%" id="lg-btn">Entrar</button>
-    <div class="ver">ObraKontrol Console · v1.10</div>
+    <div class="ver">ObraKontrol Console · v1.11</div>
   </form>
 </div>
 
@@ -153,12 +160,14 @@ tr.grp td .sub{text-transform:none;letter-spacing:0;font-weight:500}
 
     <section id="sec-modulos" style="display:none">
       <div class="head"><div><h1>Módulos</h1><div class="sub">Tudo o que o ObraKontrol tem. Em desenvolvimento: só aparece no ambiente DEMO. Em teste: só onde você liberar. Disponível: pronto para os clientes.</div></div></div>
+      <div class="ptabs" id="ptabs-mod"></div><div class="pdesc" id="pdesc-mod"></div>
       <div class="card tw"><table><thead><tr><th>Módulo</th><th>Situação</th><th>Liberado para</th><th style="text-align:right">Ações</th></tr></thead><tbody id="tb-mod"></tbody></table></div>
     </section>
 
     <section id="sec-ambiente" style="display:none">
-      <div class="head"><div><h1>Ambiente de desenvolvimento</h1><div class="sub">O painel completo do cliente DEMO, com todos os módulos ligados, inclusive os que estão em desenvolvimento. Os dados daqui não aparecem para nenhum cliente.</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap" id="amb-botoes"></div></div>
+      <div class="head"><div><h1>Ambiente de desenvolvimento</h1><div class="sub">Teste cada produto no cliente DEMO. Os dados daqui não aparecem para nenhum cliente.</div></div></div>
+      <div class="ptabs" id="ptabs-amb"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 14px"><div class="pdesc" id="pdesc-amb" style="margin:0"></div><div style="display:flex;gap:8px;flex-wrap:wrap" id="amb-botoes"></div></div>
       <div id="amb-corpo"></div>
     </section>
   </div>
@@ -231,7 +240,7 @@ tr.grp td .sub{text-transform:none;letter-spacing:0;font-weight:500}
 </div>
 
 <script>
-const VERSAO = 'v1.10';
+const VERSAO = 'v1.11';
 const firebaseConfig = {
   apiKey: "AIzaSyBShR-XvPrUiFtnndFXJV7IYrrTG90BS5o",
   authDomain: "obrakontrol-205c4.firebaseapp.com",
@@ -280,6 +289,16 @@ const MODULOS = Object.entries(OK_MOD_PADRAO).map(([k, v]) => [k, v.nome]);
 const PRODUTOS = [['apropriacao', 'Controle de Apropriação', 'Painel de gestão + app de campo · mão de obra, equipamentos, abastecimento…'],
   ['medicoes', 'Medições de Terceiros', 'Portal do fornecedor + gestão de alçadas · sistema e endereço próprios (obrakontrol-medicoes.web.app)']];
 const produtoDe = k => (OK_MOD_PADRAO[k] || {}).produto || 'apropriacao';
+let PROD = 'apropriacao'; try { PROD = localStorage.getItem('ok_console_prod') || 'apropriacao'; } catch (e) {}
+function abasProduto(alvo, onde) {
+  const el = $(alvo); if (!el) return;
+  el.innerHTML = PRODUTOS.map(([pk, pn]) => `<button class="${pk === PROD ? 'on' : ''}" onclick="trocarProduto('${pk}')">${esc(pn)}${onde === 'mod' ? ` <span class="n">${MODULOS.filter(([k]) => produtoDe(k) === pk).length}</span>` : ''}</button>`).join('');
+  const d = $(alvo.replace('ptabs', 'pdesc')); if (d) d.textContent = (PRODUTOS.find(x => x[0] === PROD) || [])[2] || '';
+}
+function trocarProduto(pk) {
+  PROD = pk; try { localStorage.setItem('ok_console_prod', pk); } catch (e) {}
+  renderModulos(); if ($('sec-ambiente').style.display !== 'none') { const f = $('amb-frame'); if (f) f.remove(); renderAmbiente(true); }
+}
 const SIT = { dev: ['🔧 Em desenvolvimento', 't-gray'], teste: ['🧪 Em teste', 't-amber'], disponivel: ['✅ Disponível', 't-green'] };
 // coleções que vão para a gaveta do cliente na migração
 const COLS = ['obras','empresas','ua','cargos','turnos','equipes','funcionarios','familias','modelos','equipamentos','frentes','tiposServico','tiposPerdas',
@@ -620,7 +639,8 @@ function modLigado(c, k) { const cat = OK_MODULOS[k] || {}; if (cat.situacao ===
 // ── MÓDULOS: situação e liberação
 function renderModulos() {
   const tb = $('tb-mod'); if (!tb) return;
-  tb.innerHTML = PRODUTOS.map(([pk, pn, pd]) => `<tr class="grp"><td colspan="4">${esc(pn)} <span class="sub">· ${esc(pd)}</span></td></tr>` + MODULOS.filter(([k]) => produtoDe(k) === pk).map(([k, l]) => { const m = OK_MODULOS[k] || {}, sit = m.situacao || 'disponivel';
+  abasProduto('ptabs-mod', 'mod');
+  tb.innerHTML = [PRODUTOS.find(x => x[0] === PROD) || PRODUTOS[0]].map(([pk]) => MODULOS.filter(([k]) => produtoDe(k) === pk).map(([k, l]) => { const m = OK_MODULOS[k] || {}, sit = m.situacao || 'disponivel';
     const libs = clientesReais().map(c => { const on = modLigado(c, k), lim = (c.modulosObra || {})[k];
       return `<span class="${on ? 'on' : ''}">${esc(c.nomeCurto || c.id)}${on && lim && lim.length ? ' · ' + lim.length + ' obra(s)' : ''}${on ? '' : ' · desligado'}</span>`; }).join('');
     return `<tr><td><b>${esc(l)}</b>${m.desc ? `<div class="sub">${esc(m.desc)}</div>` : ''}</td>
@@ -672,15 +692,33 @@ async function salvarLib() {
 
 // ── AMBIENTE DE DESENVOLVIMENTO (cliente DEMO)
 function renderAmbiente(abrir) {
+  abasProduto('ptabs-amb', 'amb');
+  if (PROD === 'medicoes') return renderAmbienteMed(abrir);
   const demo = CLIENTES.find(c => c.id === 'demo'), bt = $('amb-botoes'), corpo = $('amb-corpo'); if (!bt || !corpo) return;
   if (!demo) { bt.innerHTML = ''; corpo.innerHTML = `<div class="card" style="padding:28px;text-align:center"><b style="font-size:16px">O ambiente DEMO ainda não existe</b><p class="sub" style="max-width:520px;margin:8px auto 16px">Ele é um cliente de mentira, só seu, com todos os módulos ligados. É onde você testa o que está desenvolvendo antes de liberar para as obras.</p><button class="btn btn-p" onclick="criarDemo()">Criar ambiente DEMO</button></div>`; return; }
   const outros = clientesReais();
   bt.innerHTML = `${outros.length ? `<select class="sit" id="amb-origem" aria-label="Copiar dados de">${outros.map(c => `<option value="${esc(c.id)}">${esc(c.nomeCurto || c.id)}</option>`).join('')}</select><button class="btn" onclick="copiarParaDemo()">Copiar dados de teste para o DEMO</button>` : ''}
     <button class="btn" onclick="criarRepublicasExemplo()">Criar repúblicas de exemplo</button>
-    <button class="btn" onclick="window.open(base() + 'index.html?c=demo', '_blank')">Abrir em nova aba ↗</button>
-    <button class="btn" title="Medições de Terceiros do ambiente DEMO (sistema à parte)" onclick="medicoesDemo()">Medições do DEMO ↗</button>`;
+    <button class="btn" onclick="window.open(base() + 'index.html?c=demo', '_blank')">Abrir em nova aba ↗</button>`;
   if (abrir && !$('amb-frame')) corpo.innerHTML = `<iframe id="amb-frame" title="Painel do ambiente DEMO" src="${base()}index.html?c=demo"></iframe>`;
   else if (!$('amb-frame')) corpo.innerHTML = '';
+}
+/** Aba Medições do ambiente de desenvolvimento: o Portal de Gestão do cliente DEMO do Medições, dentro do console. */
+async function renderAmbienteMed(abrir) {
+  const bt = $('amb-botoes'), corpo = $('amb-corpo'); if (!bt || !corpo) return;
+  bt.innerHTML = `<button class="btn" onclick="window.open(MED_URL + '/m/demo?p=gestao', '_blank')">Gestão em nova aba ↗</button>
+    <button class="btn" onclick="window.open(MED_URL + '/m/demo', '_blank')">Portal do Fornecedor ↗</button>`;
+  if ($('amb-frame') && !abrir) return;
+  corpo.innerHTML = '<div class="card" style="padding:28px;text-align:center" class="sub">Verificando o Medições do DEMO…</div>';
+  let st; try { [st] = await medApi('status', { clientes: ['demo'] }); } catch (e) { corpo.innerHTML = `<div class="card" style="padding:28px;text-align:center"><b>Não consegui falar com o Medições</b><p class="sub">${esc(e.message)}</p></div>`; return; }
+  if (PROD !== 'medicoes') return;
+  if (!st.existe || !st.ativo) {
+    corpo.innerHTML = `<div class="card" style="padding:28px;text-align:center"><b style="font-size:16px">O Medições do DEMO ainda não ${st.existe ? 'está ligado' : 'existe'}</b>
+      <p class="sub" style="max-width:520px;margin:8px auto 16px">É um portal separado do Controle de Apropriação, só para testar fornecedor, alçadas e BM. Você entra como administradora.</p>
+      <button class="btn btn-p" onclick="medicoesDemo()">${st.existe ? 'Ligar' : 'Criar'} o Medições do DEMO</button></div>`;
+    return;
+  }
+  corpo.innerHTML = `<iframe id="amb-frame" title="Medições de Terceiros · DEMO" src="${MED_URL}/m/demo?p=gestao"></iframe>`;
 }
 /** Medições de Terceiros no ambiente DEMO: cria na primeira vez (você como admin) e abre o Portal de Gestão. */
 async function medicoesDemo() {
@@ -689,9 +727,9 @@ async function medicoesDemo() {
     if (!st.existe || !st.ativo) {
       if (!st.existe && !confirm('Criar o Medições de Terceiros do ambiente DEMO?\n\nÉ um portal separado, vazio, para testar. Você entra como administradora.')) return;
       const r = await medApi('ligar', { cliente: 'demo', nome: 'Ambiente de desenvolvimento', nomeCurto: 'DEMO', adminEmail: auth.currentUser.email, adminNome: 'Desenvolvedor' });
-      if (r.criado) { mostrarAcessoMed('DEMO', r); return; }
+      if (r.criado) mostrarAcessoMed('DEMO', r);
     }
-    window.open(st.url + '?p=gestao', '_blank');
+    if (PROD === 'medicoes' && $('sec-ambiente').style.display !== 'none') renderAmbienteMed(true); else window.open(st.url + '?p=gestao', '_blank');
   } catch (e) { toast('Medições: ' + e.message, true); }
 }
 async function criarDemo() {
