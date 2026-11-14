@@ -33,10 +33,14 @@ service cloud.firestore {
       }
     }
 
+    // Medições de Terceiros (Portal do Fornecedor): só o servidor (Cloud Functions) acessa — os apps não leem nem gravam
+    match /medicoes/{doc=**} { allow read, write: if false; }
+    match /mail/{id} { allow read, write: if false; }
+
     // TRANSIÇÃO: dados antigos (antes da migração para clientes/tenco).
     // Depois de conferir a migração, apague este bloco e publique de novo.
     match /{col}/{doc=**} {
-      allow read, write: if logado() && !(col in ['acessos', 'clientes', 'modulos']);
+      allow read, write: if logado() && !(col in ['acessos', 'clientes', 'modulos', 'medicoes', 'mail']);
     }
   }
 }
