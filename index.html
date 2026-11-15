@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.52 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.53 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -13338,8 +13338,8 @@ function renderUA() {
     buscaSelect('frente-ramo', 'Digite o código ou nome do grupo da EAP…');
   }
   const ramoOpts = (obra, sel) => { const s = $('frente-ramo'); if (!s) return;
-    const gs = _uasDa(obra).filter(u => !u.folha && u.ativo !== false && (u.nivel || 0) >= 2).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
-    s.innerHTML = '<option value="">— EAP inteira (obra sem divisão)</option>' + gs.map(u => `<option value="${_e(u.cod)}">${_e(u.cod)} · ${_e(u.nome)}</option>`).join('');
+    const gs = _uasDa(obra).filter(u => u.ativo !== false && (u.nivel || 0) >= 2).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));   // v4.53: pode ser grupo OU uma UA (ex.: frente de uma estação)
+    s.innerHTML = '<option value="">— EAP inteira (obra sem divisão)</option>' + gs.map(u => `<option value="${_e(u.cod)}">${_e(u.cod)} · ${_e(u.nome)}${u.folha ? ' (UA)' : ''}</option>`).join('');
     if (sel && !gs.some(u => u.cod === sel)) s.insertAdjacentHTML('beforeend', `<option value="${_e(sel)}">${_e(sel)} · (inativo)</option>`);
     s.value = sel || ''; buscaSelectSync('frente-ramo'); };
   $('frente-obra')?.addEventListener('change', () => ramoOpts($('frente-obra').value, ''));
@@ -13540,7 +13540,7 @@ async function uaExcluirManuais() {
   D.cargos.rotulo = 'Funções'; D.tiposPerdas.rotulo = 'Tipos de parada';
   // ── Frentes: confere o ramo da EAP
   POS.frentes = it => { if (!it.ramoUA) return ''; const temEap = _uasDa(it.obra).length;
-    if (temEap && !_uasDa(it.obra).some(u => u.cod === it.ramoUA && !u.folha)) { it.__aviso = 'frente ' + (it.cod || it.desc) + ': ramo ' + it.ramoUA + ' não existe na EAP desta obra — importada sem ramo'; it.ramoUA = ''; } return ''; };
+    if (temEap && !_uasDa(it.obra).some(u => u.cod === it.ramoUA)) { it.__aviso = 'frente ' + (it.cod || it.desc) + ': ramo ' + it.ramoUA + ' não existe na EAP desta obra — importada sem ramo'; it.ramoUA = ''; } return ''; };
   // ── Tipos de serviço: da obra, com as UAs que custeia
   D.tiposServico.porObra = true;
   D.tiposServico.col = ['Código', 'Nome do serviço', 'Unidade', 'Meta diária', 'UAs do RM que custeia (nomes, separe por ;)'];
