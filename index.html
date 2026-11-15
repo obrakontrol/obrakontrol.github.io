@@ -628,9 +628,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
 #login-screen .lg-rod .lg-ok { position:static; height:30px; display:inline-block; }
 #login-screen .lg-rod .lg-ver { position:static; margin-top:6px; text-align:center; }
 #login-screen .lg-esq { padding-bottom:120px; }
-#login-screen .lg-foto { position:absolute; top:0; right:0; width:66%; height:68%; background:url('img/login/obra_bg.webp?v=1') right 30%/cover no-repeat; z-index:0;
-  -webkit-mask-image:linear-gradient(to right, transparent 0, #000 38%), linear-gradient(to bottom, #000 50%, transparent 100%); -webkit-mask-composite:source-in;
-  mask-image:linear-gradient(to right, transparent 0, #000 38%), linear-gradient(to bottom, #000 50%, transparent 100%); mask-composite:intersect; opacity:.95; }
+#login-screen .lg-foto { position:absolute; inset:0; background:linear-gradient(to right, rgba(11,11,12,.94) 0%, rgba(11,11,12,.82) 30%, rgba(11,11,12,.35) 52%, rgba(11,11,12,0) 66%), url('img/login/obra_bg.webp?v=2') right bottom/auto 100% no-repeat, #0b0b0c; z-index:0; }
 #login-screen .lg-dir { align-items:center; }
 #login-screen .lg-dir-in { z-index:2; }
 #login-screen .lg-feat-ico { border-radius:12px; background:rgba(255,255,255,.05); }
@@ -673,7 +671,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.59 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.60 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
