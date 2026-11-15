@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.55 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.56 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -1437,8 +1437,8 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <div class="table-wrap">
       <table id="tabela-frentes">
-        <thead><tr><th>Código</th><th>Descrição</th><th>Obra</th><th>Responsável</th><th>Tipos de serviço vinculados</th><th></th></tr></thead>
-        <tbody id="tbody-frentes"><tr><td colspan="6" class="empty-row">Carregando…</td></tr></tbody>
+        <thead><tr><th>Código</th><th>Descrição</th><th>Obra</th><th>Ramo da EAP</th><th></th></tr></thead>
+        <tbody id="tbody-frentes"><tr><td colspan="5" class="empty-row">Carregando…</td></tr></tbody>
       </table>
     </div>
   </div></div>
@@ -7281,6 +7281,8 @@ function popularObrasUsuarios() {
 // FRENTES DE SERVIÇO
 // ═══════════════════════════════════════════════════════════════
 
+function _frRamoCel(f) { try { const u = f && f.ramoUA && typeof _uasDa === 'function' ? _uasDa(f.obra).find(x => x.cod === f.ramoUA) : null;
+  return f && f.ramoUA ? `<span class="td-mono" style="font-size:11.5px">${_e(f.ramoUA)}</span> ${_e(u ? u.nome : '')}` : '<span style="color:var(--text-3)">EAP inteira</span>'; } catch (e) { return '—'; } }
 function renderFrentes() {
   const el = document.getElementById('tbody-frentes'); if (!el) return;
   if (!dados.frentes) dados.frentes = [];
@@ -7295,8 +7297,7 @@ function renderFrentes() {
           + '<td class="td-mono"><strong>'+f.cod+'</strong></td>'
           + '<td>'+f.desc+'</td>'
           + '<td>'+obraNome+'</td>'
-          + '<td>'+(f.resp||'—')+'</td>'
-          + '<td><span class="tag tag-blue" style="font-size:11px">'+nServicos+' tipo(s)</span></td>'
+          + '<td>'+_frRamoCel(f)+'</td>'   // v4.56: Ramo da EAP já sai no render (antes era trocado depois e embaralhava as colunas)
           + '<td>'+acoesCell("editarFrente('"+f.id+"')", "deletar('frentes','"+f.id+"')")+'</td>'
           + '</tr>';
       }).join('')
@@ -13362,12 +13363,7 @@ function renderUA() {
   const oRF = window.renderFrentes || renderFrentes;
   renderFrentes = window.renderFrentes = function () {
     const r = oRF.apply(this, arguments);
-    const h = document.querySelector('#tabela-frentes thead tr'); if (h && h.children.length >= 6) { h.children[3].textContent = 'Ramo da EAP'; h.children[4].remove(); }
-    const vis = new Map((dados.frentes || []).map(f => [f.cod, f]));
-    document.querySelectorAll('#tbody-frentes tr').forEach(tr => { if (tr.children.length < 6) return; const f = vis.get(tr.children[0].textContent.trim()); tr.children[4].remove();
-      const u = f && f.ramoUA ? _uasDa(f.obra).find(x => x.cod === f.ramoUA) : null;
-      tr.children[3].innerHTML = f && f.ramoUA ? `<span class="td-mono" style="font-size:11.5px">${_e(f.ramoUA)}</span> ${_e(u ? u.nome : '')}` : '<span style="color:var(--text-3)">EAP inteira</span>'; });
-    return r;
+    return r;   // v4.56: a coluna Ramo da EAP agora vem pronta do render (_frRamoCel)
   };
   // template / importação de frentes: "Ramo da EAP (código)" no lugar de Responsável
   try { const d = IMPORT_DEF.frentes; d.col = ['Descrição', 'Código (deixe em branco: o sistema gera)', 'Ramo da EAP (código, ex.: 1.002.004.001)', 'Coordenada (lat, long)'];
@@ -15453,7 +15449,7 @@ function _afVarrer() {
     if (tb.id === 'tabela-func' || tb.closest('.dx-main') || tb.closest('.modal') || !tb.querySelector(':scope > thead') || tb.__afObs) return;
     tb.__afOcup = true; try { _colOrdem(tb); } finally { setTimeout(() => { tb.__afOcup = false; }, 0); }
     _afMontar(tb); _afAplicar(tb);
-    tb.__afObs = new MutationObserver(() => { if (tb.__afOcup) return; clearTimeout(tb.__afT); tb.__afT = setTimeout(() => { tb.__afOcup = true; try { _colOrdem(tb); } catch (e) {} _afMontar(tb); _afAplicar(tb); }, 0); });
+    tb.__afObs = new MutationObserver(ms => { if (tb.__afOcup && !(tb.querySelector(':scope > thead > tr:last-child')?.__perm && ms.some(m => [...m.addedNodes].some(n => n.tagName === 'TR' && !n.__ord && n.parentElement && n.parentElement.tagName === 'TBODY')))) return; clearTimeout(tb.__afT); tb.__afT = setTimeout(() => { tb.__afOcup = true; try { _colOrdem(tb); } catch (e) {} _afMontar(tb); _afAplicar(tb); }, 0); });
     tb.__afObs.observe(tb, { childList: true, subtree: true });
   });
 }
