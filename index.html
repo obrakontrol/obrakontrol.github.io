@@ -671,7 +671,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.62 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.63 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -19518,10 +19518,12 @@ function _uaApropriado(obra) {
   const m = {}, it = cod => m[cod] = m[cod] || { qtd: 0, hn: 0, he: 0, hp: 0, hpar: 0, cmo: 0, ceq: 0, comb: {} };
   const comb = (x, a, q, c) => { const k = (a.frente || '—') + '|' + (a.servico || a.tipoServico || '—'); const y = x.comb[k] = x.comb[k] || { qtd: 0, custo: 0, dias: new Set(), unid: '' }; y.qtd += q; y.custo += c; if (q && a.unid) y.unid = a.unid; if (a.data) y.dias.add(a.data); };
   const un = v => String(v || '').toLowerCase().replace('metro', 'm').replace(/^unidade$/, 'un').trim(), uU = new Map((dados.ua || []).filter(u => u.obra === obra).map(u => [u.cod, un(u.unid)]));
-  (dados.aponMO || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a)).forEach(a => { const x = it(a.ua), c = custoMO(a), cv = c.normal + c.extra + c.domFer, q = parseFloat(a.qtd) || 0;
+  const corte = new Map((dados.ua || []).filter(u => u.obra === obra && u.antData).map(u => [u.cod, u.antData])), dep = a => !corte.get(a.ua) || String(a.data || '') > corte.get(a.ua);   // v4.63: depois da data de corte
+  (dados.aponMO || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a) && dep(a)).forEach(a => { const x = it(a.ua), c = custoMO(a), cv = c.normal + c.extra + c.domFer, q = parseFloat(a.qtd) || 0;
     if (!uU.get(a.ua) || un(a.unid) === uU.get(a.ua)) x.qtd += q;   /* produzido da UA: só serviços na mesma unidade (PV em un, recomposição em m² não somam nos metros da VCA) */ x.hn += parseFloat(a.hn) || 0; x.he += parseFloat(a.he) || 0; x.cmo += cv; comb(x, a, q, cv); });
-  (dados.aponEQ || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a)).forEach(a => { const x = it(a.ua), c = custoEQ(a), cv = c.prod + c.parado;
+  (dados.aponEQ || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a) && dep(a)).forEach(a => { const x = it(a.ua), c = custoEQ(a), cv = c.prod + c.parado;
     x.hp += parseFloat(a.hp) || 0; x.hpar += parseFloat(a.hpar) || 0; x.ceq += cv; comb(x, a, 0, cv); });
+  (dados.ua || []).filter(u => u.obra === obra && u.folha && (+u.antQtd || +u.antCusto)).forEach(u => { const x = it(u.cod); x.qApp = x.qtd; x.antQtd = +u.antQtd || 0; x.antCusto = +u.antCusto || 0; x.antData = u.antData || ''; x.qtd += x.antQtd; });
   return m;
 }
 function _uaFluxoHTML(obra) {
@@ -19566,28 +19568,31 @@ renderUA = window.renderUA = function () {
   const todas = (dados.ua || []).filter(u => u.obra === obra), ap = _uaApropriado(obra);
   // soma nos grupos (pelo prefixo do código)
   const tot = {}; todas.filter(u => u.folha).forEach(u => { const a = ap[u.cod]; if (!a) return; const partes = String(u.cod).split('.');
-    for (let i = 1; i <= partes.length; i++) { const k = partes.slice(0, i).join('.'); const t = tot[k] = tot[k] || { h: 0, he: 0, c: 0 }; t.h += a.hn + a.he; t.he += a.hp + a.hpar; t.c += a.cmo + a.ceq; } });
+    for (let i = 1; i <= partes.length; i++) { const k = partes.slice(0, i).join('.'); const t = tot[k] = tot[k] || { h: 0, he: 0, c: 0 }; t.h += a.hn + a.he; t.he += a.hp + a.hpar; t.c += a.cmo + a.ceq + (a.antCusto || 0); t.cq = (t.cq || 0) + (u.qtd && u.custoTotal ? Math.min(1, a.qtd / u.qtd) * u.custoTotal : 0); } });
   const l = todas.filter(u => sit === 'todas' || (sit === 'inativas' ? u.ativo === false : u.ativo !== false))
     .filter(u => !busca || _uaN(u.cod + ' ' + (u.nome || u.desc)).includes(busca))
     .sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
   const rm = todas.filter(u => u.origem === 'RM'), at = rm.filter(u => u.ativo !== false);
-  const res = document.getElementById('ua-resumo'); if (res) res.innerHTML = (_okObraAtual() === 'todas' ? `<b>${_e(getNomeObra(obra))}</b> · ` : '') + (rm.length ? `${at.filter(u => u.folha).length} UAs de lançamento ativas · ${rm.length - at.length} inativa(s)` : 'Nenhuma UA do RM nesta obra. Clique em <b>↑ Atualizar do RM</b>.');
+  const res = document.getElementById('ua-resumo'); if (res) res.innerHTML = (_okObraAtual() === 'todas' ? `<b>${_e(getNomeObra(obra))}</b> · ` : '') + (rm.length ? `${at.filter(u => u.folha).length} UAs de lançamento ativas · ${rm.length - at.length} inativa(s)` : 'Nenhuma UA do RM nesta obra. Clique em <b>↑ Atualizar do RM</b>.')
+    + (() => { const of = todas.filter(u => u.folha && u.ativo !== false).reduce((s, u) => s + (+u.custoTotal || 0), 0), ex = todas.filter(u => u.folha && u.ativo !== false && ap[u.cod] && +u.qtd).reduce((s, u) => s + Math.min(1, ap[u.cod].qtd / u.qtd) * (+u.custoTotal || 0), 0);
+        return of ? ` · <b style="color:var(--text-1)">Avanço físico ${_n1(ex / of * 100)}%</b> <span title="soma de (qtd realizada ÷ qtd orçada × orçado) de cada UA ÷ orçado total">ⓘ</span>` : ''; })();
   const brl = v => (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }), n1 = v => (Math.round((+v || 0) * 10) / 10).toLocaleString('pt-BR');
   tb.innerHTML = l.length ? l.map(u => { const nv = Math.max(0, (u.nivel || 1) - 1), grupo = _uaEap(u) && !u.folha, a = ap[u.cod], t = tot[u.cod], aberta = window._uaAberta === u.cod;
-    const pct = u.folha && a && +u.qtd ? a.qtd / u.qtd * 100 : null;
+    const orcG = grupo ? todas.filter(x => x.folha && String(x.cod).startsWith(u.cod + '.')).reduce((s, x) => s + (+x.custoTotal || 0), 0) : 0;
+    const pct = u.folha && a && +u.qtd ? a.qtd / u.qtd * 100 : grupo && orcG && t && t.cq ? t.cq / orcG * 100 : null;   // grupo: avanço físico ponderado pelo orçado
     let det = '';
     if (aberta) { const cs = a ? Object.entries(a.comb).sort((x, y) => y[1].custo - x[1].custo) : [];
       det = `<tr><td colspan="11" style="background:rgba(22,163,74,.05);padding:10px 14px 12px ${20 + nv * 14}px">${cs.length ? `<div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--text-3);margin-bottom:6px">O QUE CAIU NESTA UA (aprovados)</div>
         <table style="width:auto;font-size:12.5px"><thead><tr><th>Frente</th><th>Serviço</th><th style="text-align:right">Produzido</th><th style="text-align:right">Dias</th><th style="text-align:right">Custo</th></tr></thead><tbody>${cs.map(([k, y]) => { const [f, s] = k.split('|'); return `<tr><td><b class="td-mono">${_e(f)}</b> ${_e(_nomeFrente(f))}</td><td>${_e(s)}</td><td class="td-mono" style="text-align:right">${y.qtd ? n1(y.qtd) + ' ' + _e(y.unid || u.unid || '') : '—'}</td><td class="td-mono" style="text-align:right">${y.dias.size}</td><td class="td-mono" style="text-align:right">${brl(y.custo)}</td></tr>`; }).join('')}</tbody></table>`
-        : '<span style="font-size:12.5px;color:var(--text-3)">Nada aprovado caiu nesta UA ainda.</span>'}</td></tr>`; }
+        : '<span style="font-size:12.5px;color:var(--text-3)">Nada aprovado caiu nesta UA ainda.</span>'}${a && (a.antQtd || a.antCusto) ? `<div style="margin-top:8px;font-size:12.5px"><b>Realizado anterior</b> (até ${_e(fmtData(a.antData))}): ${a.antQtd ? n1(a.antQtd) + ' ' + _e(u.unid || '') : '—'} · ${brl(a.antCusto)} <span style="color:var(--text-3)">— lançamentos do app só contam depois dessa data</span></div>` : ''}</td></tr>`; }
     return `<tr data-ua="${_e(u.cod)}" style="${u.ativo === false ? 'opacity:.55;' : ''}${grupo ? 'background:var(--bg);' : ''}${u.folha ? 'cursor:pointer;' : ''}" ${u.folha ? `onclick="if(!event.target.closest('button'))_uaToggle('${_e(u.cod)}')" title="Clique para ver frentes e serviços que caíram aqui"` : ''}><td class="td-mono" style="white-space:nowrap">${u.folha ? (aberta ? '▾ ' : '▸ ') : ''}${_e(u.cod)}</td>
       <td style="padding-left:${8 + nv * 14}px;${grupo ? 'font-weight:800' : ''}">${_e(u.nome || u.desc || '')}</td>
       <td>${_e(u.unid || (_uaEap(u) ? '' : u.tipo || ''))}</td><td class="td-mono" style="text-align:right">${u.folha && u.qtd ? (+u.qtd).toLocaleString('pt-BR') : ''}</td>
       <td class="td-mono" style="text-align:right">${u.custoTotal ? brl(u.custoTotal) : ''}</td>
-      <td class="td-mono" style="text-align:right">${u.folha && a && a.qtd ? n1(a.qtd) : ''}</td>
+      <td class="td-mono" style="text-align:right">${u.folha && a && a.qtd ? n1(a.qtd) + (a.antQtd ? `<div style="font-size:10.5px;color:var(--text-3);white-space:nowrap">ant. ${n1(a.antQtd)} + app ${n1(a.qtd - a.antQtd)}</div>` : '') : ''}</td>
       <td class="td-mono" style="text-align:right">${pct != null ? `<span style="color:${pct > 100 ? '#dc2626' : pct > 0 ? '#15803d' : 'inherit'}">${n1(pct)}%</span>` : ''}</td>
       <td class="td-mono" style="text-align:right;white-space:nowrap">${t ? n1(t.h) + ' · ' + n1(t.he) : ''}</td>
-      <td class="td-mono" style="text-align:right;${grupo ? 'font-weight:800' : ''}">${t && t.c ? brl(t.c) : ''}</td>
+      <td class="td-mono" style="text-align:right;${grupo ? 'font-weight:800' : ''}">${t && t.c ? brl(t.c) + (u.folha && a && a.antCusto ? `<div style="font-size:10.5px;color:var(--text-3);font-weight:400;white-space:nowrap">ant. ${brl(a.antCusto)} + app ${brl(t.c - a.antCusto)}</div>` : '') : ''}</td>
       <td>${u.ativo === false ? tag('Inativa', 'gray') : grupo ? '<span style="font-size:11px;color:var(--text-3)">grupo</span>' + (u.origem === 'manual' ? ' ' + tag('Manual', 'amber') : '') : u.origem === 'RM' ? tag('Ativa', 'green') : tag('Manual', 'amber')}</td>
       <td>${u.origem === 'RM' ? '' : acoesCell(`editarUA('${u.id}')`, `deletar('ua','${u.id}')`)}</td></tr>${det}`; }).join('')
     : '<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:2rem">Nenhuma UA com esse filtro.</td></tr>';
@@ -19631,6 +19636,86 @@ function _patChips(prev, real, nomeDe) {
     } catch (e) { console.warn('patrulha', e); }
     return r;
   };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.63: UA — REALIZADO ANTERIOR (obras em andamento): por UA, quantidade e custo realizados até uma data de corte.
+// O app soma só as apropriações DEPOIS da data de corte (sem contar duas vezes). Custo pode vir do RM; a quantidade é levantada.
+// ═══════════════════════════════════════════════════════════════
+let _uaAnt = null;
+function uaAntAbrir() {
+  const obra = _uaObraTela(); if (!obra) { toast('Escolha a obra no topo.', 'error'); return; }
+  const fol = _uaFolhas(obra).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
+  if (!fol.length) { toast('Esta obra ainda não tem EAP. Use ↑ Atualizar do RM primeiro.', 'error'); return; }
+  const corte = (fol.find(u => u.antData) || {}).antData || '';
+  _uaAnt = { obra, corte, m: Object.fromEntries(fol.map(u => [u.cod, { q: u.antQtd ?? '', c: u.antCusto ?? '' }])) };
+  if (!document.getElementById('modal-ua-ant')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-ua-ant"><div class="modal" style="max-width:1000px;width:96vw">
+    <div class="modal-header"><span class="modal-title">Realizado anterior — por UA</span><button class="modal-close" onclick="closeModal('modal-ua-ant')">×</button></div>
+    <div class="modal-body" id="uaant-corpo" style="max-height:72vh;overflow:auto"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-ua-ant')">Cancelar</button><button class="btn btn-primary" onclick="uaAntSalvar()">Salvar</button></div></div></div>`);
+  _uaAntRender(); openModal('modal-ua-ant');
+}
+function _uaAntRender() {
+  const A = _uaAnt, fol = _uaFolhas(A.obra).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true })), todas = _uasDa(A.obra);
+  const brl = v => (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+  let grp = '';
+  const linhas = fol.map(u => { const v = A.m[u.cod] || {}, pai = todas.find(x => x.cod === u.pai), g = pai && pai.cod !== grp ? (grp = pai.cod, `<tr><td colspan="6" style="background:var(--bg);font-weight:800;font-size:12px"><span class="td-mono">${_e(pai.cod)}</span> ${_e(pai.nome)}</td></tr>`) : '';
+    const pct = +v.q && +u.qtd ? +v.q / u.qtd * 100 : null;
+    return g + `<tr><td class="td-mono" style="white-space:nowrap;font-size:12px">${_e(u.cod)}</td><td style="font-size:12.5px">${_e(u.nome)}</td>
+      <td class="td-mono" style="text-align:right;white-space:nowrap;font-size:12px">${u.qtd ? (+u.qtd).toLocaleString('pt-BR') + ' ' + _e(u.unid || '') : ''}</td>
+      <td><input class="form-control" type="number" min="0" step="any" style="width:120px;padding:4px 8px" value="${v.q}" onchange="_uaAnt.m['${_e(u.cod)}'].q=this.value;_uaAntRender()"/></td>
+      <td class="td-mono" style="font-size:12px;color:${pct > 100 ? '#dc2626' : 'var(--text-2)'}">${pct != null ? _n1(pct) + '%' : ''}</td>
+      <td><input class="form-control" type="number" min="0" step="any" style="width:140px;padding:4px 8px" value="${v.c}" onchange="_uaAnt.m['${_e(u.cod)}'].c=this.value;_uaAntRender()"/></td></tr>`; }).join('');
+  const tq = fol.filter(u => +(A.m[u.cod] || {}).q).length, tc = fol.reduce((t, u) => t + (+(A.m[u.cod] || {}).c || 0), 0);
+  document.getElementById('uaant-corpo').innerHTML = `
+    <div style="border:1.5px solid #E30613;background:rgba(227,6,19,.05);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;line-height:1.5">
+      Para obras <b>em andamento</b>: informe o que já foi feito em cada UA <b>até a data de corte</b>. Depois dessa data, quem soma são as apropriações do app — os lançamentos até a data de corte <b>não</b> entram (não conta duas vezes).<br>
+      <b>Custo</b>: o realizado do RM. <b>Quantidade</b>: o levantamento de campo (medição / topografia) — é ela que dá o avanço físico.</div>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+      <div><label class="form-label">Data de corte (realizado até)</label><input class="form-control" type="date" value="${_e(A.corte)}" onchange="_uaAnt.corte=this.value" style="width:170px"/></div>
+      <button class="btn btn-outline btn-sm" onclick="uaAntModelo()">⬇ Planilha para preencher</button>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer">↑ Importar planilha<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="uaAntImportar(this)"/></label>
+      <div style="font-size:12px;color:var(--text-3);margin-left:auto">${tq} UA(s) com quantidade · custo anterior total <b>${brl(tc)}</b></div></div>
+    <div class="table-wrap"><table style="font-size:12.5px"><thead><tr><th>Código</th><th>UA</th><th style="text-align:right">Qtd orçada</th><th>Qtd realizada até o corte</th><th>% físico</th><th>Custo realizado até o corte (R$)</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+}
+function uaAntModelo() {
+  const A = _uaAnt, fol = _uaFolhas(A.obra).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
+  const rows = [['Código da Tarefa/UA', 'Nome', 'Unidade', 'Quantidade orçada', 'Qtd realizada anterior', 'Custo realizado anterior (R$)']].concat(fol.map(u => { const v = A.m[u.cod] || {}; return [u.cod, u.nome, u.unid || '', +u.qtd || '', v.q === '' ? '' : +v.q, v.c === '' ? '' : +v.c]; }));
+  const wb = XLSX.utils.book_new(), sh = XLSX.utils.aoa_to_sheet(rows); sh['!cols'] = [{ wch: 20 }, { wch: 60 }, { wch: 9 }, { wch: 16 }, { wch: 20 }, { wch: 26 }];
+  XLSX.utils.book_append_sheet(wb, sh, 'Realizado anterior');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Realizado anterior por UA'], [''], ['Preencha só as UAs que já tiveram execução. Linha em branco = nada antes da data de corte.'], ['Custo: pode colar o realizado do RM (por código da UA). Quantidade: levantamento de campo.'], ['A data de corte é informada na tela, antes de salvar.'], ['Também aceita o relatório do RM direto: basta ter a coluna "Código da Tarefa" e uma coluna de custo/valor realizado.']]), 'Como preencher');
+  XLSX.writeFile(wb, 'Realizado anterior por UA - ' + (getNomeObra(A.obra) || A.obra).replace(/[^\w-]+/g, '_').slice(0, 40) + '.xlsx');
+}
+function uaAntImportar(inp) {
+  const f = inp.files && inp.files[0]; if (!f) return; const rd = new FileReader();
+  rd.onload = ev => { try {
+    const wb = XLSX.read(ev.target.result, { type: 'binary' }), rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+    const hi = rows.findIndex(r => r.some(c => /c[oó]digo/i.test(String(c)))); if (hi < 0) { toast('Não achei a coluna "Código da Tarefa/UA".', 'error'); return; }
+    const H = rows[hi].map(h => _uaN(h)), ix = re => H.findIndex(h => re.test(h));
+    const cCod = ix(/CODIGO/), cQ = ix(/(QTD|QUANTIDADE).*(REALIZ|EXECUT|ANTERIOR)/), cC = ix(/(CUSTO|VALOR).*(REALIZ|EXECUT|ANTERIOR)/);
+    if (cQ < 0 && cC < 0) { toast('Não achei a coluna de quantidade realizada nem de custo realizado.', 'error'); return; }
+    const num = v => typeof v === 'number' ? v : (String(v).trim() === '' ? '' : (parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0));
+    let n = 0, fora = 0;
+    rows.slice(hi + 1).forEach(r => { const cod = String(r[cCod] || '').trim(); if (!cod) return; const m = _uaAnt.m[cod]; if (!m) { fora++; return; }
+      if (cQ >= 0 && num(r[cQ]) !== '') m.q = num(r[cQ]); if (cC >= 0 && num(r[cC]) !== '') m.c = num(r[cC]); n++; });
+    _uaAntRender(); toast(n + ' UA(s) preenchida(s)' + (fora ? ' · ' + fora + ' código(s) fora das UAs de lançamento (grupos ou inexistentes) ignorados' : '') + '. Confira e clique em Salvar.');
+  } catch (e) { console.error(e); toast('Não consegui ler a planilha.', 'error'); } finally { inp.value = ''; } };
+  rd.readAsBinaryString(f);
+}
+async function uaAntSalvar() {
+  const A = _uaAnt, fol = _uaFolhas(A.obra), num = v => v === '' || v == null ? null : +v;
+  const tem = fol.some(u => num((A.m[u.cod] || {}).q) || num((A.m[u.cod] || {}).c));
+  if (tem && !A.corte) { toast('Informe a data de corte (até quando vale o realizado anterior).', 'error'); return; }
+  const mud = [];
+  fol.forEach(u => { const v = A.m[u.cod] || {}, q = num(v.q), c = num(v.c), d = (q || c) ? A.corte : '';
+    if ((u.antQtd ?? null) !== q || (u.antCusto ?? null) !== c || (u.antData || '') !== d) { u.antQtd = q; u.antCusto = c; u.antData = d; mud.push(u); } });
+  if (db && _firebaseReady) { const rs = await Promise.allSettled(mud.map(u => fbSave('ua', u.id, u))); const fl = rs.filter(r => r.status === 'rejected').length; if (fl) toast(fl + ' não foram gravadas. Tente de novo.', 'error'); }
+  closeModal('modal-ua-ant'); renderUA(); toast(mud.length ? mud.length + ' UA(s) atualizada(s).' : 'Nada mudou.');
+}
+// botão na tela de UA
+(function () {
+  const pi = window.pageInit; window.pageInit = function (id) { const r = pi ? pi.apply(this, arguments) : undefined;
+    if (id === 'ua') { const bg = document.querySelector('#page-ua .page-header .btn-group'); if (bg && !bg.querySelector('#ua-btn-ant')) bg.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline btn-sm" id="ua-btn-ant" onclick="uaAntAbrir()" title="Obras em andamento: quantidade e custo já realizados por UA até uma data de corte">↺ Realizado anterior</button>'); }
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
