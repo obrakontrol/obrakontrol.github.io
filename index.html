@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.53 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.54 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -1653,6 +1653,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
             <option value="ton">ton</option>
             <option value="hora">hora</option>
             <option value="vb">verba (vb)</option>
+            <option value="%">% (percentual)</option>
           </select>
         </div>
         <div class="form-group form-full">
@@ -7393,8 +7394,9 @@ function salvarTipoServico() {
   if (!cod)  { toast('Informe o código','error'); return; }
   if (!nome) { toast('Informe o nome do serviço','error'); return; }
   if (!dados.tiposServico) dados.tiposServico = [];
-  const dup = dados.tiposServico.find(s=>s.cod===cod&&s.id!==id);
-  if (dup) { toast('Código "'+cod+'" já existe: '+dup.nome,'error'); return; }
+  const _obSel = document.getElementById('srv-obra')?.value||'';   // v4.54: o mesmo código pode existir em obras diferentes
+  const dup = dados.tiposServico.find(s=>s.cod===cod&&s.id!==id&&(s.obra||'')===_obSel);
+  if (dup) { toast('Código "'+cod+'" já existe nesta obra: '+dup.nome,'error'); return; }
   if (id) {
     const s = dados.tiposServico.find(s=>s.id===id);
     if (s) { s.cod=cod; s.nome=nome; s.unidade=unidade; s.meta=meta; s.obs=obs; }
@@ -7403,7 +7405,7 @@ function salvarTipoServico() {
   }
     // Save to Firebase
   if (db && _firebaseReady) {
-    const _last = (dados.tiposServico||[]).slice(-1)[0];
+    const _last = id ? dados.tiposServico.find(x=>x.id===id) : (dados.tiposServico||[]).slice(-1)[0];   // v4.54: grava o editado, não o último
     if (_last?.id) fbSave('tiposServico', _last.id, _last).catch(()=>{});
   }
   closeModal('modal-novo-tipo-servico');
@@ -13394,7 +13396,9 @@ function renderUA() {
   const srvAbrir = s => { popularSelectObra('srv-obra', s ? (s.obra || '') : (_okObraAtual() !== 'todas' ? _okObraAtual() : '')); const o0 = $('srv-obra'); if (o0 && o0.options[0]) o0.options[0].textContent = 'Todas as obras';
     window._srvSel = new Set(((s && s.uaNomes) || []).map(_uaN)); if ($('srv-uas-busca')) $('srv-uas-busca').value = ''; _srvUasRender(); };
   const oEdS = window.editarTipoServico;
-  window.editarTipoServico = function (id) { const r = oEdS.apply(this, arguments); srvAbrir((dados.tiposServico || []).find(x => x.id === id)); return r; };
+  window.editarTipoServico = function (id) { const r = oEdS.apply(this, arguments); const s0 = (dados.tiposServico || []).find(x => x.id === id); srvAbrir(s0);
+    try { const se = $('srv-unidade'), u = s0 && s0.unidade; if (se && se.tagName === 'SELECT' && u) { if (![...se.options].some(o => o.value === u)) se.insertAdjacentHTML('beforeend', `<option value="${_e(u)}">${_e(u)}</option>`); se.value = u; } } catch (e) {}   // v4.54: unidade do kickoff/importação aparece no editar
+    return r; };
   document.querySelectorAll(`[onclick*="openModal('modal-novo-tipo-servico')"]`).forEach(b => b.addEventListener('click', () => setTimeout(() => srvAbrir(null), 30)));
   const oSvS = window.salvarTipoServico;
   window.salvarTipoServico = function () {
@@ -13411,8 +13415,8 @@ function renderUA() {
   renderTiposServico = window.renderTiposServico = function () {
     const r = oRS.apply(this, arguments); const h = document.querySelector('#page-tipos-servico thead tr');
     if (h && !h.dataset.ua) { h.dataset.ua = '1'; h.children[h.children.length - 1].insertAdjacentHTML('beforebegin', '<th>Custeia nas UAs (RM)</th>'); }
-    const m = new Map((dados.tiposServico || []).map(s => [String(s.cod), s]));
-    document.querySelectorAll('#tbody-tipos-servico tr').forEach(tr => { const s = m.get(tr.children[0]?.textContent.trim()); if (!s || tr.dataset.ua) return; tr.dataset.ua = '1';
+    const m = new Map((dados.tiposServico || []).map(s => [String(s.id), s]));   // v4.54: casa a linha pelo id (códigos podem repetir entre obras)
+    document.querySelectorAll('#tbody-tipos-servico tr').forEach(tr => { const mm = (tr.innerHTML.match(/editarTipoServico\('([^']+)'\)/) || [])[1]; const s = mm && m.get(mm); if (!s || tr.dataset.ua) return; tr.dataset.ua = '1';
       tr.children[tr.children.length - 1].insertAdjacentHTML('beforebegin', `<td style="font-size:11.5px">${(s.uaNomes || []).length ? s.uaNomes.map(n => _e(n)).join('<br>') : '<span style="color:var(--amber)">⚠ sem UA</span>'}</td>`); });
     return r;
   };
@@ -18721,7 +18725,7 @@ async function _kkGerar(nUsr) {
     .map(([cod, desc, a, b, ramo], i) => sv('frentes', { id: 'kk_fr' + i, cod, desc, ramoUA: ramo, resp: NOMES[[0, 1, 2, 0, 20, 1][i]], coord: (B.lat + a).toFixed(5) + ', ' + (B.lng + b).toFixed(5), obs: '', ...X }));
   const SVL = _KK_SERVICOS;
   _kkUAs(O, sv, K);
-  const SV = SVL.map(([cod, nome, unidade, qtd, pd, cu, orc], i) => ({ ...sv('tiposServico', { id: 'kk_sv' + i, cod, nome, unidade, meta: pd, uaNomes: [_uaN(nome)], ...X }), _q: qtd, _pd: pd, _cu: cu, _orc: orc }));
+  const SV = SVL.map(([cod, nome, unidade, qtd, pd, cu, orc], i) => ({ ...sv('tiposServico', { id: 'kk_sv' + i, cod, nome, unidade, meta: pd, uaNomes: [nome.toUpperCase()], ...X }), _q: qtd, _pd: pd, _cu: cu, _orc: orc }));
   sv('orcamentos', { id: 'kk_orc', obra: O, nome: 'Executivo', status: 'validada', validadoEm: dia(50) + 'T10:00:00', criadoEm: dia(52), itens: SV.filter(s => s._orc).map(s => ({ servico: s.nome, unid: s.unidade, qtd: s._q, prodDia: s._pd, custoUnit: s._cu, equipe: [], equipamentos: [] })), kick: true });
   SV.forEach(s => { delete s._q; delete s._pd; delete s._cu; delete s._orc; });
   const SVd = Object.fromEntries(SVL.map(x => [x[0], x[4]]));
