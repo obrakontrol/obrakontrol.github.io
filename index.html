@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.56 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.57 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -19428,6 +19428,93 @@ function uaModelo() {
     if (id === 'ua') { const bg = pg.querySelector('.page-header .btn-group'); if (bg && !bg.querySelector('#ua-btn-modelo')) bg.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline btn-sm" id="ua-btn-modelo" onclick="uaModelo()" title="EAP no formato do RM, padrão Sabesp (formal/rural, esgoto/água, estações)">⬇ Modelo de UA</button>'); }
     return r; };
 })();
+// ═══════════════════════════════════════════════════════════════
+// v4.57: UA — EAP com o APROPRIADO em cada linha (produzido, horas e custo real somando nos grupos)
+// + quadro "Como cai na UA": frente (ramo) → serviço → linha da EAP. Clique numa UA para ver o que caiu nela.
+// ═══════════════════════════════════════════════════════════════
+window._uaAberta = window._uaAberta || null;
+function _uaObraTela() {
+  const o = _okObraAtual(); if (o !== 'todas') return o;
+  const com = [...new Set((dados.ua || []).filter(u => _uaEap(u)).map(u => u.obra))];
+  return com.length === 1 ? com[0] : '';
+}
+function _uaApropriado(obra) {
+  const m = {}, it = cod => m[cod] = m[cod] || { qtd: 0, hn: 0, he: 0, hp: 0, hpar: 0, cmo: 0, ceq: 0, comb: {} };
+  const comb = (x, a, q, c) => { const k = (a.frente || '—') + '|' + (a.servico || a.tipoServico || '—'); const y = x.comb[k] = x.comb[k] || { qtd: 0, custo: 0, dias: new Set() }; y.qtd += q; y.custo += c; if (a.data) y.dias.add(a.data); };
+  (dados.aponMO || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a)).forEach(a => { const x = it(a.ua), c = custoMO(a), cv = c.normal + c.extra + c.domFer, q = parseFloat(a.qtd) || 0;
+    x.qtd += q; x.hn += parseFloat(a.hn) || 0; x.he += parseFloat(a.he) || 0; x.cmo += cv; comb(x, a, q, cv); });
+  (dados.aponEQ || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a)).forEach(a => { const x = it(a.ua), c = custoEQ(a), cv = c.prod + c.parado;
+    x.hp += parseFloat(a.hp) || 0; x.hpar += parseFloat(a.hpar) || 0; x.ceq += cv; comb(x, a, 0, cv); });
+  return m;
+}
+function _uaFluxoHTML(obra) {
+  const frs = (dados.frentes || []).filter(f => f.obra === obra && f.ativo !== false).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
+  const svs = (dados.tiposServico || []).filter(s => (!s.obra || s.obra === obra) && (s.uaNomes || []).length && s.ativo !== false);
+  if (!frs.length || !svs.length) return '<div style="color:var(--text-3);font-size:12.5px">Cadastre frentes (com ramo da EAP) e tipos de serviço (com as UAs que custeiam) para ver o caminho.</div>';
+  const sel = document.getElementById('ua-fx-fr')?.value || frs[0].cod, fr = frs.find(f => f.cod === sel) || frs[0];
+  const ramoU = fr.ramoUA ? _uasDa(obra).find(u => u.cod === fr.ramoUA) : null;
+  // serviços já usados nesta frente vêm primeiro
+  const usados = new Set((dados.aponMO || []).filter(a => a.obra === obra && a.frente === fr.cod).map(a => a.servico || a.tipoServico));
+  const lst = svs.slice().sort((a, b) => (usados.has(b.nome) - usados.has(a.nome)) || String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
+  const box = (t, s, cor) => `<div style="border:1.5px solid ${cor};border-radius:10px;padding:7px 10px;background:var(--surface,#fff);min-width:0"><div style="font-weight:800;font-size:12.5px">${t}</div>${s ? `<div style="font-size:11px;color:var(--text-3)">${s}</div>` : ''}</div>`;
+  const seta = '<div style="color:var(--text-3);font-size:18px;text-align:center">→</div>';
+  const lin = s => { const r = uaResolver(obra, fr.cod, s.nome);
+    const fim = r.ua ? `<div onclick="_uaIr('${_e(r.ua.cod)}')" style="cursor:pointer">${box(`<span class="td-mono">${_e(r.ua.cod)}</span>`, _e(r.ua.nome) + ' · <b style="color:#15803d">automática</b>', '#16a34a')}</div>`
+      : r.cands.length ? box(`${r.cands.length} UAs possíveis`, 'o aprovador escolhe: ' + r.cands.map(u => `<a href="#" onclick="_uaIr('${_e(u.cod)}');return false" class="td-mono">${_e(u.cod)}</a>`).join(', '), '#d97706')
+      : box('Não cai em nenhuma UA', _e(r.motivo || ''), usados.has(s.nome) ? '#dc2626' : 'var(--border)');
+    return `<div style="display:grid;grid-template-columns:minmax(150px,1fr) 28px minmax(220px,1.6fr);gap:6px;align-items:center;margin-bottom:6px">
+      ${box(_e(s.nome) + (usados.has(s.nome) ? ' <span class="tag tag-blue" style="font-size:9.5px">lançado aqui</span>' : ''), 'custeia: ' + (s.uaNomes || []).map(_e).join('; '), 'var(--border)')}${seta}${fim}</div>`; };
+  const us = lst.filter(s => usados.has(s.nome)), ou = lst.filter(s => !usados.has(s.nome));
+  const linhas = (us.length ? us.map(lin).join('') : '<div style="font-size:12.5px;color:var(--text-3);margin-bottom:6px">Nenhum serviço lançado nesta frente ainda.</div>')
+    + (ou.length ? `<details style="margin-top:6px"${us.length ? '' : ' open'}><summary style="cursor:pointer;font-size:12.5px;color:var(--text-2)">Simular os outros ${ou.length} serviços nesta frente</summary><div style="margin-top:8px">${ou.map(lin).join('')}</div></details>` : '');
+  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label class="form-label" style="margin:0">Frente</label>
+      <select class="form-control" id="ua-fx-fr" style="max-width:420px" onchange="renderUA()">${frs.map(f => `<option value="${_e(f.cod)}" ${f.cod === fr.cod ? 'selected' : ''}>${_e(f.cod)} — ${_e(f.desc || '')}</option>`).join('')}</select>
+      <div style="font-size:12.5px">Ramo da EAP: ${fr.ramoUA ? `<b class="td-mono">${_e(fr.ramoUA)}</b> ${_e(ramoU ? ramoU.nome : '(não existe na EAP)')}` : '<b>EAP inteira</b> (sem ramo)'}</div></div>
+    <div style="display:grid;grid-template-columns:minmax(150px,1fr) 28px minmax(220px,1.6fr);gap:6px;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--text-3);margin-bottom:4px"><div>SERVIÇO LANÇADO</div><div></div><div>LINHA DA EAP (UA) ONDE O CUSTO CAI</div></div>${linhas}`;
+}
+function _uaIr(cod) { window._uaAberta = cod; renderUA(); setTimeout(() => { const tr = document.querySelector(`#tbody-ua tr[data-ua="${CSS.escape(cod)}"]`); if (tr) { tr.scrollIntoView({ block: 'center', behavior: 'smooth' }); tr.style.outline = '2px solid #16a34a'; setTimeout(() => tr.style.outline = '', 1800); } }, 50); }
+function _uaToggle(cod) { window._uaAberta = window._uaAberta === cod ? null : cod; renderUA(); }
+renderUA = window.renderUA = function () {
+  const tb = document.getElementById('tbody-ua'); if (!tb) return;
+  const pg = document.getElementById('page-ua'), card = tb.closest('.card');
+  let fx = document.getElementById('ua-fluxo'); if (!fx && card) { card.insertAdjacentHTML('beforebegin', '<div class="card" id="ua-fluxo" style="margin-bottom:1rem"><div class="card-body"><div style="font-weight:800;margin-bottom:2px">Como o lançamento cai na UA</div><div style="font-size:12px;color:var(--text-3);margin-bottom:10px">A <b>frente</b> diz onde (o ramo da EAP) · o <b>serviço</b> diz o quê (as UAs que ele custeia) · o app cruza os dois e acha a linha da EAP.</div><div id="ua-fluxo-c"></div></div></div>'); fx = document.getElementById('ua-fluxo'); }
+  const obra = _uaObraTela(), sit = document.getElementById('filtro-ua-sit')?.value || 'ativas', busca = _uaN(document.getElementById('search-ua')?.value || '');
+  const head = document.querySelector('#tabela-ua thead tr');
+  if (head && head.dataset.v457 !== '1') { head.dataset.v457 = '1'; head.dataset.rm = '1'; head.innerHTML = '<th>Código</th><th>Nome</th><th>Unid.</th><th style="text-align:right">Qtd orçada</th><th style="text-align:right">Orçado</th><th style="text-align:right">Produzido</th><th style="text-align:right">% exec.</th><th style="text-align:right">Horas MO · EQ</th><th style="text-align:right">Custo real</th><th>Situação</th><th></th>'; }
+  if (!obra) { if (fx) fx.style.display = 'none';
+    const com = [...new Set((dados.ua || []).filter(u => _uaEap(u)).map(u => u.obra))];
+    tb.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:2rem">Escolha a obra para ver a EAP dela.${com.length ? '<div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' + com.map(o => `<button class="btn btn-outline btn-sm" onclick="selecionarObra('${_e(o)}','${_e(getNomeObra(o)).replace(/'/g, '&#39;')}')">${_e(getNomeObra(o))}</button>`).join('') + '</div>' : ''}</td></tr>`; return; }
+  if (fx) { fx.style.display = ''; const c = document.getElementById('ua-fluxo-c'); if (c) c.innerHTML = _uaFluxoHTML(obra); }
+  const todas = (dados.ua || []).filter(u => u.obra === obra), ap = _uaApropriado(obra);
+  // soma nos grupos (pelo prefixo do código)
+  const tot = {}; todas.filter(u => u.folha).forEach(u => { const a = ap[u.cod]; if (!a) return; const partes = String(u.cod).split('.');
+    for (let i = 1; i <= partes.length; i++) { const k = partes.slice(0, i).join('.'); const t = tot[k] = tot[k] || { h: 0, he: 0, c: 0 }; t.h += a.hn + a.he; t.he += a.hp + a.hpar; t.c += a.cmo + a.ceq; } });
+  const l = todas.filter(u => sit === 'todas' || (sit === 'inativas' ? u.ativo === false : u.ativo !== false))
+    .filter(u => !busca || _uaN(u.cod + ' ' + (u.nome || u.desc)).includes(busca))
+    .sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
+  const rm = todas.filter(u => u.origem === 'RM'), at = rm.filter(u => u.ativo !== false);
+  const res = document.getElementById('ua-resumo'); if (res) res.innerHTML = (_okObraAtual() === 'todas' ? `<b>${_e(getNomeObra(obra))}</b> · ` : '') + (rm.length ? `${at.filter(u => u.folha).length} UAs de lançamento ativas · ${rm.length - at.length} inativa(s)` : 'Nenhuma UA do RM nesta obra. Clique em <b>↑ Atualizar do RM</b>.');
+  const brl = v => (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }), n1 = v => (Math.round((+v || 0) * 10) / 10).toLocaleString('pt-BR');
+  tb.innerHTML = l.length ? l.map(u => { const nv = Math.max(0, (u.nivel || 1) - 1), grupo = _uaEap(u) && !u.folha, a = ap[u.cod], t = tot[u.cod], aberta = window._uaAberta === u.cod;
+    const pct = u.folha && a && +u.qtd ? a.qtd / u.qtd * 100 : null;
+    let det = '';
+    if (aberta) { const cs = a ? Object.entries(a.comb).sort((x, y) => y[1].custo - x[1].custo) : [];
+      det = `<tr><td colspan="11" style="background:rgba(22,163,74,.05);padding:10px 14px 12px ${20 + nv * 14}px">${cs.length ? `<div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--text-3);margin-bottom:6px">O QUE CAIU NESTA UA (aprovados)</div>
+        <table style="width:auto;font-size:12.5px"><thead><tr><th>Frente</th><th>Serviço</th><th style="text-align:right">Produzido</th><th style="text-align:right">Dias</th><th style="text-align:right">Custo</th></tr></thead><tbody>${cs.map(([k, y]) => { const [f, s] = k.split('|'); return `<tr><td><b class="td-mono">${_e(f)}</b> ${_e(_nomeFrente(f))}</td><td>${_e(s)}</td><td class="td-mono" style="text-align:right">${y.qtd ? n1(y.qtd) + ' ' + _e(u.unid || '') : '—'}</td><td class="td-mono" style="text-align:right">${y.dias.size}</td><td class="td-mono" style="text-align:right">${brl(y.custo)}</td></tr>`; }).join('')}</tbody></table>`
+        : '<span style="font-size:12.5px;color:var(--text-3)">Nada aprovado caiu nesta UA ainda.</span>'}</td></tr>`; }
+    return `<tr data-ua="${_e(u.cod)}" style="${u.ativo === false ? 'opacity:.55;' : ''}${grupo ? 'background:var(--bg);' : ''}${u.folha ? 'cursor:pointer;' : ''}" ${u.folha ? `onclick="if(!event.target.closest('button'))_uaToggle('${_e(u.cod)}')" title="Clique para ver frentes e serviços que caíram aqui"` : ''}><td class="td-mono" style="white-space:nowrap">${u.folha ? (aberta ? '▾ ' : '▸ ') : ''}${_e(u.cod)}</td>
+      <td style="padding-left:${8 + nv * 14}px;${grupo ? 'font-weight:800' : ''}">${_e(u.nome || u.desc || '')}</td>
+      <td>${_e(u.unid || (_uaEap(u) ? '' : u.tipo || ''))}</td><td class="td-mono" style="text-align:right">${u.folha && u.qtd ? (+u.qtd).toLocaleString('pt-BR') : ''}</td>
+      <td class="td-mono" style="text-align:right">${u.custoTotal ? brl(u.custoTotal) : ''}</td>
+      <td class="td-mono" style="text-align:right">${u.folha && a && a.qtd ? n1(a.qtd) : ''}</td>
+      <td class="td-mono" style="text-align:right">${pct != null ? `<span style="color:${pct > 100 ? '#dc2626' : pct > 0 ? '#15803d' : 'inherit'}">${n1(pct)}%</span>` : ''}</td>
+      <td class="td-mono" style="text-align:right;white-space:nowrap">${t ? n1(t.h) + ' · ' + n1(t.he) : ''}</td>
+      <td class="td-mono" style="text-align:right;${grupo ? 'font-weight:800' : ''}">${t && t.c ? brl(t.c) : ''}</td>
+      <td>${u.ativo === false ? tag('Inativa', 'gray') : grupo ? '<span style="font-size:11px;color:var(--text-3)">grupo</span>' + (u.origem === 'manual' ? ' ' + tag('Manual', 'amber') : '') : u.origem === 'RM' ? tag('Ativa', 'green') : tag('Manual', 'amber')}</td>
+      <td>${u.origem === 'RM' ? '' : acoesCell(`editarUA('${u.id}')`, `deletar('ua','${u.id}')`)}</td></tr>${det}`; }).join('')
+    : '<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:2rem">Nenhuma UA com esse filtro.</td></tr>';
+};
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
