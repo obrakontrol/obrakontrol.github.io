@@ -671,7 +671,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.61 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.62 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18778,6 +18778,20 @@ async function _kkGerar(nUsr) {
     { fr: 2, ap: 2, mo: [21, 22, 23, 24, 25], eq: [3], sv: ['SV-06', 'SV-07'], op: { 3: 26 } },
     { fr: 3, ap: 20, mo: [27, 28, 29, 30, 31], eq: [1], sv: ['SV-04', 'SV-05'], op: { 1: 27 } },
     { fr: 4, ap: 20, mo: [32, 33, 34, 35, 36], eq: [7, 4], sv: ['SV-08'], op: { 7: 32, 4: 37 } }];
+  // v4.62: patrulha prevista no orçamento (equipe por função e equipamentos por família de cada serviço) a partir das equipes do dia a dia,
+  // com pequenos desvios de propósito para o comparativo previsto × real; e as premissas (salário por função, diesel por família)
+  { const orc = (dados.orcamentos || []).find(o => o.id === 'kk_orc'); if (orc) {
+    const pat = {};
+    EQP.forEach((g, gi) => g.sv.forEach(cod => { const s = SV.find(z => z.cod === cod); if (!s || pat[s.nome]) return;
+      const fu = {}, fa = {}; g.mo.forEach(fi => { const c = FS[fi].codFuncao; fu[c] = (fu[c] || 0) + 1; }); g.eq.forEach(qi => { const f = EQ[qi].familia; fa[f] = (fa[f] || 0) + 1; });
+      const ks = Object.keys(fu); if (ks.length) { const k = ks[(gi + 1) % ks.length]; fu[k] = Math.max(1, fu[k] + [1, -1, 1, 0, 1][gi % 5]); }   // desvio proposital
+      if (gi === 0) fa.RET = (fa.RET || 0) + 1;   // patrulha prevista com 1 retro a mais que a real
+      pat[s.nome] = { equipe: Object.entries(fu).map(([funcao, qtd]) => ({ funcao, qtd })), equipamentos: Object.entries(fa).map(([familia, qtd]) => ({ familia, qtd })) }; }));
+    orc.itens.forEach(i => { const p = pat[i.servico]; if (p) { i.equipe = p.equipe; i.equipamentos = p.equipamentos; } });
+    const usadas = [...new Set(EQP.flatMap(g => g.mo.map(fi => FS[fi].codFuncao)))];
+    orc.salarios = usadas.map((cod, k) => { const c = cg(cod); return { funcao: cod, salario: Math.round((c ? c.salRef : 3000) * [1, .96, 1.04, .98][k % 4]) }; });
+    orc.diesel = [['ESC', 15], ['RET', 7], ['CB', 9], ['ROL', 8], ['PD', 12]].map(([familia, lh]) => ({ familia, lh, precoL: 6.15 }));
+  } }
   const CHUVA = new Set([dia(33), dia(19), dia(8)]), QUEBRA = { [dia(26)]: [0, 'Manutenção corretiva — mangueira estourada', 3.5], [dia(12)]: [2, 'Manutenção corretiva — defeito elétrico', 5], [dia(4)]: [6, 'Aguardando peças', 4] };
   const TQ = [sv('tanques', { id: 'kk_tq1', cod: 'TQ-01', nome: 'Tanque fixo do canteiro', cap: 15000, saldo: 8650, local: 'Canteiro', preco: 6.12, ativo: true, ...X }), sv('tanques', { id: 'kk_tq2', cod: 'CB-01', nome: 'Caminhão comboio', cap: 4000, saldo: 1820, local: 'Móvel', preco: 6.19, ativo: true, ...X })];
   const ultAbs = EQ.map(() => null), lancou = i => FS[i].nome;
@@ -19578,6 +19592,46 @@ renderUA = window.renderUA = function () {
       <td>${u.origem === 'RM' ? '' : acoesCell(`editarUA('${u.id}')`, `deletar('ua','${u.id}')`)}</td></tr>${det}`; }).join('')
     : '<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:2rem">Nenhuma UA com esse filtro.</td></tr>';
 };
+// ═══════════════════════════════════════════════════════════════
+// v4.62: AVANÇO — patrulha prevista (orçamento) × patrulha real (média por dia de equipe), MO por função e EQ por família
+// ═══════════════════════════════════════════════════════════════
+function _patReal(obra, servico) {
+  const ok = a => a.obra === obra && (a.servico || a.tipoServico) === servico && _ehAprovado(a);
+  const mo = (dados.aponMO || []).filter(ok), eq = (dados.aponEQ || []).filter(ok), un = new Set(mo.map(a => a.data + '|' + a.frente));
+  eq.forEach(a => un.add(a.data + '|' + a.frente));
+  const n = un.size, fu = {}, fa = {}, famDe = a => a.tipo || ((dados.equipamentos || []).find(e => e.tag === a.equip || e.id === a.equipId) || {}).familia || '?';
+  const p1 = new Set(); mo.forEach(a => { const k = a.data + '|' + a.frente + '|' + (a.mat || a.func); if (p1.has(k)) return; p1.add(k); const f = a.funcao || '?'; fu[f] = (fu[f] || 0) + 1; });
+  const e1 = new Set(); eq.forEach(a => { const k = a.data + '|' + a.frente + '|' + a.equip; if (e1.has(k)) return; e1.add(k); const f = famDe(a); fa[f] = (fa[f] || 0) + 1; });
+  Object.keys(fu).forEach(k => fu[k] /= n || 1); Object.keys(fa).forEach(k => fa[k] /= n || 1);
+  return { n, fu, fa };
+}
+function _patChips(prev, real, nomeDe) {
+  const ks = [...new Set([...prev.map(x => x.k), ...Object.keys(real)])];
+  return ks.map(k => { const p = +((prev.find(x => x.k === k) || {}).q || 0), r = real[k] || 0, d = r - p;
+    const cor = !p ? '#d97706' : Math.abs(d) <= Math.max(.25, p * .1) ? '#16a34a' : d < 0 ? '#dc2626' : '#d97706';
+    return `<span title="${_e(nomeDe(k))}" style="display:inline-flex;gap:5px;align-items:baseline;border:1px solid ${cor};border-radius:8px;padding:3px 8px;margin:2px 4px 2px 0;font-size:12px;white-space:nowrap"><b>${_e(nomeDe(k) || k)}</b><span class="td-mono" style="color:${cor}">${_n1(r)}</span><span style="color:var(--text-3)">/ ${p ? _n1(p) : '—'}</span></span>`; }).join('');
+}
+(function () {
+  const oR = window.renderAvanco || renderAvanco;
+  renderAvanco = window.renderAvanco = function () {
+    const r = oR.apply(this, arguments);
+    try { const obra = _pgObraSel('av-obra'), corpo = document.getElementById('av-corpo'), v = obra && orcVigente(obra); if (!corpo || !v) return r;
+      const sm = l => l.reduce((t, x) => t + (+x.qtd || 0), 0), sr = o => Object.values(o).reduce((t, x) => t + x, 0);
+      const lin = (v.itens || []).filter(i => (i.equipe || []).length || (i.equipamentos || []).length).map(i => { const R = _patReal(obra, i.servico);
+        const pP = sm(i.equipe || []), pR = sr(R.fu), eP = sm(i.equipamentos || []), eR = sr(R.fa), c = (r, p) => !R.n ? '' : `<span style="color:${Math.abs(r - p) <= Math.max(.25, p * .1) ? '#16a34a' : r < p ? '#dc2626' : '#d97706'};font-weight:800">${_n1(r)}</span> <span style="color:var(--text-3)">/ ${_n1(p)}</span>`;
+        return `<tr><td><b>${_e(i.servico)}</b><div style="font-size:11.5px;color:var(--text-3)">${R.n ? R.n + ' dia(s) de equipe' : 'sem apontamento aprovado'}</div></td>
+          <td style="white-space:nowrap">${c(pR, pP) || '—'}</td><td>${R.n ? _patChips((i.equipe || []).map(x => ({ k: x.funcao, q: x.qtd })), R.fu, _nomeFuncao) : ''}</td>
+          <td style="white-space:nowrap">${c(eR, eP) || '—'}</td><td>${R.n ? _patChips((i.equipamentos || []).map(x => ({ k: x.familia, q: x.qtd })), R.fa, _nomeFamilia) : ''}</td></tr>`; });
+      corpo.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:12px"><div class="card-body">
+        <div style="font-weight:800;margin-bottom:2px">Patrulha prevista × real</div>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">Previsto = equipe e equipamentos por dia do orçamento vigente. Real = média por dia de equipe (frente × dia) nos apontamentos aprovados. Em cada item: <b>real</b> / previsto · <span style="color:#16a34a">verde</span> igual (até 10%) · <span style="color:#dc2626">vermelho</span> abaixo · <span style="color:#d97706">laranja</span> acima ou fora do previsto.</div>
+        ${lin.length ? `<div class="table-wrap"><table><thead><tr><th>Serviço</th><th>Pessoas/dia</th><th>Mão de obra por função</th><th>Equip./dia</th><th>Equipamentos por família</th></tr></thead><tbody>${lin.join('')}</tbody></table></div>`
+          : '<div style="color:var(--text-3);font-size:12.5px">O orçamento vigente não tem patrulha (equipe/equipamentos) nos serviços. Preencha em Orçamento previsto → editar serviço.</div>'}
+      </div></div>`);
+    } catch (e) { console.warn('patrulha', e); }
+    return r;
+  };
+})();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
