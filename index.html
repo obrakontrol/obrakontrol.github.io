@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.64 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.65 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -19718,6 +19718,15 @@ async function uaAntSalvar() {
   const pi = window.pageInit; window.pageInit = function (id) { const r = pi ? pi.apply(this, arguments) : undefined;
     if (id === 'ua') { const bg = document.querySelector('#page-ua .page-header .btn-group'); if (bg && !bg.querySelector('#ua-btn-ant')) bg.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline btn-sm" id="ua-btn-ant" onclick="uaAntAbrir()" title="Obras em andamento: quantidade e custo já realizados por UA até uma data de corte">↺ Realizado anterior</button>'); }
     return r; };
+})();
+// v4.65: ordem do menu Obra — Obras, Frentes, Tipos de serviço, Orçamento, Programação, Avanço, UA, Fornecedores, QR Codes
+(function () {
+  const ORD = ['obras', 'frentes', 'tipos-servico', 'orcamento', 'programacao', 'avanco', 'ua', 'empresas', 'forn-banco', 'qrcodes'];
+  const arruma = () => { try {
+    const it = id => document.querySelector(`.sidebar .nav-item[onclick*="showPage('${id}'"]:not([data-atalho])`), ob = it('obras'); if (!ob) return; const pai = ob.parentElement;
+    ORD.map(it).filter(x => x && x.parentElement === pai).forEach(x => pai.appendChild(x));
+  } catch (e) {} };
+  [300, 1500, 4000, 9000].forEach(t => setTimeout(arruma, t));
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
