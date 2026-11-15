@@ -614,23 +614,57 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
   #login-screen .lg-ok { left:28px; }
 }
 </style>
+<style>
+/* v4.59: nova abertura — foto da obra ao fundo, notebook + celular com telas reais, campos com ícone */
+#login-screen .lg-tit span { color:#E30613; }
+#login-screen .lg-tit { font-size:30px; letter-spacing:-.6px; }
+#login-screen .lg-campo { position:relative; }
+#login-screen .lg-campo > svg.lg-ic { position:absolute; left:13px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:#9a9a9a; pointer-events:none; }
+#login-screen .lg-campo .lg-inp { padding-left:42px; }
+#login-screen .lg-btn { display:flex; align-items:center; justify-content:center; gap:10px; border-radius:10px; padding:15px; }
+#login-screen .lg-btn::after { content:''; width:18px; height:18px; background:currentColor; -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat; }
+#login-screen .lg-btn:disabled::after { display:none; }
+#login-screen .lg-rod { position:absolute; left:56px; right:56px; bottom:18px; border-top:1px solid #ececec; padding-top:16px; text-align:center; }
+#login-screen .lg-rod .lg-ok { position:static; height:30px; display:inline-block; }
+#login-screen .lg-rod .lg-ver { position:static; margin-top:6px; text-align:center; }
+#login-screen .lg-esq { padding-bottom:120px; }
+#login-screen .lg-foto { position:absolute; top:0; right:0; width:66%; height:68%; background:url('img/login/obra_bg.webp?v=1') right 30%/cover no-repeat; z-index:0;
+  -webkit-mask-image:linear-gradient(to right, transparent 0, #000 38%), linear-gradient(to bottom, #000 50%, transparent 100%); -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(to right, transparent 0, #000 38%), linear-gradient(to bottom, #000 50%, transparent 100%); mask-composite:intersect; opacity:.95; }
+#login-screen .lg-dir { align-items:center; }
+#login-screen .lg-dir-in { z-index:2; }
+#login-screen .lg-feat-ico { border-radius:12px; background:rgba(255,255,255,.05); }
+/* notebook + celular */
+#login-screen .lg-vis { position:absolute; right:3vw; bottom:5vh; width:min(47%, 880px); padding:0; z-index:1; }
+#login-screen .lg-note { position:relative; width:86%; }
+#login-screen .lg-note-tela { background:#0c0c0d; border:1px solid rgba(255,255,255,.18); border-bottom:none; border-radius:14px 14px 0 0; padding:2.2% 2.2% 1.4%; box-shadow:0 30px 80px rgba(0,0,0,.65); }
+#login-screen .lg-note-tela img { display:block; width:100%; border-radius:3px; }
+#login-screen .lg-note-base { height:14px; margin:0 -6%; background:linear-gradient(#cfd2d6, #8d9196); border-radius:0 0 14px 14px; position:relative; box-shadow:0 18px 30px rgba(0,0,0,.55); }
+#login-screen .lg-note-base::before { content:''; position:absolute; left:50%; top:0; transform:translateX(-50%); width:16%; height:5px; background:#9ea2a7; border-radius:0 0 6px 6px; }
+#login-screen .lg-vis .lg-vis-cel { position:absolute; right:0; bottom:-2%; width:24%; min-width:0; max-width:none; border-radius:28px; padding:6px; background:#0b0b0c; border:2px solid #3a3b3f; box-shadow:0 24px 60px rgba(0,0,0,.75); }
+#login-screen .lg-vis .lg-vis-cel img { border-radius:22px; }
+@media (max-width: 1750px) { #login-screen .lg-vis { position:absolute; flex:none; } #login-screen .lg-vis-tela { display:block; } #login-screen .lg-vis .lg-vis-cel { position:absolute; width:24%; } }
+@media (max-width: 1600px) { #login-screen .lg-dir { padding:60px 4vw; align-items:flex-start; padding-top:12vh; } #login-screen .lg-dir-in { max-width:470px; flex-basis:470px; } #login-screen .lg-vis { right:2vw; width:54%; bottom:3vh; } }
+@media (max-width: 1180px) { #login-screen .lg-vis { display:none; } }
+@media (max-width: 860px) { #login-screen .lg-rod { left:28px; right:28px; } }
+</style>
 <div id="login-screen">
   <div class="lg-esq">
     <div class="lg-traco"></div>
     <svg class="lg-logo" style="" viewBox="0 0 312 60" role="img" aria-label="TENCO"><g fill="#E30613"><rect x="0" y="0" width="48" height="12"/><rect x="18" y="0" width="12" height="60"/><rect x="62" y="0" width="44" height="12"/><rect x="62" y="24" width="44" height="12"/><rect x="62" y="48" width="44" height="12"/><rect x="120" y="0" width="12" height="60"/><rect x="168" y="0" width="12" height="60"/><polygon points="120,0 133,0 180,60 167,60"/></g><g fill="none" stroke="#E30613" stroke-width="12"><path d="M240.4 14.6 A24 24 0 1 0 240.4 45.4"/><circle cx="282" cy="30" r="24"/></g></svg>
     <div class="lg-logo-sub">Engenharia e Construção</div>
-    <div class="lg-tit">ObraKontrol</div>
+    <div class="lg-tit">Obra<span>Kontrol</span></div>
     <div class="lg-sub">Gestão operacional de obras</div>
     <div class="lg-aviso">Acesso restrito — identifique-se para continuar</div>
     <div id="login-erro" style="display:none;background:#FDECEC;border:1px solid #FDCBCB;border-radius:8px;padding:10px 14px;font-size:13px;color:#C0392B;margin-bottom:1rem"></div>
     <div style="margin-bottom:16px">
       <label class="lg-lbl" for="login-email">Usuário ou e-mail</label>
-      <input class="lg-inp" id="login-email" type="text" placeholder="nome.sobrenome" autocomplete="username" autocapitalize="off" spellcheck="false" onkeydown="if(event.key==='Enter')fazerLogin()"/>
+      <div class="lg-campo"><svg class="lg-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></svg><input class="lg-inp" id="login-email" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Informe seu usuário ou e-mail" onkeydown="if(event.key==='Enter')fazerLogin()"/></div>
     </div>
     <div style="margin-bottom:22px">
       <label class="lg-lbl" for="login-senha">Senha</label>
-      <div style="position:relative">
-        <input class="lg-inp" id="login-senha" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()" style="padding-right:42px"/>
+      <div class="lg-campo"><svg class="lg-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+        <input class="lg-inp" id="login-senha" type="password" placeholder="Informe sua senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()" style="padding-right:42px"/>
         <button onclick="toggleSenha('login-senha')" type="button" aria-label="Mostrar senha" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8a8a8a">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
@@ -638,18 +672,19 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     </div>
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
-    <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.58 · Gestão operacional de obras</div>
+    <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
+    <div class="lg-ver">ObraKontrol v4.59 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
+    <div class="lg-foto" aria-hidden="true"></div>
     <div class="lg-dir-in">
       <div class="lg-dir-traco"></div>
       <h1 class="lg-h1">Da obra à diretoria,<br><span>em tempo real.</span></h1>
-      <p class="lg-p">O que acontece no canteiro é lançado no celular e chega ao painel com custos e indicadores atualizados no mesmo dia.</p>
-      <div class="lg-feats"><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div><div class="lg-feat-t">Mão de obra</div><div class="lg-feat-d">Equipes e horas lançadas pelo crachá</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h12v-6H7l-3 3H2z"/><circle cx="6" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><path d="M14 12l4-6 4 2-3 5"/></svg></div><div><div class="lg-feat-t">Equipamentos</div><div class="lg-feat-d">Horas, produção e diesel por máquina</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></div><div><div class="lg-feat-t">Manutenção</div><div class="lg-feat-d">OMC/OMP, preventivas e tempo parado</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l2-5h12l2 5v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5"/></svg></div><div><div class="lg-feat-t">Frota</div><div class="lg-feat-d">Veículos leves, km/L e multas por responsável</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg></div><div><div class="lg-feat-t">Alojamentos</div><div class="lg-feat-d">Repúblicas, vagas e custo por pessoa</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></div><div><div class="lg-feat-t">Mobilização</div><div class="lg-feat-d">Chegada e saída pelo QR, com termo</div></div></div></div>
+      <p class="lg-p">Organize, controle e acompanhe a execução das obras com dados confiáveis, integrados e atualizados.</p>
+      <div class="lg-feats"><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div><div class="lg-feat-t">Mão de obra</div><div class="lg-feat-d">Produtividade e apontamentos do campo</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h12v-6H7l-3 3H2z"/><circle cx="6" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><path d="M14 12l4-6 4 2-3 5"/></svg></div><div><div class="lg-feat-t">Equipamentos</div><div class="lg-feat-d">Utilização, disponibilidade e custos</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></div><div><div class="lg-feat-t">Manutenções</div><div class="lg-feat-d">Controle preventivo e corretivo</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l2-5h12l2 5v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5"/></svg></div><div><div class="lg-feat-t">Frota</div><div class="lg-feat-d">Abastecimento, mobilização e checklist</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg></div><div><div class="lg-feat-t">Alojamentos</div><div class="lg-feat-d">Gestão de ocupação e consumo</div></div></div><div class="lg-feat"><div class="lg-feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="13" width="4" height="7" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg></div><div><div class="lg-feat-t">Medições</div><div class="lg-feat-d">Controle de terceiros e acompanhamento por contrato</div></div></div></div>
     </div>
     <div class="lg-vis" aria-hidden="true">
-      <div class="lg-vis-tela"><div class="lg-vis-bar"><i></i><i></i><i></i></div><img src="img/login/dash.webp" alt=""/></div>
+      <div class="lg-note"><div class="lg-note-tela"><img src="img/login/dash.webp" alt=""/></div><div class="lg-note-base"></div></div>
       <div class="lg-vis-cel"><img src="img/login/phone.webp" alt=""/></div>
     </div>
   </div>
