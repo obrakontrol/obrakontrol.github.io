@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.54 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.55 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18859,10 +18859,30 @@ async function kkApagar(silencioso) {
   _kkProg('');
   if (!silencioso) { toast('Dados do kickoff apagados.'); try { renderObras(); } catch (e) {} }
 }
+// v4.55: zera a base DEMO inteira (não só o que o kickoff gerou) e gera o kickoff limpo.
+// Mantém: logins/usuários, perfis, famílias, turnos, tipos de perda e configurações.
+const _KK_ZERAR = ['ua', 'empresas', 'cargos', 'funcionarios', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'servicos', 'orcamentos', 'tanques', 'movTanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
+  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'vistoriasRep', 'partesDiarias', 'mobilizacoes', 'programacao', 'resumoObra', 'turnosAbertos', 'rdos', 'notasFiscais', 'equipes', 'fotos', 'obras'];
+async function kkZerarTudo() {
+  if (!_exDemo() || !_okCli()) { toast('Disponível só no ambiente DEMO.', 'error'); return; }
+  const r = prompt('ZERAR A BASE DEMO\n\nApaga TUDO da base demo: obras, cadastros, apropriações, testes, partes diárias, programação…\nContinuam: logins, perfis, famílias, turnos e tipos de perda.\nDepois gera o kickoff limpo.\n\nPara confirmar, digite ZERAR:');
+  if (r === null) return; if (String(r).trim().toUpperCase() !== 'ZERAR') { toast('Nada foi apagado (precisa digitar ZERAR).', 'error'); return; }
+  let tot = 0;
+  try {
+    for (const col of _KK_ZERAR) {
+      _kkProg('Apagando ' + col + '…');
+      let snap; try { snap = await db.collection(col).get(); } catch (e) { continue; }
+      for (let i = 0; i < snap.docs.length; i += 400) { const b = db.batch(); snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); tot += Math.min(400, snap.docs.length - i); }
+      dados[col] = [];
+    }
+    _kkProg(''); toast(tot + ' registros apagados. Agora o kickoff…');
+    await kkPreparar();
+  } catch (e) { console.error(e); toast('Parou com erro: ' + (e.code || e.message), 'error'); _kkProg(''); }
+}
 (function () {   // botões na tela Obras (só no DEMO)
   const pi = window.pageInit;
   window.pageInit = function (id) { const r = pi ? pi.apply(this, arguments) : undefined;
-    try { if (id === 'obras' && _exDemo()) { const g = document.querySelector('#page-obras .page-header .btn-group'); if (g && !g.querySelector('.kk-b')) g.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary btn-sm kk-b" onclick="kkPreparar()" title="Só no DEMO: enche a obra escolhida no topo com dados de 6 semanas e cria logins para os participantes">🎬 Preparar kickoff</button><button class="btn btn-outline btn-sm kk-b" onclick="kkApagar()">🗑 Apagar kickoff</button>'); } } catch (e) {}
+    try { if (id === 'obras' && _exDemo()) { const g = document.querySelector('#page-obras .page-header .btn-group'); if (g && !g.querySelector('.kk-b')) g.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary btn-sm kk-b" onclick="kkPreparar()" title="Só no DEMO: enche a obra escolhida no topo com dados de 6 semanas e cria logins para os participantes">🎬 Preparar kickoff</button><button class="btn btn-outline btn-sm kk-b" onclick="kkApagar()">🗑 Apagar kickoff</button><button class="btn btn-outline btn-sm kk-b" style="color:#b91c1c;border-color:#b91c1c" onclick="kkZerarTudo()" title="Só no DEMO: apaga TODA a base demo (testes e cadastros antigos) e gera o kickoff limpo">🧹 Zerar DEMO e gerar kickoff</button>'); } } catch (e) {}
     return r; };
 })();
 // ═══════════════════════════════════════════════════════════════
