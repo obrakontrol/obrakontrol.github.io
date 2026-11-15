@@ -639,7 +639,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.57 · Gestão operacional de obras</div>
+    <div class="lg-ver">ObraKontrol v4.58 · Gestão operacional de obras</div>
   </div>
   <div class="lg-dir">
     <div class="lg-dir-in">
@@ -18716,19 +18716,22 @@ async function _kkGerar(nUsr) {
   // ── frentes e serviços
   const B = { lat: -21.4677, lng: -47.0047 };
   // v4.52: serviços e EAP no padrão das obras da Sabesp — 01 Área formal / 02 Área rural (cada uma com Esgoto e Água) / 03 Estações
-  const FR = [['FR-001', 'VCA esgoto — Rua Sete de Setembro (área formal)', .002, .001, '01.01'], ['FR-002', 'MND — Travessia Av. Brasil (área formal)', -.006, .004, '01.01'], ['FR-003', 'Ligações de água e esgoto — Vila Nova (área formal)', .004, -.008, '01'],
-    ['FR-004', 'Poços de visita e de emboque (área formal)', -.002, -.003, '01.01'], ['FR-005', 'Recomposição de pavimento — Centro', .007, .006, '01.01'], ['FR-006', 'EEE-01 — Estação elevatória de esgoto', -.009, -.005, '03']]
-    .map(([cod, desc, a, b, ramo], i) => sv('frentes', { id: 'kk_fr' + i, cod, desc, ramoUA: ramo, resp: NOMES[[0, 1, 2, 0, 20, 1][i]], coord: (B.lat + a).toFixed(5) + ', ' + (B.lng + b).toFixed(5), obs: '', ...X }));
+  // v4.58: EAP no padrão do LOTE 19 (RM): 1.002.004 Formal/Informal · 1.002.005 Rural — dentro de cada uma, esgoto, ligações, água, estações
+  const FR = [['FR-001', 'Rede de esgoto e água — Rua Sete de Setembro (área formal)', .002, .001, '1.002.004'], ['FR-002', 'MND — Travessia Av. Brasil (área formal)', -.006, .004, '1.002.004'],
+    ['FR-003', 'Ligações de água e esgoto — Vila Nova (área formal)', .004, -.008, '1.002.004'], ['FR-004', 'Poços de visita e de emboque — esgoto (área formal)', -.002, -.003, '1.002.004.001'],
+    ['FR-005', 'Recomposição de pavimento — Centro (área formal)', .007, .006, '1.002.004'], ['FR-006', 'EEE-01 — Estação elevatória de esgoto 5 a 10 CV', -.009, -.005, '1.002.004.004.003'],
+    ['FR-007', 'Rede de esgoto — Bairro Santa Cruz (área rural)', .011, -.012, '1.002.005']]
+    .map(([cod, desc, a, b, ramo], i) => sv('frentes', { id: 'kk_fr' + i, cod, desc, ramoUA: ramo, resp: NOMES[[0, 1, 2, 0, 20, 1, 0][i]], coord: (B.lat + a).toFixed(5) + ', ' + (B.lng + b).toFixed(5), obs: '', ...X }));
   const SVL = _KK_SERVICOS;
   _kkUAs(O, sv, K);
-  const SV = SVL.map(([cod, nome, unidade, qtd, pd, cu, orc], i) => ({ ...sv('tiposServico', { id: 'kk_sv' + i, cod, nome, unidade, meta: pd, uaNomes: [nome.toUpperCase()], ...X }), _q: qtd, _pd: pd, _cu: cu, _orc: orc }));
+  const SV = SVL.map(([cod, nome, unidade, qtd, pd, cu, orc, uas], i) => ({ ...sv('tiposServico', { id: 'kk_sv' + i, cod, nome, unidade, meta: pd, uaNomes: uas || [nome.toUpperCase()], ...X }), _q: qtd, _pd: pd, _cu: cu, _orc: orc }));
   sv('orcamentos', { id: 'kk_orc', obra: O, nome: 'Executivo', status: 'validada', validadoEm: dia(50) + 'T10:00:00', criadoEm: dia(52), itens: SV.filter(s => s._orc).map(s => ({ servico: s.nome, unid: s.unidade, qtd: s._q, prodDia: s._pd, custoUnit: s._cu, equipe: [], equipamentos: [] })), kick: true });
   SV.forEach(s => { delete s._q; delete s._pd; delete s._cu; delete s._orc; });
   const SVd = Object.fromEntries(SVL.map(x => [x[0], x[4]]));
-  const _uaKK = {}, uaDe = (fr, nome) => { const k = fr + '|' + nome; if (!(k in _uaKK)) { const r = uaResolver(O, fr, nome); _uaKK[k] = r.ua ? { ua: r.ua.cod, uaNome: r.ua.nome } : {}; } return _uaKK[k]; };
+  const _uaKK = {}, uaDe = (fr, nome) => { const k = fr + '|' + nome; if (!(k in _uaKK)) { const r = uaResolver(O, fr, nome); const u = r.ua || r.cands[0]; _uaKK[k] = u ? { ua: u.cod, uaNome: u.nome } : {}; /* mais de uma possível: simula a escolha do aprovador (1ª) */ } return _uaKK[k]; };
   // ── equipes do dia a dia: frente, apropriador, pessoas, equipamentos, serviços (alterna por semana)
-  const EQP = [{ fr: 0, ap: 0, mo: [5, 6, 7, 8, 9, 10, 11], eq: [0, 5, 6], sv: ['SV-01'], op: { 0: 5, 5: 12, 6: 19 } },
-    { fr: 1, ap: 1, mo: [13, 14, 15, 16, 17, 18], eq: [8, 2], sv: ['SV-02', 'SV-03'], op: { 8: 13, 2: 15 } },
+  const EQP = [{ fr: [0, 0, 6], ap: 0, mo: [5, 6, 7, 8, 9, 10, 11], eq: [0, 5, 6], sv: ['SV-01', 'SV-12', 'SV-01'], op: { 0: 5, 5: 12, 6: 19 } },
+    { fr: 1, ap: 1, mo: [13, 14, 15, 16, 17, 18], eq: [8, 2], sv: ['SV-02', 'SV-13', 'SV-03'], op: { 8: 13, 2: 15 } },
     { fr: 2, ap: 2, mo: [21, 22, 23, 24, 25], eq: [3], sv: ['SV-06', 'SV-07'], op: { 3: 26 } },
     { fr: 3, ap: 20, mo: [27, 28, 29, 30, 31], eq: [1], sv: ['SV-04', 'SV-05'], op: { 1: 27 } },
     { fr: 4, ap: 20, mo: [32, 33, 34, 35, 36], eq: [7, 4], sv: ['SV-08'], op: { 7: 32, 4: 37 } }];
@@ -18741,7 +18744,7 @@ async function _kkGerar(nUsr) {
     const sab = wd === 6, sem = Math.floor(n / 7), pend = n <= 2, st = pend ? 'campo' : 'aprovado', chuva = CHUVA.has(d) && !sab;
     EQP.forEach((g, gi) => {
       if (sab && gi > 2) return;
-      const s = SV.find(z => z.cod === g.sv[sem % g.sv.length]), fr = FR[g.fr], hIni = sab ? '07:00' : '07:00', heX = !sab && R() < .35 ? (R() < .5 ? 1 : 2) : 0;
+      const s = SV.find(z => z.cod === g.sv[sem % g.sv.length]), fr = FR[[].concat(g.fr)[sem % [].concat(g.fr).length]], hIni = sab ? '07:00' : '07:00', heX = !sab && R() < .35 ? (R() < .5 ? 1 : 2) : 0;
       const hn = sab ? 4 : 9, hFim = sab ? '11:00' : (heX ? (heX === 1 ? '18:00' : '19:00') : '17:00');
       const apr = 'kk_ap' + (nAp++), parH = chuva ? (R() < .5 ? 1 : 2) : 0;
       const qtd = r1(SVd[s.cod] * (sab ? .45 : 1) * (.78 + R() * .4) * (chuva ? .7 : 1) * (heX ? 1.1 : 1)) || 1;
@@ -19381,46 +19384,62 @@ async function famCriarFaltando() {
 // · Como a UA é escolhida: o tipo de serviço diz QUAIS nomes de UA ele custeia; a frente diz EM QUE RAMO da EAP ela está.
 //   Mesmo nome em ramos diferentes (VCA formal × rural, esgoto × água) → o ramo da frente desempata.
 // ═══════════════════════════════════════════════════════════════
-const _KK_SERVICOS = [   // cod, nome, unid, qtd orçada, produção/dia, custo unit., entra no orçamento
-  ['SV-01', 'VCA - Vala a céu aberto', 'm', 9000, 60, 95, 1], ['SV-02', 'MND - Furo direcional', 'm', 2400, 40, 180, 1], ['SV-03', 'MND - Tubo cravado', 'm', 600, 8, 950, 1],
-  ['SV-04', 'Poço de visita', 'un', 220, 2, 980, 1], ['SV-05', 'Poço de emboque e desemboque', 'un', 40, 1, 3200, 1], ['SV-06', 'Ligação domiciliar de esgoto', 'un', 1500, 12, 145, 1],
-  ['SV-07', 'Ligação domiciliar de água', 'un', 1200, 14, 120, 1], ['SV-08', 'Recomposição de pavimento asfáltico', 'm²', 6000, 72, 36, 1],
-  ['SV-09', 'EEE - Estação elevatória de esgoto', '%', 100, 1, 4500, 1], ['SV-10', 'ETA - Estação de tratamento de água', '%', 100, 1, 0, 0], ['SV-11', 'ETE - Estação de tratamento de esgoto', '%', 100, 1, 0, 0]];
-// estrutura da EAP: [código, nome, unid. (só nas UAs de lançamento), parte da quantidade do serviço]
+// v4.58: nomes das UAs exatamente como na EAP do Lote 19 (RM)
+const _L19 = { VE: 'VCA - VALA A CÉU ABERTO - ESGOTO', VA: 'VCA - VALA A CÉU ABERTO - ÁGUA', ME: 'MND - FURO DIRECIONAL - ESGOTO', MA: 'MND - FURO DIRECIONAL - ÁGUA', LE: 'LIGAÇÃO DE ESGOTO', LER: 'LIGAÇÕES ESGOTO -', LA: 'LIGAÇÃO DE ÁGUA', LAR: 'LIGAÇÕES ÁGUA -',
+  EEE: ['EEE - ESTAÇÃO ELEVATÓRIA DE ESGOTO ATÉ 3 CV, FORNECIMENTO E SERVIÇO', 'EEE - ESTAÇÃO ELEVATÓRIA DE ESGOTO DE 3,01 A 5 CV, FORNECIMENTO E SERVIÇO', 'EEE - ESTAÇÃO ELEVATÓRIA DE ESGOTO DE 5,01 A 10 CV, FORNECIMENTO E SERVIÇO', 'EEE - ESTAÇÃO ELEVATÓRIA DE ESGOTO DE 10,01 A 15 CV, FORNECIMENTO E SERVIÇO'],
+  ETE: 'ETE - ESTAÇÃO DE TRATAMENTO DE ESGOTO Q 20,01 A 40 AMP, FORNECIMENTO E SERVIÇO', ETA: 'ETA - ESTAÇÃO DE TRATAMENTO DE ÁGUA Q 20,01 A 40 AMP, FORNECIMENTO E SERVIÇO' };
+const _KK_SERVICOS = [   // cod, nome, unid, qtd orçada, produção/dia, custo unit., entra no orçamento, UAs do RM que custeia
+  ['SV-01', 'VCA - Vala a céu aberto (esgoto)', 'm', 6000, 60, 95, 1, [_L19.VE]], ['SV-12', 'VCA - Vala a céu aberto (água)', 'm', 3000, 80, 70, 1, [_L19.VA]],
+  ['SV-02', 'MND - Furo direcional (esgoto)', 'm', 1800, 40, 180, 1, [_L19.ME]], ['SV-13', 'MND - Furo direcional (água)', 'm', 800, 50, 150, 1, [_L19.MA]],
+  ['SV-03', 'MND - Tubo cravado', 'm', 600, 8, 950, 1, [_L19.ME]],
+  ['SV-04', 'Poço de visita', 'un', 220, 2, 980, 1, [_L19.VE]], ['SV-05', 'Poço de emboque e desemboque', 'un', 40, 1, 3200, 1, [_L19.ME, _L19.MA]],
+  ['SV-06', 'Ligação domiciliar de esgoto', 'un', 1500, 12, 145, 1, [_L19.LE, _L19.LER]], ['SV-07', 'Ligação domiciliar de água', 'un', 1200, 14, 120, 1, [_L19.LA, _L19.LAR]],
+  ['SV-08', 'Recomposição de pavimento asfáltico', 'm²', 6000, 72, 36, 1, [_L19.VE, _L19.VA]],
+  ['SV-09', 'EEE - Estação elevatória de esgoto', '%', 100, 1, 4500, 1, _L19.EEE], ['SV-10', 'ETA - Estação de tratamento de água', '%', 100, 1, 0, 0, [_L19.ETA]], ['SV-11', 'ETE - Estação de tratamento de esgoto', '%', 100, 1, 0, 0, [_L19.ETE]]];
+// EAP no padrão do Lote 19: [código, nome, unid. (só nas UAs de lançamento), quantidade, custo unitário]
 function _uaBaseSabesp() {
-  const V = 'VCA - VALA A CÉU ABERTO', MF = 'MND - FURO DIRECIONAL', MT = 'MND - TUBO CRAVADO', PV = 'POÇO DE VISITA', PE = 'POÇO DE EMBOQUE E DESEMBOQUE', LE = 'LIGAÇÃO DOMICILIAR DE ESGOTO', LA = 'LIGAÇÃO DOMICILIAR DE ÁGUA', RP = 'RECOMPOSIÇÃO DE PAVIMENTO ASFÁLTICO';
-  return [['01', 'ÁREA FORMAL'], ['01.01', 'SISTEMA DE ESGOTO — ÁREA FORMAL'], ['01.01.01', V, 'm', .45], ['01.01.02', MF, 'm', .6], ['01.01.03', MT, 'm', .8], ['01.01.04', PV, 'un', .75], ['01.01.05', PE, 'un', .8], ['01.01.06', LE, 'un', .8], ['01.01.07', RP, 'm²', .65],
-    ['01.02', 'SISTEMA DE ÁGUA — ÁREA FORMAL'], ['01.02.01', V, 'm', .25], ['01.02.02', MF, 'm', .25], ['01.02.03', LA, 'un', .8], ['01.02.04', RP, 'm²', .35],
-    ['02', 'ÁREA RURAL'], ['02.01', 'SISTEMA DE ESGOTO — ÁREA RURAL'], ['02.01.01', V, 'm', .2], ['02.01.02', MF, 'm', .1], ['02.01.03', MT, 'm', .2], ['02.01.04', PV, 'un', .25], ['02.01.05', PE, 'un', .2], ['02.01.06', LE, 'un', .2],
-    ['02.02', 'SISTEMA DE ÁGUA — ÁREA RURAL'], ['02.02.01', V, 'm', .1], ['02.02.02', MF, 'm', .05], ['02.02.03', LA, 'un', .2],
-    ['03', 'ESTAÇÕES'], ['03.01', 'EEE - ESTAÇÃO ELEVATÓRIA DE ESGOTO', '%', 1], ['03.02', 'ETA - ESTAÇÃO DE TRATAMENTO DE ÁGUA', '%', 1], ['03.03', 'ETE - ESTAÇÃO DE TRATAMENTO DE ESGOTO', '%', 1]];
+  const L = _L19;
+  return [['1', 'SABESP LOTE 19'], ['1.002', 'CUSTO DIRETO'],
+    ['1.002.004', 'FORMAL / INFORMAL'],
+    ['1.002.004.001', 'FORMAL ESGOTO'], ['1.002.004.001.001', L.VE, 'M', 4500, 95], ['1.002.004.001.002', L.ME, 'M', 1500, 180], ['1.002.004.001.003', 'VCA - VALA A CÉU ABERTO - FORNECIMENTO - ESGOTO', 'M', 4500, 45], ['1.002.004.001.004', 'MND - FURO DIRECIONAL - FORNECIMENTO - ESGOTO', 'M', 1500, 60],
+    ['1.002.004.002', 'LIGAÇÕES ESGOTO'], ['1.002.004.002.001', L.LE, 'UN', 1200, 145],
+    ['1.002.004.004', 'EEE - ESTAÇÃO ELEVATÓRIA DE ESGOTO'], ['1.002.004.004.001', L.EEE[0], 'UN', 2, 242000], ['1.002.004.004.002', L.EEE[1], 'UN', 1, 387750], ['1.002.004.004.003', L.EEE[2], 'UN', 1, 452237], ['1.002.004.004.004', L.EEE[3], 'UN', 1, 474147],
+    ['1.002.004.007', 'ETE - ESTAÇÃO DE TRATAMENTO DE ESGOTO'], ['1.002.004.007.001', L.ETE, 'UN', 1, 2850000],
+    ['1.002.004.010', 'FORMAL ÁGUA'], ['1.002.004.010.001', L.VA, 'M', 2250, 70], ['1.002.004.010.002', L.MA, 'M', 600, 150], ['1.002.004.010.003', 'VCA - VALA A CÉU ABERTO - FORNECIMENTO - ÁGUA', 'M', 2250, 30], ['1.002.004.010.004', 'MND - FURO DIRECIONAL - FORNECIMENTO - ÁGUA', 'M', 600, 40],
+    ['1.002.004.011', 'LIGAÇÕES ÁGUA'], ['1.002.004.011.001', L.LA, 'UN', 960, 120],
+    ['1.002.004.012', 'ETA - ESTAÇÃO DE TRATAMENTO DE ÁGUA'], ['1.002.004.012.001', L.ETA, 'UN', 1, 3100000],
+    ['1.002.005', 'RURAL'],
+    ['1.002.005.001', 'RURAL ESGOTO'], ['1.002.005.001.001', L.VE, 'M', 1500, 95], ['1.002.005.001.002', L.ME, 'M', 300, 180],
+    ['1.002.005.002', 'LIGAÇÕES ESGOTO'], ['1.002.005.002.001', L.LER, 'UN', 300, 145],
+    ['1.002.005.009', 'RURAL ÁGUA'], ['1.002.005.009.001', L.VA, 'M', 750, 70], ['1.002.005.009.002', L.MA, 'M', 200, 150],
+    ['1.002.005.012', 'LIGAÇÕES ÁGUA'], ['1.002.005.012.001', L.LAR, 'UN', 240, 120]];
 }
 function _uaQtdBase(nome, parte) { const sv = _KK_SERVICOS.find(x => _uaN(x[1]) === _uaN(nome)); return sv && parte ? { qtd: Math.round(sv[3] * parte), cu: sv[5] } : { qtd: 0, cu: 0 }; }
 function _kkUAs(O, sv, K) {
   const base = _uaBaseSabesp(), pais = new Set(base.map(x => x[0].includes('.') ? x[0].slice(0, x[0].lastIndexOf('.')) : ''));
-  base.forEach(([cod, nome, un, parte]) => { const folha = !pais.has(cod), q = folha ? _uaQtdBase(nome, parte) : { qtd: 0, cu: 0 };
+  base.forEach(([cod, nome, un, qq, cu]) => { const folha = !pais.has(cod), q = folha ? { qtd: qq || 0, cu: cu || 0 } : { qtd: 0, cu: 0 };
     sv('ua', { id: _uaId(O, cod), obra: O, origem: 'RM', cod, nome, desc: nome, qtd: q.qtd, unid: un || '', unidNome: '', custoUnit: q.cu, custoTotal: q.qtd * q.cu, nivel: cod.split('.').length, pai: cod.includes('.') ? cod.slice(0, cod.lastIndexOf('.')) : '', folha, ativo: true, ...K }); });
 }
 function uaModelo() {
   const base = _uaBaseSabesp(), pais = new Set(base.map(x => x[0].includes('.') ? x[0].slice(0, x[0].lastIndexOf('.')) : ''));
   const E = [['Código da Tarefa/UA', 'Nome', 'Quantidade', 'Cód. Unidade', 'Unidade', 'Custo Unitário', 'Custo Parcial']]
-    .concat(base.map(([cod, nome, un]) => { const f = !pais.has(cod); return [cod, nome, f ? '' : '', f ? un || '' : '', f ? ({ m: 'Metro', 'm²': 'Metro quadrado', un: 'Unidade', '%': 'Percentual' }[un] || '') : '', '', '']; }));
-  const T = [['Tipo de serviço (cadastro)', 'Unidade', 'UAs que ele custeia (nome exato da UA — separe com ;)']].concat(_KK_SERVICOS.map(x => [x[1], x[2], _uaN(x[1])]));
-  const AJ = [['Como funciona a UA no ObraKontrol'], [''],
-    ['1. A aba EAP está no MESMO formato do relatório da EAP do RM. Preencha quantidade, unidade e custo unitário das UAs de lançamento (as linhas sem filhos).'],
-    ['2. Formal × Rural e Esgoto × Água: o MESMO nome de UA (ex.: VCA - VALA A CÉU ABERTO) aparece em ramos diferentes da EAP (01.01, 01.02, 02.01, 02.02).'],
-    ['   A obra que não separa formal/rural ou água/esgoto apaga os ramos que não usa. Pode renomear e criar ramos — o código com pontos é que monta a árvore.'],
-    ['3. No painel: UA → escolha a obra no topo → "Atualizar do RM" → escolha esta planilha → confira → Aplicar.'],
-    ['4. Tipos de serviço: em cada tipo, marque as UAs que ele custeia (pelo nome). Ex.: "VCA - Vala a céu aberto" custeia "VCA - VALA A CÉU ABERTO" (aba Tipos de serviço).'],
-    ['5. Frentes: em cada frente, escolha o RAMO da EAP onde ela está. Ex.: frente de VCA de esgoto na área formal → ramo 01.01.'],
-    ['   Frente que faz ligação de água e de esgoto na área formal → ramo 01 (o sistema acha a UA certa dentro do ramo).'],
-    ['   Frente sem ramo = EAP inteira: funciona quando o nome da UA só existe em um lugar.'],
-    ['6. Na aprovação o sistema escolhe a UA sozinho (serviço + ramo da frente). Se sobrar mais de uma possível, pede para escolher ou definir o ramo na frente.']];
+    .concat(base.map(([cod, nome, un]) => { const f = !pais.has(cod); return [cod, nome, '', f ? un || '' : '', f ? ({ M: 'Metro', 'M2': 'Metro quadrado', UN: 'Unidade', '%': 'Percentual' }[un] || '') : '', '', '']; }));
+  const T = [['Código', 'Nome do serviço', 'Unidade', 'Meta diária', 'UAs do RM que custeia (nomes, separe por ;)']].concat(_KK_SERVICOS.map(x => [x[0], x[1], x[2], x[4], (x[7] || [x[1].toUpperCase()]).join('; ')]));
+  const AJ = [['Como funciona a UA no ObraKontrol (padrão Lote 19)'], [''],
+    ['1. A aba EAP está no MESMO formato e na MESMA estrutura da EAP do Lote 19 no RM (1.002.004 Formal/Informal · 1.002.005 Rural).'],
+    ['   As UAs de lançamento são as linhas sem filhos (ex.: 1.002.004.001.001 VCA - VALA A CÉU ABERTO - ESGOTO).'],
+    ['2. O MESMO nome de UA aparece no Formal e no Rural (ex.: VCA - VALA A CÉU ABERTO - ESGOTO em 1.002.004.001.001 e 1.002.005.001.001). Quem separa é o ramo da FRENTE.'],
+    ['   Esgoto e água têm nomes diferentes — por isso o SERVIÇO é separado: VCA (esgoto) e VCA (água).'],
+    ['3. No painel: UA → escolha a obra no topo → "Atualizar do RM" → escolha o relatório do RM → confira → Aplicar.'],
+    ['4. Tipos de serviço: importe a aba "Tipos de serviço" (ou marque no cadastro as UAs que cada um custeia).'],
+    ['5. Frentes: em cada frente, escolha o RAMO da EAP. Frente na área formal → 1.002.004 · na área rural → 1.002.005 · estação → a UA da própria estação (ex.: 1.002.004.004.003).'],
+    ['6. Na aprovação o sistema cruza frente + serviço e acha a linha da EAP sozinho. Se sobrar mais de uma (ex.: recomposição → VCA esgoto ou água), o aprovador escolhe.'],
+    ['   Serviços sem UA própria no Lote 19 (PV, emboque, tubo cravado, recomposição) custeiam a UA de VCA ou MND, que já inclui esses itens na composição.']];
   const wb = XLSX.utils.book_new(), sh = (rows, w) => { const s = XLSX.utils.aoa_to_sheet(rows); s['!cols'] = w.map(x => ({ wch: x })); return s; };
   XLSX.utils.book_append_sheet(wb, sh(E, [20, 46, 12, 12, 16, 14, 14]), 'EAP');
-  XLSX.utils.book_append_sheet(wb, sh(T, [40, 10, 56]), 'Tipos de serviço');
+  XLSX.utils.book_append_sheet(wb, sh(T, [10, 40, 10, 12, 110]), 'Tipos de serviço');
   XLSX.utils.book_append_sheet(wb, sh(AJ, [140]), 'Como funciona');
-  XLSX.writeFile(wb, 'Modelo de UA - padrao Sabesp.xlsx');
+  XLSX.writeFile(wb, 'Modelo de UA - padrao Lote 19.xlsx');
 }
 (function () {
   const pg = document.getElementById('page-ua'); if (!pg) return;
@@ -19440,9 +19459,10 @@ function _uaObraTela() {
 }
 function _uaApropriado(obra) {
   const m = {}, it = cod => m[cod] = m[cod] || { qtd: 0, hn: 0, he: 0, hp: 0, hpar: 0, cmo: 0, ceq: 0, comb: {} };
-  const comb = (x, a, q, c) => { const k = (a.frente || '—') + '|' + (a.servico || a.tipoServico || '—'); const y = x.comb[k] = x.comb[k] || { qtd: 0, custo: 0, dias: new Set() }; y.qtd += q; y.custo += c; if (a.data) y.dias.add(a.data); };
+  const comb = (x, a, q, c) => { const k = (a.frente || '—') + '|' + (a.servico || a.tipoServico || '—'); const y = x.comb[k] = x.comb[k] || { qtd: 0, custo: 0, dias: new Set(), unid: '' }; y.qtd += q; y.custo += c; if (q && a.unid) y.unid = a.unid; if (a.data) y.dias.add(a.data); };
+  const un = v => String(v || '').toLowerCase().replace('metro', 'm').replace(/^unidade$/, 'un').trim(), uU = new Map((dados.ua || []).filter(u => u.obra === obra).map(u => [u.cod, un(u.unid)]));
   (dados.aponMO || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a)).forEach(a => { const x = it(a.ua), c = custoMO(a), cv = c.normal + c.extra + c.domFer, q = parseFloat(a.qtd) || 0;
-    x.qtd += q; x.hn += parseFloat(a.hn) || 0; x.he += parseFloat(a.he) || 0; x.cmo += cv; comb(x, a, q, cv); });
+    if (!uU.get(a.ua) || un(a.unid) === uU.get(a.ua)) x.qtd += q;   /* produzido da UA: só serviços na mesma unidade (PV em un, recomposição em m² não somam nos metros da VCA) */ x.hn += parseFloat(a.hn) || 0; x.he += parseFloat(a.he) || 0; x.cmo += cv; comb(x, a, q, cv); });
   (dados.aponEQ || []).filter(a => a.obra === obra && a.ua && _ehAprovado(a)).forEach(a => { const x = it(a.ua), c = custoEQ(a), cv = c.prod + c.parado;
     x.hp += parseFloat(a.hp) || 0; x.hpar += parseFloat(a.hpar) || 0; x.ceq += cv; comb(x, a, 0, cv); });
   return m;
@@ -19501,7 +19521,7 @@ renderUA = window.renderUA = function () {
     let det = '';
     if (aberta) { const cs = a ? Object.entries(a.comb).sort((x, y) => y[1].custo - x[1].custo) : [];
       det = `<tr><td colspan="11" style="background:rgba(22,163,74,.05);padding:10px 14px 12px ${20 + nv * 14}px">${cs.length ? `<div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--text-3);margin-bottom:6px">O QUE CAIU NESTA UA (aprovados)</div>
-        <table style="width:auto;font-size:12.5px"><thead><tr><th>Frente</th><th>Serviço</th><th style="text-align:right">Produzido</th><th style="text-align:right">Dias</th><th style="text-align:right">Custo</th></tr></thead><tbody>${cs.map(([k, y]) => { const [f, s] = k.split('|'); return `<tr><td><b class="td-mono">${_e(f)}</b> ${_e(_nomeFrente(f))}</td><td>${_e(s)}</td><td class="td-mono" style="text-align:right">${y.qtd ? n1(y.qtd) + ' ' + _e(u.unid || '') : '—'}</td><td class="td-mono" style="text-align:right">${y.dias.size}</td><td class="td-mono" style="text-align:right">${brl(y.custo)}</td></tr>`; }).join('')}</tbody></table>`
+        <table style="width:auto;font-size:12.5px"><thead><tr><th>Frente</th><th>Serviço</th><th style="text-align:right">Produzido</th><th style="text-align:right">Dias</th><th style="text-align:right">Custo</th></tr></thead><tbody>${cs.map(([k, y]) => { const [f, s] = k.split('|'); return `<tr><td><b class="td-mono">${_e(f)}</b> ${_e(_nomeFrente(f))}</td><td>${_e(s)}</td><td class="td-mono" style="text-align:right">${y.qtd ? n1(y.qtd) + ' ' + _e(y.unid || u.unid || '') : '—'}</td><td class="td-mono" style="text-align:right">${y.dias.size}</td><td class="td-mono" style="text-align:right">${brl(y.custo)}</td></tr>`; }).join('')}</tbody></table>`
         : '<span style="font-size:12.5px;color:var(--text-3)">Nada aprovado caiu nesta UA ainda.</span>'}</td></tr>`; }
     return `<tr data-ua="${_e(u.cod)}" style="${u.ativo === false ? 'opacity:.55;' : ''}${grupo ? 'background:var(--bg);' : ''}${u.folha ? 'cursor:pointer;' : ''}" ${u.folha ? `onclick="if(!event.target.closest('button'))_uaToggle('${_e(u.cod)}')" title="Clique para ver frentes e serviços que caíram aqui"` : ''}><td class="td-mono" style="white-space:nowrap">${u.folha ? (aberta ? '▾ ' : '▸ ') : ''}${_e(u.cod)}</td>
       <td style="padding-left:${8 + nv * 14}px;${grupo ? 'font-weight:800' : ''}">${_e(u.nome || u.desc || '')}</td>
