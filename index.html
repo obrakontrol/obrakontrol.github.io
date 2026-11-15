@@ -671,7 +671,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.60 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.61 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -13440,13 +13440,23 @@ function renderUA() {
     if (s) { s.obra = obra; s.uaNomes = (dados.ua || []).filter(u => _uaEap(u) && nomes.includes(_uaN(u.nome))).map(u => u.nome).filter((v, i, a) => a.indexOf(v) === i); if (db && _firebaseReady) fbSave('tiposServico', s.id, s).catch(() => {}); try { renderTiposServico(); } catch (e) {} }
     return r;
   };
+  // v4.61: para cada UA que o serviço custeia, os códigos da EAP onde ela existe (e o grupo: FORMAL ESGOTO, RURAL ESGOTO…) — quem escolhe entre eles é o ramo da frente
+  window._srvCodigos = function (s) {
+    const nomes = (s.uaNomes || []).map(_uaN); if (!nomes.length) return '';
+    const ob = s.obra || (_okObraAtual() !== 'todas' ? _okObraAtual() : ''), todas = (dados.ua || []).filter(u => _uaEap(u) && u.ativo !== false && (!ob || u.obra === ob));
+    const fol = todas.filter(u => u.folha && nomes.includes(_uaN(u.nome))).sort((a, b) => String(a.cod).localeCompare(String(b.cod), 'pt-BR', { numeric: true }));
+    if (!fol.length) return '<span style="color:var(--amber)">⚠ nome não encontrado na EAP' + (ob ? '' : ' (escolha a obra no topo)') + '</span>';
+    const multi = new Set((dados.ua || []).filter(u => fol.includes(u)).map(u => u.obra)).size > 1;
+    return fol.map(u => { const pai = todas.find(x => x.obra === u.obra && x.cod === u.pai), avo = pai && todas.find(x => x.obra === u.obra && x.cod === pai.pai);
+      return `<div style="white-space:nowrap"><b class="td-mono">${_e(u.cod)}</b> <span style="color:var(--text-3)">· ${avo && (avo.nivel || 0) >= 3 ? _e(avo.nome) + ' › ' : ''}${_e(pai ? pai.nome : '')}${multi ? ' · ' + _e(getNomeObra(u.obra)) : ''}</span></div>`; }).join('');
+  };
   const oRS = window.renderTiposServico || renderTiposServico;
   renderTiposServico = window.renderTiposServico = function () {
     const r = oRS.apply(this, arguments); const h = document.querySelector('#page-tipos-servico thead tr');
-    if (h && !h.dataset.ua) { h.dataset.ua = '1'; h.children[h.children.length - 1].insertAdjacentHTML('beforebegin', '<th>Custeia nas UAs (RM)</th>'); }
+    if (h && !h.dataset.ua) { h.dataset.ua = '1'; h.children[h.children.length - 1].insertAdjacentHTML('beforebegin', '<th>Custeia nas UAs (RM)</th><th>Código na EAP (onde a UA existe)</th>'); }
     const m = new Map((dados.tiposServico || []).map(s => [String(s.id), s]));   // v4.54: casa a linha pelo id (códigos podem repetir entre obras)
     document.querySelectorAll('#tbody-tipos-servico tr').forEach(tr => { const mm = (tr.innerHTML.match(/editarTipoServico\('([^']+)'\)/) || [])[1]; const s = mm && m.get(mm); if (!s || tr.dataset.ua) return; tr.dataset.ua = '1';
-      tr.children[tr.children.length - 1].insertAdjacentHTML('beforebegin', `<td style="font-size:11.5px">${(s.uaNomes || []).length ? s.uaNomes.map(n => _e(n)).join('<br>') : '<span style="color:var(--amber)">⚠ sem UA</span>'}</td>`); });
+      tr.children[tr.children.length - 1].insertAdjacentHTML('beforebegin', `<td style="font-size:11.5px">${(s.uaNomes || []).length ? s.uaNomes.map(n => _e(n)).join('<br>') : '<span style="color:var(--amber)">⚠ sem UA</span>'}</td><td style="font-size:11.5px">${_srvCodigos(s)}</td>`); });
     return r;
   };
 
