@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.65 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.66 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -8303,6 +8303,7 @@ const MODULOS = [
   ['config',       'Configurações ADM',          []],
   ['abastecimento', 'Abastecimento no app de campo', []],
   ['mobilizacao', 'Movimentação no app de campo (equipamentos e veículos)', []],
+  ['custoPessoal', 'Ver custo de pessoal (salários, custo/hora da função e lista de funcionários)', []],   // v4.66
 ];
 const PERFIS_PADRAO = [
   { id:'pf-admin',       nome:'Admin',       tipo:'painel', cor:'red',   sistema:true, desc:'acesso total',
@@ -8323,7 +8324,12 @@ const PERFIS_PADRAO = [
   { id:'pf-lean', nome:'Lean', tipo:'painel', cor:'blue', sistema:true, desc:'só frentes de serviço e as placas QR',
     perms:{cadastros:true,qrcodes:true}, telas:{'frentes':true,'qrcodes':true} },
   { id:'pf-dp', nome:'DP', tipo:'painel', cor:'green', sistema:true, desc:'só o efetivo (funcionários)',
-    perms:{cadastros:true}, telas:{'funcionarios':true} },
+    perms:{cadastros:true,custoPessoal:true}, telas:{'funcionarios':true} },
+  // v4.66: setor de custos e diretoria — veem custo de pessoal
+  { id:'pf-custos', nome:'Custos', tipo:'painel', cor:'red', sistema:true, desc:'setor de custos — apropriação, aprovação, orçamento e custo de pessoal',
+    perms:{dashboards:true,cadastros:true,apontamentos:true,relatorios:true,aprovacao:true,qrcodes:true,custoPessoal:true} },
+  { id:'pf-diretoria', nome:'Diretoria', tipo:'painel', cor:'gray', sistema:true, desc:'dashboards e relatórios, com custo de pessoal',
+    perms:{dashboards:true,relatorios:true,custoPessoal:true} },
 ];
 function listaPerfis() {
   const salvos = dados.perfis || [];
@@ -19727,6 +19733,57 @@ async function uaAntSalvar() {
     ORD.map(it).filter(x => x && x.parentElement === pai).forEach(x => pai.appendChild(x));
   } catch (e) {} };
   [300, 1500, 4000, 9000].forEach(t => setTimeout(arruma, t));
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.66: CUSTO DE PESSOAL — só Admin, Custos, Gerência, Diretoria e DP (ou perfil com "Ver custo de pessoal")
+// Sem a permissão: some a tela Funcionários, o salário e o custo/hora da função. Custos somados (serviço, frente, UA) continuam.
+// (Fase 1 = telas. A proteção nos dados — salário separado + regra do Firebase — vem na fase 2.)
+// ═══════════════════════════════════════════════════════════════
+const _CP_PADRAO = ['Gerência', 'DP', 'Custos', 'Diretoria'];
+function _vePessoal() {
+  const u = typeof usuarioLogado !== 'undefined' ? usuarioLogado : null; if (!u) return false;
+  if (u.perfil === 'Admin' || u.master || (typeof _okEhDev === 'function' && _okEhDev(u.email))) return true;
+  const p = perfilPorNome(u.perfil); if (!p) return false;
+  const v = p.perms && p.perms.custoPessoal; return v === undefined ? _CP_PADRAO.includes(p.nome) : !!v;
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `body.sem-cp .sidebar .nav-item[onclick*="showPage('funcionarios'"]{display:none!important}
+    body.sem-cp .cp-oculto{display:none!important}`;
+  document.head.appendChild(css);
+  const esconde = () => {
+    // colunas de salário / custo-hora em tabelas de cadastro
+    ['tabela-cargos', 'tabela-func', 'tabela-funcionarios'].forEach(id => { const t = document.getElementById(id); if (!t) return;
+      const ths = [...t.querySelectorAll('thead tr:last-child > th')], ix = ths.map((th, i) => /custo\s*\/\s*h|sal[aá]rio/i.test(th.textContent) ? i : -1).filter(i => i >= 0);
+      ix.forEach(i => { ths[i].classList.add('cp-oculto'); t.querySelectorAll('tbody > tr').forEach(tr => { if (tr.children.length === ths.length && tr.children[i]) tr.children[i].classList.add('cp-oculto'); }); }); });
+    // campos de salário / custo-hora nas janelas
+    ['cargo-custo', 'func-salario'].forEach(id => { const g = document.getElementById(id)?.closest('.form-group'); if (g) g.classList.add('cp-oculto'); });
+    document.querySelectorAll('[id^="cargo-sal"], [id^="cargo-salref"]').forEach(el => el.closest('.form-group')?.classList.add('cp-oculto'));
+    // orçamento: bloco "Salário previsto por função"
+    document.querySelectorAll('.orc-prem .card-body > div').forEach(d => { if (/Sal[aá]rio previsto por fun/i.test(d.firstElementChild?.textContent || '')) d.classList.add('cp-oculto'); });
+  };
+  const aplica = () => { const sem = !!(typeof usuarioLogado !== 'undefined' && usuarioLogado) && !_vePessoal(); document.body.classList.toggle('sem-cp', sem); if (sem) esconde(); };
+  setInterval(aplica, 800);
+  const oS = window.showPage;
+  if (typeof oS === 'function') window.showPage = showPage = function (id) {
+    if (id === 'funcionarios' && typeof usuarioLogado !== 'undefined' && usuarioLogado && !_vePessoal()) { toast('Seu perfil não vê a lista de funcionários (custo de pessoal).', 'error'); return; }
+    return oS.apply(this, arguments); };
+})();
+// v4.66: no editor de perfil, a caixa "Ver custo de pessoal" fica visível (acima das telas) e já vem com o valor efetivo
+(function () {
+  const oEd = window.editarPerfil;
+  window.editarPerfil = function (id) {
+    const r = oEd.apply(this, arguments);
+    try { const c = document.getElementById('pf-perm-custoPessoal'), alvo = document.getElementById('pf-telas-bloco') || document.getElementById('pf-telas')?.parentElement; if (!c || !alvo) return r;
+      const p = id ? listaPerfis().find(x => x.id === id) : null, v = p && p.perms && p.perms.custoPessoal;
+      c.checked = v === undefined ? !!(p && _CP_PADRAO.includes(p.nome)) : !!v;
+      let box = document.getElementById('pf-cp-box'); if (!box) { alvo.insertAdjacentHTML('afterbegin', '<div id="pf-cp-box" style="border:1.5px solid #E30613;background:rgba(227,6,19,.05);border-radius:10px;padding:8px 12px;margin-bottom:10px"></div>'); box = document.getElementById('pf-cp-box'); }
+      const lb = c.closest('label'); box.innerHTML = ''; box.appendChild(lb); lb.style.display = 'flex'; lb.style.fontWeight = '700';
+      box.insertAdjacentHTML('beforeend', '<div style="font-size:11.5px;color:var(--text-3);margin:2px 0 0 24px">Sem isso o perfil não vê a tela Funcionários, nem salário e custo/hora da função. Custos somados (serviço, frente, UA) continuam visíveis.</div>');
+      box.style.display = document.getElementById('pf-tipo')?.value === 'campo' ? 'none' : '';
+    } catch (e) {}
+    return r;
+  };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
