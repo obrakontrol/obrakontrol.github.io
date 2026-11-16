@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.70 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.71 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -19641,18 +19641,7 @@ function _patChips(prev, real, nomeDe) {
   renderAvanco = window.renderAvanco = function () {
     const r = oR.apply(this, arguments);
     try { const obra = _pgObraSel('av-obra'), corpo = document.getElementById('av-corpo'), v = obra && orcVigente(obra); if (!corpo || !v) return r;
-      const sm = l => l.reduce((t, x) => t + (+x.qtd || 0), 0), sr = o => Object.values(o).reduce((t, x) => t + x, 0);
-      const lin = (v.itens || []).filter(i => (i.equipe || []).length || (i.equipamentos || []).length).map(i => { const R = _patReal(obra, i.servico);
-        const pP = sm(i.equipe || []), pR = sr(R.fu), eP = sm(i.equipamentos || []), eR = sr(R.fa), c = (r, p) => !R.n ? '' : `<span style="color:${Math.abs(r - p) <= Math.max(.25, p * .1) ? '#16a34a' : r < p ? '#dc2626' : '#d97706'};font-weight:800">${_n1(r)}</span> <span style="color:var(--text-3)">/ ${_n1(p)}</span>`;
-        return `<tr><td><b>${_e(i.servico)}</b><div style="font-size:11.5px;color:var(--text-3)">${R.n ? R.n + ' dia(s) de equipe' : 'sem apontamento aprovado'}</div></td>
-          <td style="white-space:nowrap">${c(pR, pP) || '—'}</td><td>${R.n ? _patChips((i.equipe || []).map(x => ({ k: x.funcao, q: x.qtd })), R.fu, _nomeFuncao) : ''}</td>
-          <td style="white-space:nowrap">${c(eR, eP) || '—'}</td><td>${R.n ? _patChips((i.equipamentos || []).map(x => ({ k: x.familia, q: x.qtd })), R.fa, _nomeFamilia) : ''}</td></tr>`; });
-      corpo.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:12px"><div class="card-body">
-        <div style="font-weight:800;margin-bottom:2px">Patrulha prevista × real</div>
-        <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">Previsto = equipe e equipamentos por dia do orçamento vigente. Real = média por dia de equipe (frente × dia) nos apontamentos aprovados. Em cada item: <b>real</b> / previsto · <span style="color:#16a34a">verde</span> igual (até 10%) · <span style="color:#dc2626">vermelho</span> abaixo · <span style="color:#d97706">laranja</span> acima ou fora do previsto.</div>
-        ${lin.length ? `<div class="table-wrap"><table><thead><tr><th>Serviço</th><th>Pessoas/dia</th><th>Mão de obra por função</th><th>Equip./dia</th><th>Equipamentos por família</th></tr></thead><tbody>${lin.join('')}</tbody></table></div>`
-          : '<div style="color:var(--text-3);font-size:12.5px">O orçamento vigente não tem patrulha (equipe/equipamentos) nos serviços. Preencha em Orçamento previsto → editar serviço.</div>'}
-      </div></div>`);
+      corpo.insertAdjacentHTML('beforeend', '<div class="card" id="pat-card" style="margin-top:12px"></div>'); _patRender(obra);
     } catch (e) { console.warn('patrulha', e); }
     return r;
   };
@@ -20120,6 +20109,57 @@ function _equipesDiaHTML(data, ob) {
     return r;
   };
 })();
+
+// v4.71: Patrulha prevista × real — novo visual: resumo do período, status por serviço e detalhe por função/família (abre e fecha)
+window._patAb = window._patAb || null;
+function _patTol(r, p) { if (!p) return r > 0 ? 'acima' : 'ok'; const d = (r - p) / p; return Math.abs(d) <= .1 + 1e-9 ? 'ok' : d > 0 ? 'acima' : 'abaixo'; }
+const _PAT_COR = { ok: ['#16A34A', 'rgba(22,163,74,.13)'], acima: ['#D97706', 'rgba(217,119,6,.14)'], abaixo: ['#DC2626', 'rgba(220,38,38,.12)'] };
+function _patToggle(k) { const A = window._patAb; if (A.has(k)) A.delete(k); else A.add(k); _patRender(_pgObraSel('av-obra')); }
+function _patTodos(abrir) { const obra = _pgObraSel('av-obra'), v = obra && orcVigente(obra); window._patAb = new Set(abrir && v ? (v.itens || []).map(i => i.servico) : []); _patRender(obra); }
+function _patRender(obra) {
+  const el = document.getElementById('pat-card'), v = obra && orcVigente(obra); if (!el || !v) return;
+  const sm = l => l.reduce((t, x) => t + (+x.qtd || 0), 0), sr = o => Object.values(o).reduce((t, x) => t + x, 0), n1 = x => _n1(Math.round(x * 10) / 10);
+  const its = (v.itens || []).filter(i => (i.equipe || []).length || (i.equipamentos || []).length);
+  if (!its.length) { el.innerHTML = '<div class="card-body"><div style="font-weight:800">Patrulha — previsto × real</div><div style="color:var(--text-3);font-size:12.5px;margin-top:6px">O orçamento vigente não tem patrulha (equipe/equipamentos) nos serviços. Preencha em Orçamento previsto → editar serviço.</div></div>'; return; }
+  if (!window._patAb) window._patAb = new Set([its[0].servico]);
+  const L = its.map(i => { const R = _patReal(obra, i.servico), pP = sm(i.equipe || []), pR = sr(R.fu), eP = sm(i.equipamentos || []), eR = sr(R.fa); return { i, R, pP, pR, eP, eR, st: R.n ? _patTol(pR, pP) : null }; });
+  const com = L.filter(x => x.R.n), cnt = k => com.filter(x => x.st === k).length, avg = f => com.length ? com.reduce((t, x) => t + f(x), 0) / com.length : 0;
+  const pill = (r, p, st, big) => { const [c, b] = _PAT_COR[st || 'ok']; return `<span style="display:inline-block;padding:${big ? '6px 14px' : '3px 9px'};border-radius:999px;background:${st ? b : 'var(--bg)'};color:${st ? c : 'var(--text-3)'};font-weight:800;font-size:${big ? 15 : 12}px;white-space:nowrap">${st ? n1(r) + ' / ' + n1(p) : '— / ' + n1(p)}</span>`; };
+  const delta = (r, p) => { const st = _patTol(r, p), [c, b] = _PAT_COR[st], d = r - p; return `<span style="display:inline-block;min-width:78px;text-align:center;padding:2px 8px;border-radius:999px;background:${b};color:${c};font-weight:800;font-size:11.5px;white-space:nowrap">${d > 0 ? '+' : ''}${n1(d)}${p ? ' (' + (d > 0 ? '+' : '') + Math.round(d / p * 100) + '%)' : ' (fora)'}</span>`; };
+  const mini = (prev, real, nome, rot) => { const ks = [...new Set([...prev.map(x => x.k), ...Object.keys(real)])];
+    return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 62px 52px 104px;font-size:12.5px;align-items:center">
+      <div style="font-size:11px;color:var(--text-3);padding:4px 8px">${rot}</div><div style="font-size:11px;color:var(--text-3);text-align:center">Previsto</div><div style="font-size:11px;color:var(--text-3);text-align:center">Real</div><div style="font-size:11px;color:var(--text-3);text-align:center">Δ</div>
+      ${ks.map(k => { const p = +((prev.find(x => x.k === k) || {}).q || 0), r = real[k] || 0; return `<div style="padding:4px 8px;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_e(nome(k) || k)}">${_e(nome(k) || k)}</div><div style="text-align:center;border-top:1px solid var(--border);padding:4px 0">${p ? n1(p) : '—'}</div><div style="text-align:center;border-top:1px solid var(--border);padding:4px 0;font-weight:800;color:${_PAT_COR[_patTol(r, p)][0]}">${n1(r)}</div><div style="text-align:center;border-top:1px solid var(--border);padding:3px 0">${delta(r, p)}</div>`; }).join('')}</div>`; };
+  const fech = (n, txt, k, ic) => `<div onclick="_patToggle('${_e(k).replace(/'/g, '&#39;')}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:6px 10px;font-size:12.5px"><span>${ic} <b>${n}</b> ${txt} <span style="color:var(--text-3)">(ver detalhe)</span></span><span style="color:var(--text-3);font-size:16px">›</span></div>`;
+  const icMO = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><circle cx="9" cy="7" r="3"/><path d="M3 21v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1"/><circle cx="17" cy="8" r="2.5"/><path d="M16 14h1a4 4 0 0 1 4 4v3"/></svg>';
+  const icEQ = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="2" y="13" width="13" height="5" rx="1"/><path d="M15 15h4l2 3H15M6 13V9h5l2 4"/><circle cx="6" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg>';
+  const box = (ic, n, t, cor, bg) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:${bg || 'transparent'};${cor ? 'color:' + cor : ''}">${ic ? `<span style="font-size:20px;font-weight:900">${ic}</span>` : ''}<div><div style="font-size:24px;font-weight:900;line-height:1">${n}</div><div style="font-size:12px;opacity:.85">${t}</div></div></div>`;
+  const legenda = Object.entries({ ok: 'Dentro do previsto (±10%)', acima: 'Acima do previsto (>10%)', abaixo: 'Abaixo do previsto (<-10%)' }).map(([k, t]) => `<span style="white-space:nowrap"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${_PAT_COR[k][0]};margin-right:5px"></span>${t}</span>`).join('<span style="width:14px;display:inline-block"></span>');
+  const H = 'background:#1F2A44;color:#fff;font-weight:800;font-size:12.5px;padding:8px 12px';
+  const linhas = L.map(x => { const ab = window._patAb.has(x.i.servico), k = _e(x.i.servico).replace(/'/g, '&#39;');
+    const mo = (x.i.equipe || []).map(y => ({ k: y.funcao, q: y.qtd })), eq = (x.i.equipamentos || []).map(y => ({ k: y.familia, q: y.qtd }));
+    const nMo = new Set([...mo.map(y => y.k), ...Object.keys(x.R.fu)]).size, nEq = new Set([...eq.map(y => y.k), ...Object.keys(x.R.fa)]).size;
+    return `<div style="display:grid;grid-template-columns:minmax(200px,1.1fr) 140px minmax(300px,1.6fr) minmax(280px,1.4fr);border-top:1px solid var(--border);${ab ? 'background:rgba(37,99,235,.04)' : ''}">
+      <div onclick="_patToggle('${k}')" style="cursor:pointer;padding:10px 12px;display:flex;gap:8px;align-items:flex-start"><span style="color:var(--text-3);font-size:13px;margin-top:1px">${ab ? '▾' : '▸'}</span><div><b>${_e(x.i.servico)}</b><div style="font-size:11.5px;color:var(--text-3)">${x.R.n ? x.R.n + ' dia(s) de equipe' : 'sem apontamento aprovado'}</div></div></div>
+      <div style="padding:10px 8px;text-align:center;border-left:1px solid var(--border)">${pill(x.pR, x.pP, x.st, true)}<div style="font-size:11px;color:var(--text-3);margin-top:4px">equip. ${x.R.n ? n1(x.eR) : '—'} / ${n1(x.eP)}</div></div>
+      <div style="border-left:1px solid var(--border);padding:${ab ? '4px 6px' : '6px 4px'}">${!x.R.n ? '<div style="padding:8px 10px;font-size:12px;color:var(--text-3)">—</div>' : ab ? mini(mo, x.R.fu, _nomeFuncao, 'Função') : fech(nMo, nMo === 1 ? 'função' : 'funções', x.i.servico, icMO)}</div>
+      <div style="border-left:1px solid var(--border);padding:${ab ? '4px 6px' : '6px 4px'}">${!x.R.n ? '<div style="padding:8px 10px;font-size:12px;color:var(--text-3)">—</div>' : ab ? mini(eq, x.R.fa, _nomeFamilia, 'Equipamento / família') : fech(nEq, nEq === 1 ? 'família' : 'famílias', x.i.servico, icEQ)}</div></div>`; }).join('');
+  el.innerHTML = `<div class="card-body">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div><div style="font-weight:800;font-size:16px">Patrulha — previsto × real</div><div style="font-size:12px;color:var(--text-3)">Equipe e equipamentos por dia: orçamento vigente × média por dia de equipe (frente × dia) nos apontamentos aprovados.</div></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="_patTodos(true)">Abrir todos</button><button class="btn btn-outline btn-sm" onclick="_patTodos(false)">Fechar todos</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px solid var(--border);border-radius:14px;padding:8px;margin-bottom:10px">
+      ${box('', com.length, 'serviços com apontamento')}<div style="width:1px;align-self:stretch;background:var(--border)"></div>
+      ${box('', n1(avg(x => x.pR)) + ' / ' + n1(avg(x => x.pP)), 'patrulha média (real / prevista)')}<div style="width:1px;align-self:stretch;background:var(--border)"></div>
+      ${box('✓', cnt('ok'), 'no previsto', _PAT_COR.ok[0], _PAT_COR.ok[1])}${box('!', cnt('acima'), 'acima do previsto', _PAT_COR.acima[0], _PAT_COR.acima[1])}${box('✕', cnt('abaixo'), 'abaixo do previsto', _PAT_COR.abaixo[0], _PAT_COR.abaixo[1])}</div>
+    <div style="font-size:11.5px;color:var(--text-2);margin:0 0 8px;text-align:right">${legenda}</div>
+    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden"><div style="overflow-x:auto"><div style="min-width:940px">
+      <div style="display:grid;grid-template-columns:minmax(200px,1.1fr) 140px minmax(300px,1.6fr) minmax(280px,1.4fr)">
+        <div style="padding:8px 12px;font-weight:800;font-size:12.5px;background:var(--bg)">Serviço</div><div style="padding:8px;font-weight:800;font-size:12px;background:var(--bg);text-align:center;border-left:1px solid var(--border)">Pessoas/dia<br><span style="font-weight:400;color:var(--text-3)">real / prevista</span></div>
+        <div style="${H}">${icMO} Mão de obra por função <span style="font-weight:400;opacity:.75">(previsto × real)</span></div><div style="${H};border-left:2px solid #fff">${icEQ} Equipamentos por família <span style="font-weight:400;opacity:.75">(previsto × real)</span></div></div>
+      ${linhas}</div></div></div>
+    <div style="font-size:11.5px;color:var(--text-3);margin-top:8px">Status do serviço pela quantidade de pessoas/dia. Δ = real − previsto (por dia de equipe). "Fora" = função ou família que não estava na patrulha prevista.</div></div>`;
+}
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
