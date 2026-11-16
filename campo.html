@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.23</div>
+  <div class="login-versao">ObraKontrol Campo · v3.24</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7455,7 +7455,7 @@ function ptRender() {
   el.innerHTML = `<div class="card"><div class="card-body">
       <div class="form-group"><label class="form-label">Empreiteira *</label><select class="form-control" onchange="ptCampo('empresa',this.value,true)"><option value="">Escolha a empreiteira…</option>${emps.map(e => `<option value="${E(e.id)}" ${e.id === pt.empresa ? 'selected' : ''}>${E(_ptEmpNome(e))}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Frente *</label><div style="display:flex;gap:8px"><select class="form-control" style="flex:1" onchange="ptCampo('frente',this.value,true)"><option value="">Escolha a frente…</option>${frs.map(f => `<option value="${E(f.cod)}" ${f.cod === pt.frente ? 'selected' : ''}>${E(f.cod + (f.desc || f.nome ? ' · ' + (f.desc || f.nome) : ''))}</option>`).join('')}</select>
-        <button type="button" class="btn btn-outline" style="width:auto;padding:0 14px" onclick="abrirQR('ptfrente')">QR</button></div></div>
+        <button type="button" onclick="abrirQR('ptfrente')" aria-label="Ler QR Code da frente" title="Ler QR Code da frente" style="flex:0 0 auto;width:52px;border-radius:12px;border:0;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(227,6,19,.3)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="4" height="4" rx=".5"/><rect x="13" y="7" width="4" height="4" rx=".5"/><rect x="7" y="13" width="4" height="4" rx=".5"/><path d="M13 13h1.5v1.5H13zM16 16h1M13 17h.01M17 13v.01"/></svg></button></div></div>
       <div class="form-group" style="margin-bottom:0"><label class="form-label">Serviço *</label><select class="form-control" ${pt.empresa ? '' : 'disabled'} onchange="ptCampo('servico',this.value,true)"><option value="">${pt.empresa ? 'Escolha o serviço…' : 'Escolha a empreiteira primeiro'}</option>${svs.map(s => `<option ${s.nome === pt.servico ? 'selected' : ''}>${E(s.nome)}</option>`).join('')}</select>
         ${pt.empresa && svs.length && svs[0].semPreco ? '<div style="font-size:11.5px;color:#F59E0B;margin-top:4px">Esta empreiteira ainda não tem preços do contrato no painel — mostrando todos os serviços.</div>' : ''}</div>
     </div></div>
