@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.67 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.68 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -19989,6 +19989,69 @@ async function ptFotos(id) {
     if (id === 'ua' || id === 'avanco' || id === 'programacao') _ptCarregar().then(() => { try { if (id === 'ua') renderUA(); if (id === 'avanco') renderAvanco(); if (id === 'programacao') renderProgramacao(); } catch (e) {} });
     return r; };
   setTimeout(() => _ptCarregar(), 3500);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.68: ACOMPANHAMENTO DO DIA — equipes no dia: próprias × terceiras e por metodologia (VCA, furo direcional, poços…)
+// Própria = frente + serviço com turno aberto/encerrado ou apontamento no dia · Terceira = empreiteira + frente + serviço lançada no dia
+// ═══════════════════════════════════════════════════════════════
+const _MET = [['VCA', 'VCA', /vca|vala|rede|assentamento|escava/i], ['MND', 'Furo direcional', /furo|direcional|\bmnd\b/i], ['TC', 'Tubo cravado', /cravad/i], ['POC', 'Poços', /po[cç]o|\bpv\b/i],
+  ['LIG', 'Ligações', /liga[cç]/i], ['REC', 'Recomposição', /recomp|paviment/i], ['EST', 'Estações', /\beee\b|\beta\b|\bete\b|esta[cç][aã]o/i]];
+function _metDe(sv) { const s = String(sv || ''); if (/cravad/i.test(s)) return 'TC'; for (const [k, , re] of _MET) if (re.test(s)) return k; return 'OUT'; }
+function _equipesDia(data, ob) {
+  const okO = x => !ob || x.obra === ob, prop = new Map(), terc = new Map();
+  ((typeof _dia !== 'undefined' && _dia.lista) || []).filter(t => t.data === data && okO(t) && t.frente).forEach(t => prop.set(t.frente + '|' + (t.servico || ''), t.servico || ''));
+  (dados.aponMO || []).filter(a => a.data === data && okO(a) && a.frente).forEach(a => { const k = a.frente + '|' + (a.servico || a.tipoServico || ''); if (!prop.has(k)) prop.set(k, a.servico || a.tipoServico || ''); });
+  (dados.prodTerceiros || []).filter(p => p.data === data && okO(p) && p.status !== 'recusado').forEach(p => terc.set(p.empresa + '|' + p.frente + '|' + p.servico, { sv: p.servico, emp: p.empresaNome || '' }));
+  const met = {}; const add = (sv, tipo) => { const k = _metDe(sv); const m = met[k] = met[k] || { p: 0, t: 0 }; m[tipo]++; };
+  prop.forEach(sv => add(sv, 'p')); terc.forEach(x => add(x.sv, 't'));
+  return { p: prop.size, t: terc.size, met, emps: new Set([...terc.values()].map(x => x.emp)).size };
+}
+function _equipesDiaHTML(data, ob) {
+  const E = _equipesDia(data, ob), tot = E.p + E.t, RED = '#E30613', AMB = '#F59E0B';
+  const pct = tot ? Math.round(E.p / tot * 100) : 0;
+  const ordem = [..._MET.map(m => [m[0], m[1]]), ['OUT', 'Outros']].filter(([k]) => E.met[k]);
+  const barra = (p, t, h) => { const s = p + t; return `<div style="display:flex;height:${h}px;border-radius:${h}px;overflow:hidden;background:rgba(127,127,127,.2)">${s ? `<div style="width:${p / s * 100}%;background:${RED}"></div><div style="width:${t / s * 100}%;background:${AMB}"></div>` : ''}</div>`; };
+  return `<div class="dx-pn" id="dd-equipes" style="margin-bottom:12px"><div style="display:grid;grid-template-columns:minmax(230px,300px) 1fr;gap:22px;align-items:center">
+    <div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--dx-t3,#9AA0A6);text-transform:uppercase">Equipes no dia</div>
+      <div style="font-size:44px;font-weight:900;line-height:1.05;margin:2px 0 8px">${tot}</div>
+      ${barra(E.p, E.t, 10)}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:13px">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${RED};margin-right:6px"></span><b style="font-size:18px">${E.p}</b> próprias</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${AMB};margin-right:6px"></span><b style="font-size:18px">${E.t}</b> terceiras${E.emps ? ` <span style="opacity:.6">(${E.emps} empreiteira${E.emps > 1 ? 's' : ''})</span>` : ''}</span></div>
+      ${tot ? `<div style="font-size:11.5px;opacity:.6;margin-top:4px">${pct}% próprias · ${100 - pct}% terceiras</div>` : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+      ${ordem.length ? ordem.map(([k, n]) => { const m = E.met[k]; return `<div style="border:1px solid rgba(127,127,127,.25);border-radius:12px;padding:10px 12px;background:rgba(127,127,127,.06)">
+        <div style="font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n}</div>
+        <div style="font-size:28px;font-weight:900;line-height:1.1;margin:2px 0 6px">${m.p + m.t}</div>${barra(m.p, m.t, 6)}
+        <div style="font-size:11px;margin-top:5px;opacity:.75"><span style="color:${RED};font-weight:800">${m.p}</span> própria${m.p === 1 ? '' : 's'} · <span style="color:${AMB};font-weight:800">${m.t}</span> terceira${m.t === 1 ? '' : 's'}</div></div>`; }).join('')
+        : '<div style="opacity:.6;font-size:13px;align-self:center">Nenhuma equipe com turno, apontamento ou produção de terceiro neste dia.</div>'}
+    </div></div></div>`;
+}
+(function () {
+  const oR = renderDiario;
+  renderDiario = window.renderDiario = function () {
+    const r = oR.apply(this, arguments);
+    try { const pg = document.getElementById('page-diario'), k = pg && pg.querySelector('.dx-kpis'); if (!k) return r;
+      pg.querySelector('#dd-equipes')?.remove(); k.insertAdjacentHTML('afterend', _equipesDiaHTML(_dia.dataSel || _hojeLocal(), _dx.obra)); } catch (e) { console.warn('equipes do dia', e); }
+    return r;
+  };
+  try { ['empresas', 'prodTerceiros'].forEach(c => { if (!_EX_COLS.includes(c)) _EX_COLS.push(c); }); } catch (e) {}
+  // dia de exemplo: duas empreiteiras com produção no dia
+  const oG = window.exGerarDia;
+  if (oG) window.exGerarDia = exGerarDia = async function () {
+    const r = await oG.apply(this, arguments);
+    try { const data = _dia.dataSel || _hojeLocal(), obra = _dx.obra || (obraAtiva && obraAtiva.id !== 'todas' ? obraAtiva.id : '') || ((dados.obras || [])[0] || {}).id; if (!obra || !(dados.turnosAbertos || _dia.lista || []).some(t => String(t.id).startsWith('ex_t'))) {}
+      const X = { exemplo: true, obra }, ag = new Date().toISOString(), sv = (col, o) => { (dados[col] = dados[col] || []).push(o); return fbSave(col, o.id, o); };
+      const emps = [{ id: 'ex_emp1', cod: 'EX-DEL', nome: 'DELTA SANEAMENTO (EXEMPLO)', fantasia: 'Delta Saneamento', tipo: 'Empreiteira', ...X }, { id: 'ex_emp2', cod: 'EX-EPS', nome: 'ÉPSILON LIGAÇÕES (EXEMPLO)', fantasia: 'Épsilon Ligações', tipo: 'Empreiteira', ...X }];
+      const pts = [['ex_emp1', 'Delta Saneamento', 'EX-01', 'Escavação mecânica de vala', 'm', 36, 6], ['ex_emp1', 'Delta Saneamento', 'EX-02', 'Furo direcional', 'm', 42, 4], ['ex_emp2', 'Épsilon Ligações', 'EX-03', 'Ligações domiciliares', 'un', 9, 3]]
+        .map(([empresa, empresaNome, frente, servico, unid, qtd, pessoas], i) => ({ id: 'ex_pt' + i, data, empresa, empresaNome, frente, servico, unid, qtd, pessoas, maquinas: [], fotos: [], origem: 'interno', lancadoPor: 'Ana Ribeiro', lancadoEm: ag, status: 'pendente', ...X }));
+      await Promise.all([...emps.map(e => sv('empresas', e)), ...pts.map(p => sv('prodTerceiros', p))].map(p => p.catch(() => {})));
+      renderDiario(); } catch (e) { console.warn(e); }
+    return r;
+  };
+  setTimeout(() => { try { if (typeof _ptCarregar === 'function') _ptCarregar().then(() => { if (document.getElementById('page-diario')?.classList.contains('active')) renderDiario(); }); } catch (e) {} }, 4500);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
