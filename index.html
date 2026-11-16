@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.68 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.69 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -13594,8 +13594,8 @@ async function uaExcluirManuais() {
     if (temEap && !_uasDa(it.obra).some(u => u.cod === it.ramoUA)) { it.__aviso = 'frente ' + (it.cod || it.desc) + ': ramo ' + it.ramoUA + ' não existe na EAP desta obra — importada sem ramo'; it.ramoUA = ''; } return ''; };
   // ── Tipos de serviço: da obra, com as UAs que custeia
   D.tiposServico.porObra = true;
-  D.tiposServico.col = ['Código', 'Nome do serviço', 'Unidade', 'Meta diária', 'UAs do RM que custeia (nomes, separe por ;)'];
-  { const m = D.tiposServico.map; D.tiposServico.map = g => ({ ...m(g), uaNomes: String(g(['uas do rm', 'uas', 'custeia']) || '').split(/;|\n/).map(s => s.trim()).filter(Boolean) }); }
+  D.tiposServico.col = ['Código', 'Nome do serviço', 'Unidade', 'Meta diária', 'UAs do RM que custeia (nomes, separe por ;)', 'Metodologia (opcional)'];
+  { const m = D.tiposServico.map; D.tiposServico.map = g => ({ ...m(g), uaNomes: String(g(['uas do rm', 'uas', 'custeia']) || '').split(/;|\n/).map(s => s.trim()).filter(Boolean), metodologia: String(g(['metodologia', 'grupo']) || '').trim() }); }
   POS.tiposServico = it => { const fol = _uaFolhas(it.obra), ach = [], falta = [];
     (it.uaNomes || []).forEach(n => { const u = fol.find(x => N(x.nome) === N(n)); if (u) { if (!ach.includes(u.nome)) ach.push(u.nome); } else falta.push(n); });
     it.uaNomes = ach; if (falta.length) it.__aviso = 'serviço ' + it.cod + ': UA não encontrada na EAP — ' + falta.slice(0, 3).join('; ');
@@ -19994,22 +19994,30 @@ async function ptFotos(id) {
 // v4.68: ACOMPANHAMENTO DO DIA — equipes no dia: próprias × terceiras e por metodologia (VCA, furo direcional, poços…)
 // Própria = frente + serviço com turno aberto/encerrado ou apontamento no dia · Terceira = empreiteira + frente + serviço lançada no dia
 // ═══════════════════════════════════════════════════════════════
-const _MET = [['VCA', 'VCA', /vca|vala|rede|assentamento|escava/i], ['MND', 'Furo direcional', /furo|direcional|\bmnd\b/i], ['TC', 'Tubo cravado', /cravad/i], ['POC', 'Poços', /po[cç]o|\bpv\b/i],
-  ['LIG', 'Ligações', /liga[cç]/i], ['REC', 'Recomposição', /recomp|paviment/i], ['EST', 'Estações', /\beee\b|\beta\b|\bete\b|esta[cç][aã]o/i]];
-function _metDe(sv) { const s = String(sv || ''); if (/cravad/i.test(s)) return 'TC'; for (const [k, , re] of _MET) if (re.test(s)) return k; return 'OUT'; }
+// v4.69: metodologia vem do cadastro do tipo de serviço (campo "Metodologia"). Sem preencher: regra de saneamento bem específica; se não casar, o próprio nome do serviço.
+const _MET_SAN = [['VCA', /\bvca\b|vala a c[eé]u aberto/i], ['Furo direcional', /\bmnd\b.*furo|furo direcional/i], ['Tubo cravado', /tubo cravado/i], ['Poços', /po[cç]o de (visita|emboque)|\bpv\b/i],
+  ['Ligações', /liga[cç][aã]o domiciliar|liga[cç][oõ]es (de )?(esgoto|[aá]gua)/i], ['Recomposição', /recomposi[cç][aã]o de pavimento/i], ['Estações', /^\s*(eee|eta|ete)\b/i]];
+function _metDe(sv, obra) {
+  const n = String(sv || '').trim(); if (!n) return 'Sem serviço';
+  const t = (dados.tiposServico || []).find(x => (x.nome === n || x.desc === n) && (!obra || !x.obra || x.obra === obra)) || (dados.tiposServico || []).find(x => x.nome === n);
+  if (t && String(t.metodologia || '').trim()) return String(t.metodologia).trim();
+  for (const [k, re] of _MET_SAN) if (re.test(n)) return k;
+  return n;
+}
+const _METODOS_SUGEST = ['VCA', 'Furo direcional', 'Tubo cravado', 'Poços', 'Ligações', 'Recomposição', 'Estações'];
 function _equipesDia(data, ob) {
   const okO = x => !ob || x.obra === ob, prop = new Map(), terc = new Map();
   ((typeof _dia !== 'undefined' && _dia.lista) || []).filter(t => t.data === data && okO(t) && t.frente).forEach(t => prop.set(t.frente + '|' + (t.servico || ''), t.servico || ''));
   (dados.aponMO || []).filter(a => a.data === data && okO(a) && a.frente).forEach(a => { const k = a.frente + '|' + (a.servico || a.tipoServico || ''); if (!prop.has(k)) prop.set(k, a.servico || a.tipoServico || ''); });
   (dados.prodTerceiros || []).filter(p => p.data === data && okO(p) && p.status !== 'recusado').forEach(p => terc.set(p.empresa + '|' + p.frente + '|' + p.servico, { sv: p.servico, emp: p.empresaNome || '' }));
-  const met = {}; const add = (sv, tipo) => { const k = _metDe(sv); const m = met[k] = met[k] || { p: 0, t: 0 }; m[tipo]++; };
+  const met = {}; const add = (sv, tipo) => { const k = _metDe(sv, ob); const m = met[k] = met[k] || { p: 0, t: 0 }; m[tipo]++; };
   prop.forEach(sv => add(sv, 'p')); terc.forEach(x => add(x.sv, 't'));
   return { p: prop.size, t: terc.size, met, emps: new Set([...terc.values()].map(x => x.emp)).size };
 }
 function _equipesDiaHTML(data, ob) {
   const E = _equipesDia(data, ob), tot = E.p + E.t, RED = '#E30613', AMB = '#F59E0B';
   const pct = tot ? Math.round(E.p / tot * 100) : 0;
-  const ordem = [..._MET.map(m => [m[0], m[1]]), ['OUT', 'Outros']].filter(([k]) => E.met[k]);
+  const ordem = Object.keys(E.met).sort((a, b) => (E.met[b].p + E.met[b].t) - (E.met[a].p + E.met[a].t) || a.localeCompare(b, 'pt-BR')).map(k => [k, k]);
   const barra = (p, t, h) => { const s = p + t; return `<div style="display:flex;height:${h}px;border-radius:${h}px;overflow:hidden;background:rgba(127,127,127,.2)">${s ? `<div style="width:${p / s * 100}%;background:${RED}"></div><div style="width:${t / s * 100}%;background:${AMB}"></div>` : ''}</div>`; };
   return `<div class="dx-pn" id="dd-equipes" style="margin-bottom:12px"><div style="display:grid;grid-template-columns:minmax(230px,300px) 1fr;gap:22px;align-items:center">
     <div>
@@ -20023,7 +20031,7 @@ function _equipesDiaHTML(data, ob) {
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
       ${ordem.length ? ordem.map(([k, n]) => { const m = E.met[k]; return `<div style="border:1px solid rgba(127,127,127,.25);border-radius:12px;padding:10px 12px;background:rgba(127,127,127,.06)">
-        <div style="font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n}</div>
+        <div style="font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_e(n)}">${_e(n)}</div>
         <div style="font-size:28px;font-weight:900;line-height:1.1;margin:2px 0 6px">${m.p + m.t}</div>${barra(m.p, m.t, 6)}
         <div style="font-size:11px;margin-top:5px;opacity:.75"><span style="color:${RED};font-weight:800">${m.p}</span> própria${m.p === 1 ? '' : 's'} · <span style="color:${AMB};font-weight:800">${m.t}</span> terceira${m.t === 1 ? '' : 's'}</div></div>`; }).join('')
         : '<div style="opacity:.6;font-size:13px;align-self:center">Nenhuma equipe com turno, apontamento ou produção de terceiro neste dia.</div>'}
@@ -20052,6 +20060,34 @@ function _equipesDiaHTML(data, ob) {
     return r;
   };
   setTimeout(() => { try { if (typeof _ptCarregar === 'function') _ptCarregar().then(() => { if (document.getElementById('page-diario')?.classList.contains('active')) renderDiario(); }); } catch (e) {} }, 4500);
+})();
+
+// v4.69: campo "Metodologia" no tipo de serviço (agrupa as equipes no Acompanhamento do dia)
+(function () {
+  const $ = id => document.getElementById(id);
+  const nm = $('srv-nome'); if (nm && !$('srv-metodo')) { const g = nm.closest('.form-group'); g.insertAdjacentHTML('afterend', `<div class="form-group"><label class="form-label">Metodologia <span style="font-weight:400;color:var(--text-3)">(agrupa as equipes no Acompanhamento do dia)</span></label>
+    <input class="form-control" id="srv-metodo" list="srv-metodo-l" placeholder="Ex.: VCA, Furo direcional, Terraplenagem, Estrutura metálica…"/><datalist id="srv-metodo-l"></datalist>
+    <div style="font-size:11.5px;color:var(--text-3);margin-top:3px">Em branco: o app tenta reconhecer serviços de saneamento; se não reconhecer, usa o próprio nome do serviço.</div></div>`); }
+  const lista = () => { const dl = $('srv-metodo-l'); if (dl) dl.innerHTML = [...new Set([..._METODOS_SUGEST, ...(dados.tiposServico || []).map(x => x.metodologia).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'pt-BR')).map(v => `<option value="${_e(v)}">`).join(''); };
+  const oEd = window.editarTipoServico; if (oEd) window.editarTipoServico = function (id) { const r = oEd.apply(this, arguments); lista(); const t = (dados.tiposServico || []).find(x => x.id === id); if ($('srv-metodo')) $('srv-metodo').value = (t && t.metodologia) || ''; return r; };
+  const oOM = window.openModal; window.openModal = openModal = function (id) { const r = oOM.apply(this, arguments);
+    if (id === 'modal-novo-tipo-servico') { lista(); if (!$('srv-edit-id')?.value && $('srv-metodo')) $('srv-metodo').value = ''; } return r; };
+  const oSv = window.salvarTipoServico;
+  if (oSv) window.salvarTipoServico = salvarTipoServico = function () {
+    const met = ($('srv-metodo')?.value || '').trim(), id = $('srv-edit-id')?.value || $('srv-id')?.value || '', cod = ($('srv-cod')?.value || '').trim(), ob = $('srv-obra')?.value || '';
+    const r = oSv.apply(this, arguments);
+    const t = (dados.tiposServico || []).find(x => id ? x.id === id : (x.cod === cod && (x.obra || '') === ob));
+    if (t && (t.metodologia || '') !== met) { t.metodologia = met; if (db && _firebaseReady) fbSave('tiposServico', t.id, t).catch(() => {}); try { renderTiposServico(); } catch (e) {} }
+    return r; };
+  // coluna na lista
+  const oR = window.renderTiposServico;
+  if (oR) window.renderTiposServico = renderTiposServico = function () { const r = oR.apply(this, arguments);
+    try { const h = document.querySelector('#tabela-tipos-servico thead tr'); if (h && !h.querySelector('.th-met')) { const ths = [...h.children], i = ths.findIndex(t => /unidade/i.test(t.textContent)); (ths[i] || ths[1]).insertAdjacentHTML('afterend', '<th class="th-met">Metodologia</th>'); }
+      const hs = [...(h ? h.children : [])], im = hs.findIndex(t => t.classList.contains('th-met')), m = new Map((dados.tiposServico || []).map(x => [String(x.id), x]));
+      document.querySelectorAll('#tbody-tipos-servico tr').forEach(tr => { if (tr.dataset.met || im < 0) return; const id = (tr.innerHTML.match(/editarTipoServico\('([^']+)'\)/) || [])[1], t = id && m.get(id); if (!t) return; tr.dataset.met = '1';
+        const lab = t.metodologia ? _e(t.metodologia) : `<span style="color:var(--text-3)" title="automático">${_e(_metDe(t.nome, t.obra))}</span>`; tr.children[im - 1].insertAdjacentHTML('afterend', `<td style="font-size:12px">${lab}</td>`); });
+    } catch (e) {}
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
