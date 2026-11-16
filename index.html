@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.74 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.75 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18808,7 +18808,7 @@ async function _kkGerar(nUsr) {
     for (let d = 24; d >= 0; d--) { const dt = dia(d), wd = new Date(dt + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;
       TER.forEach(t => t.itens.forEach(([cod, preco, fr, base, pes, maq], ii) => { if ((d + ii) % 2) return; const s = SV.find(z => z.cod === cod); if (!s) return;
         const qtd = Math.max(1, Math.round(base * (0.75 + R() * 0.5))), st = d <= 1 ? 'pendente' : (k === 7 ? 'recusado' : 'aprovado'), r = st === 'aprovado' ? uaResolver(O, fr, s.nome) : null, u = r && (r.ua || r.cands[0]);
-        sv('prodTerceiros', { id: 'kk_pt' + (k++), obra: O, data: dt, empresa: t.e, empresaNome: t.nome, frente: fr, servico: s.nome, unid: s.unidade, qtd, pessoas: pes + RI(-1, 1), maquinas: maq.map(([familia, q]) => ({ familia, qtd: q })),
+        sv('prodTerceiros', { id: 'kk_pt' + (k++), obra: O, data: dt, horaIni: '07:00', horaFim: ii % 2 ? '16:00' : '17:00', horas: ii % 2 ? 9 : 10, empresa: t.e, empresaNome: t.nome, frente: fr, servico: s.nome, unid: s.unidade, qtd, pessoas: pes + RI(-1, 1), maquinas: maq.map(([familia, q]) => ({ familia, qtd: q })),
           obs: '', fotos: [], origem: 'interno', lancadoPor: 'Apontador ' + (1 + (k % 3)), lancadoEm: dt + 'T16:30:00', status: st, motivo: st === 'recusado' ? 'Quantidade acima do medido na frente — refazer' : '',
           ua: u ? u.cod : '', uaNome: u ? u.nome : '', preco: st === 'aprovado' ? preco : null, valor: st === 'aprovado' ? r2(qtd * preco) : null, aprovadoPor: st === 'pendente' ? '' : 'Custos', ...K }); })); }
   }
@@ -19943,7 +19943,7 @@ function renderTerceiros() {
       <div class="table-wrap"><table style="font-size:12.5px"><thead><tr><th>Data</th><th>Empreiteira</th><th>Frente</th><th>Serviço</th><th style="text-align:right">Qtd</th><th>Efetivo · máquinas</th><th style="text-align:right">Valor</th><th>UA</th><th>Situação</th><th></th></tr></thead><tbody>
       ${l.map(p => { const s = p.status || 'pendente', pr = _ptPreco(obra, p.empresa, p.servico), val = s === 'aprovado' ? +p.valor || 0 : pr ? (+p.qtd || 0) * pr.preco : 0;
         const maq = (p.maquinas || []).filter(m => +m.qtd).map(m => m.qtd + ' ' + _e(_nomeFamilia(m.familia) || m.familia)).join(', ');
-        return `<tr><td class="td-mono">${_e(fmtData(p.data))}</td><td>${_e(p.empresaNome || _ptEmpNome(p.empresa))}<div style="font-size:11px;color:var(--text-3)">${_e(p.lancadoPor || '')}${p.origem === 'terceiro' ? ' · terceiro' : ''}</div></td>
+        return `<tr><td class="td-mono">${_e(fmtData(p.data))}${p.horaIni ? `<div style="font-size:11px;color:var(--text-3)">${_e(p.horaIni)}–${_e(p.horaFim || '')}</div>` : ''}</td><td>${_e(p.empresaNome || _ptEmpNome(p.empresa))}<div style="font-size:11px;color:var(--text-3)">${_e(p.lancadoPor || '')}${p.origem === 'terceiro' ? ' · terceiro' : ''}</div>${p.lancadoEm && String(p.lancadoEm).slice(0, 10) > p.data ? `<div style="font-size:11px;color:#D97706">lançado em ${_e(fmtData(String(p.lancadoEm).slice(0, 10)))}</div>` : ''}${p.gps && p.gps.lat != null ? `<a href="https://www.google.com/maps?q=${p.gps.lat},${p.gps.lng}" target="_blank" rel="noopener" style="font-size:11px">📍 ver no mapa</a>${typeof _geoTxt === 'function' && p.frente ? '' : ''}` : '<div style="font-size:11px;color:#DC2626">sem localização</div>'}</td>
           <td><b class="td-mono">${_e(p.frente)}</b></td><td>${_e(p.servico)}</td><td class="td-mono" style="text-align:right;white-space:nowrap">${_n1(+p.qtd || 0)} ${_e(p.unid || '')}</td>
           <td style="font-size:12px">${+p.pessoas ? p.pessoas + ' pessoa(s)' : '—'}${maq ? '<br>' + maq : ''}${+p.pessoas && +p.qtd ? `<div style="color:var(--text-3)">${_n1(p.qtd / p.pessoas)} ${_e(p.unid || '')}/pessoa</div>` : ''}</td>
           <td class="td-mono" style="text-align:right">${val ? _ptBRL(val) : (pr ? '' : '<span style="color:var(--amber);font-size:11px">sem preço</span>')}</td>

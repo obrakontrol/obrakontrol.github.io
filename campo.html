@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.24</div>
+  <div class="login-versao">ObraKontrol Campo · v3.25</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7435,10 +7435,10 @@ function _ptTela() {
 }
 async function ptAbrir() {
   _ptTela(); const emps = _ptEmps();
-  pt = { modo: 'novo', empresa: emps.length === 1 ? emps[0].id : (localStorage.getItem('campo_pt_emp') || ''), frente: '', servico: '', unid: '', qtd: '', pessoas: 0, maquinas: [], fotos: [], obs: '', data: _hojeISO(), precos: [] };
+  pt = { modo: 'novo', empresa: emps.length === 1 ? emps[0].id : (localStorage.getItem('campo_pt_emp') || ''), frente: '', servico: '', unid: '', qtd: '', pessoas: 0, maquinas: [], fotos: [], obs: '', data: '', horaIni: '', horaFim: '', precos: [], geoSt: 'buscando' };
   if (!emps.some(e => e.id === pt.empresa)) pt.empresa = '';
   showScreen('pt'); ptRender(); pt.precos = await _ptPrecos(); ptRender();
-  _geoPegar(15000).then(g => { if (pt) pt.gps = g; }).catch(() => {});
+  ptGeo();
 }
 function ptSair() { pt = null; showScreen('home'); }
 function ptCampo(k, v, rr) { pt[k] = v; if (k === 'empresa') { pt.servico = ''; pt.unid = ''; try { localStorage.setItem('campo_pt_emp', v); } catch (e) {} } if (k === 'servico') { const s = _ptServicos().find(x => x.nome === v); pt.unid = s ? s.unid : ''; } if (rr) ptRender(); }
@@ -7453,6 +7453,10 @@ function ptRender() {
   if (pt.modo === 'lista') { _ptLista(el, bar); return; }
   const fr = frs.find(f => f.cod === pt.frente), prod = +pt.pessoas && +String(pt.qtd).replace(',', '.') ? (+String(pt.qtd).replace(',', '.') / pt.pessoas) : 0;
   el.innerHTML = `<div class="card"><div class="card-body">
+      <div class="form-group"><label class="form-label">Data do serviço *</label><input class="form-control" type="date" max="${_hojeISO()}" value="${E(pt.data)}" onchange="ptCampo('data',this.value)"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group"><label class="form-label">Início *</label><input class="form-control" type="time" value="${E(pt.horaIni || '')}" onchange="ptCampo('horaIni',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Fim *</label><input class="form-control" type="time" value="${E(pt.horaFim || '')}" onchange="ptCampo('horaFim',this.value)"/></div></div>
       <div class="form-group"><label class="form-label">Empreiteira *</label><select class="form-control" onchange="ptCampo('empresa',this.value,true)"><option value="">Escolha a empreiteira…</option>${emps.map(e => `<option value="${E(e.id)}" ${e.id === pt.empresa ? 'selected' : ''}>${E(_ptEmpNome(e))}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Frente *</label><div style="display:flex;gap:8px"><select class="form-control" style="flex:1" onchange="ptCampo('frente',this.value,true)"><option value="">Escolha a frente…</option>${frs.map(f => `<option value="${E(f.cod)}" ${f.cod === pt.frente ? 'selected' : ''}>${E(f.cod + (f.desc || f.nome ? ' · ' + (f.desc || f.nome) : ''))}</option>`).join('')}</select>
         <button type="button" onclick="abrirQR('ptfrente')" aria-label="Ler QR Code da frente" title="Ler QR Code da frente" style="flex:0 0 auto;width:52px;border-radius:12px;border:0;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(227,6,19,.3)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="4" height="4" rx=".5"/><rect x="13" y="7" width="4" height="4" rx=".5"/><rect x="7" y="13" width="4" height="4" rx=".5"/><path d="M13 13h1.5v1.5H13zM16 16h1M13 17h.01M17 13v.01"/></svg></button></div></div>
@@ -7460,7 +7464,7 @@ function ptRender() {
         ${pt.empresa && svs.length && svs[0].semPreco ? '<div style="font-size:11.5px;color:#F59E0B;margin-top:4px">Esta empreiteira ainda não tem preços do contrato no painel — mostrando todos os serviços.</div>' : ''}</div>
     </div></div>
     <div class="card"><div class="card-body">
-      <div class="form-group"><label class="form-label">Quantidade executada hoje *</label><div style="display:flex;gap:8px;align-items:center"><input class="form-control" style="flex:1;font-size:20px;font-weight:800" type="number" inputmode="decimal" step="any" min="0" value="${E(pt.qtd)}" oninput="ptCampo('qtd',this.value);ptProd()"/><div style="min-width:44px;text-align:center;font-weight:800">${E(pt.unid || '')}</div></div></div>
+      <div class="form-group"><label class="form-label">Quantidade executada no dia *</label><div style="display:flex;gap:8px;align-items:center"><input class="form-control" style="flex:1;font-size:20px;font-weight:800" type="number" inputmode="decimal" step="any" min="0" value="${E(pt.qtd)}" oninput="ptCampo('qtd',this.value);ptProd()"/><div style="min-width:44px;text-align:center;font-weight:800">${E(pt.unid || '')}</div></div></div>
       <div class="form-label" style="margin:6px 0 2px">Efetivo e máquinas deles</div>
       <div class="pt-mq"><span>Pessoas</span><span class="pt-st"><button type="button" onclick="ptPes(-1)" aria-label="Menos">−</button><b>${+pt.pessoas || 0}</b><button type="button" onclick="ptPes(1)" aria-label="Mais">+</button></span></div>
       ${pt.maquinas.map((m, i) => `<div class="pt-mq"><span>${E(fn.get(m.familia) || m.familia)}</span><span class="pt-st"><button type="button" onclick="ptMaq(${i},-1)" aria-label="Menos">−</button><b>${m.qtd}</b><button type="button" onclick="ptMaq(${i},1)" aria-label="Mais">+</button></span></div>`).join('')}
@@ -7472,38 +7476,43 @@ function ptRender() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${pt.fotos.map((f, i) => `<div style="position:relative"><img src="${f}" style="width:70px;height:70px;object-fit:cover;border-radius:10px"/><button type="button" onclick="pt.fotos.splice(${i},1);ptRender()" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#DC2626;color:#fff;font-size:12px" aria-label="Tirar foto">×</button></div>`).join('')}
         ${pt.fotos.length < 4 ? `<label style="width:70px;height:70px;border-radius:10px;border:1.5px dashed rgba(127,127,127,.5);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer">📷<input type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="ptFoto(this)"/></label>` : ''}</div>
       <div class="form-group" style="margin:0"><label class="form-label">Observação</label><input class="form-control" value="${E(pt.obs)}" oninput="ptCampo('obs',this.value)" placeholder="Ex.: trecho entre PV-12 e PV-14"/></div>
-      <div style="font-size:11.5px;color:var(--text3);margin-top:8px">📍 Horário e localização gravados automaticamente.</div>
+      <div id="pt-geo" style="margin-top:10px">${_ptGeoTxt()}</div>
     </div></div>
-    <div style="text-align:center;margin:6px 0 80px"><button type="button" class="btn btn-outline" style="width:auto;padding:8px 16px" onclick="ptVerLista()">Ver lançamentos de hoje${emp ? ' · ' + E(_ptEmpNome(emp)) : ''}</button></div>`;
+    <div style="text-align:center;margin:6px 0 80px"><button type="button" class="btn btn-outline" style="width:auto;padding:8px 16px" onclick="ptVerLista()">Ver lançamentos do dia${emp ? ' · ' + E(_ptEmpNome(emp)) : ''}</button></div>`;
   bar.innerHTML = '<button class="btn btn-outline" onclick="ptSair()">Sair</button><button class="btn btn-green" onclick="ptSalvar()">✓ Salvar produção</button>';
 }
 function ptProd() { const el = document.getElementById('pt-prod'); if (!el) return; const q = +String(pt.qtd).replace(',', '.'), p = +pt.pessoas; el.innerHTML = q && p ? 'Produtividade: <b>' + (Math.round(q / p * 10) / 10).toString().replace('.', ',') + ' ' + _ptE(pt.unid) + '/pessoa</b>' : ''; }
 async function ptSalvar() {
   const q = parseFloat(String(pt.qtd).replace(',', '.')), f = [];
+  if (!pt.gps) { toast('Sem localização ainda. Ative o GPS e toque em "Tentar de novo" — o lançamento precisa da localização.', 'err'); ptGeo(); return; }
+  if (!pt.data) f.push('a data'); if (!pt.horaIni) f.push('a hora de início'); if (!pt.horaFim) f.push('a hora de fim');
+  if (pt.data > _hojeISO()) { toast('A data não pode ser futura.', 'err'); return; }
+  if (pt.horaIni && pt.horaFim && pt.horaFim <= pt.horaIni) { toast('A hora de fim precisa ser depois do início.', 'err'); return; }
   if (!pt.empresa) f.push('a empreiteira'); if (!pt.frente) f.push('a frente'); if (!pt.servico) f.push('o serviço'); if (!(q > 0)) f.push('a quantidade'); if (!(+pt.pessoas > 0)) f.push('o número de pessoas');
   if (f.length) { toast('Falta: ' + f.join(', ') + '.', 'err'); return; }
   const emp = _ptEmps().find(e => e.id === pt.empresa), ag = new Date().toISOString(), id = 'pt' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), obra = usuarioCampo?.obra || emp?.obra || '';
   const fotos = []; for (const img of pt.fotos) { const fid = 'fpt' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); await fbSalvar('fotos', { id: fid, tipo: 'producao_terceiro', prodId: id, data: pt.data, obra, lancadoPor: usuarioCampo.nome, tiradaEm: ag, img }); fotos.push(fid); }
-  const doc = { id, obra, data: pt.data, empresa: pt.empresa, empresaNome: _ptEmpNome(emp), frente: pt.frente, servico: pt.servico, unid: pt.unid || '', qtd: q, pessoas: +pt.pessoas, maquinas: pt.maquinas.filter(m => m.qtd > 0),
+  const hm = h => { const [a, b] = String(h || '0:0').split(':').map(Number); return a * 60 + b; }, horas = Math.round((hm(pt.horaFim) - hm(pt.horaIni)) / 6) / 10;
+  const doc = { id, obra, data: pt.data, horaIni: pt.horaIni, horaFim: pt.horaFim, horas, empresa: pt.empresa, empresaNome: _ptEmpNome(emp), frente: pt.frente, servico: pt.servico, unid: pt.unid || '', qtd: q, pessoas: +pt.pessoas, maquinas: pt.maquinas.filter(m => m.qtd > 0),
     fotos, obs: String(pt.obs || '').trim(), gps: pt.gps || null, origem: usuarioCampo?.empresaTerceiro ? 'terceiro' : 'interno', lancadoPor: usuarioCampo.nome, lancadoMat: usuarioCampo.mat || '', lancadoEm: ag, status: 'pendente' };
   await fbSalvar('prodTerceiros', doc);
   try { const l = JSON.parse(localStorage.getItem('campo_pt_meus') || '[]'); l.unshift(doc); localStorage.setItem('campo_pt_meus', JSON.stringify(l.slice(0, 60))); } catch (e) {}
   toast('Produção de ' + _ptEmpNome(emp) + ' salva ✓ — vai para aprovação', 'ok');
-  const e0 = pt.empresa, p0 = pt.precos; pt = { modo: 'novo', empresa: e0, frente: pt.frente, servico: '', unid: '', qtd: '', pessoas: 0, maquinas: [], fotos: [], obs: '', data: _hojeISO(), precos: p0, gps: pt.gps };
+  const e0 = pt.empresa, p0 = pt.precos; pt = { modo: 'novo', empresa: e0, frente: pt.frente, servico: '', unid: '', qtd: '', pessoas: 0, maquinas: [], fotos: [], obs: '', data: pt.data, horaIni: '', horaFim: '', precos: p0, gps: pt.gps, geoSt: pt.geoSt };
   ptRender(); window.scrollTo(0, 0);
 }
 async function ptVerLista() { pt.modo = 'lista'; ptRender();
-  let l = null; if (db && _fbReady && isOnline) { try { const sn = await db.collection('prodTerceiros').where('data', '==', _hojeISO()).get(); l = sn.docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) {} }
+  let l = null; if (db && _fbReady && isOnline) { try { const sn = await db.collection('prodTerceiros').where('data', '==', pt.data || _hojeISO()).get(); l = sn.docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) {} }
   if (l) { const meus = JSON.parse(localStorage.getItem('campo_pt_meus') || '[]'); l.forEach(x => { const i = meus.findIndex(y => y.id === x.id); if (i >= 0) meus[i] = x; }); try { localStorage.setItem('campo_pt_meus', JSON.stringify(meus)); } catch (e) {} pt._lista = l; }
   if (pt && pt.modo === 'lista') ptRender(); }
 function _ptLista(el, bar) {
   const E = _ptE, o = usuarioCampo?.obra || '', hoje = _hojeISO();
-  let l = pt._lista || JSON.parse(localStorage.getItem('campo_pt_meus') || '[]').filter(x => x.data === hoje); l = l.filter(x => (!o || x.obra === o) && (!pt.empresa || x.empresa === pt.empresa));
+  const dl = pt.data || hoje; let l = pt._lista || JSON.parse(localStorage.getItem('campo_pt_meus') || '[]').filter(x => x.data === dl); l = l.filter(x => (!o || x.obra === o) && (!pt.empresa || x.empresa === pt.empresa));
   const cor = s => s === 'aprovado' ? ['Aprovado', '#16A34A'] : s === 'recusado' ? ['Recusado', '#DC2626'] : ['Pendente', '#D97706'];
-  el.innerHTML = `<div class="card"><div class="card-body"><div style="font-weight:800;font-size:16px">${E(l[0]?.empresaNome || 'Hoje')}</div><div style="font-size:12.5px;color:var(--text2);margin-bottom:6px">${l.length} lançamento(s) hoje</div>
+  el.innerHTML = `<div class="card"><div class="card-body"><div style="font-weight:800;font-size:16px">${E(l[0]?.empresaNome || 'Hoje')}</div><div style="font-size:12.5px;color:var(--text2);margin-bottom:6px">${l.length} lançamento(s) em ${E(dl.split('-').reverse().join('/'))}</div>
     ${l.map(x => { const [t, c] = cor(x.status); const mq = (x.maquinas || []).map(m => m.qtd + ' ' + E((new Map(_ptFams())).get(m.familia) || m.familia)).join(', ');
       return `<div class="pt-it"><div style="display:flex;justify-content:space-between;gap:8px"><b>${E(x.servico)} · ${E(x.frente)}</b><b>${String(x.qtd).replace('.', ',')} ${E(x.unid || '')}</b></div>
-        <div style="font-size:12px;color:var(--text2)">${x.pessoas} pessoa(s)${mq ? ' · ' + mq : ''}${x.pessoas ? ' · ' + (Math.round(x.qtd / x.pessoas * 10) / 10).toString().replace('.', ',') + ' ' + E(x.unid || '') + '/pessoa' : ''}</div>
+        <div style="font-size:12px;color:var(--text2)">${x.horaIni ? E(x.horaIni) + '–' + E(x.horaFim || '') + ' · ' : ''}${x.pessoas} pessoa(s)${mq ? ' · ' + mq : ''}${x.pessoas ? ' · ' + (Math.round(x.qtd / x.pessoas * 10) / 10).toString().replace('.', ',') + ' ' + E(x.unid || '') + '/pessoa' : ''}</div>
         <span class="pt-tag" style="background:${c}22;color:${c}">${t}</span>${x.status === 'recusado' && x.motivo ? `<div style="font-size:12px;color:#DC2626;margin-top:2px">Motivo: ${E(x.motivo)}</div>` : ''}</div>`; }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0">Nada lançado hoje ainda.</div>'}
   </div></div>`;
   bar.innerHTML = '<button class="btn btn-outline" onclick="ptSair()">Sair</button><button class="btn btn-green" onclick="pt.modo=\'novo\';pt._lista=null;ptRender()">+ Novo lançamento</button>';
@@ -7520,6 +7529,14 @@ function _ptLista(el, bar) {
     return oP.apply(this, arguments);
   };
 })();
+
+// v3.25: localização obrigatória e visível na produção de terceiro; data e horário informados (o lançamento pode ser feito depois)
+function _ptGeoTxt() { if (!pt) return ''; const g = pt.gps;
+  if (g) return `<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#16A34A;font-weight:700">📍 Localização registrada <span style="font-weight:400;color:var(--text3)">±${g.acc || '?'} m · ${new Date(g.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></div>`;
+  if (pt.geoSt === 'buscando') return '<div style="font-size:12.5px;color:var(--text2)">📍 Buscando a localização…</div>';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1.5px solid #DC2626;border-radius:10px;padding:8px 10px;font-size:12.5px;color:#DC2626;font-weight:700">⚠ Sem localização — ative o GPS<button type="button" class="btn btn-outline" style="width:auto;padding:6px 10px;font-size:12px" onclick="ptGeo()">Tentar de novo</button></div>`; }
+function ptGeo() { if (!pt) return; pt.geoSt = 'buscando'; const el = document.getElementById('pt-geo'); if (el) el.innerHTML = _ptGeoTxt();
+  _geoPegar(15000).then(g => { if (!pt) return; pt.gps = g; pt.geoSt = 'ok'; }).catch(() => { if (pt) pt.geoSt = 'erro'; }).finally(() => { const e2 = document.getElementById('pt-geo'); if (e2) e2.innerHTML = _ptGeoTxt(); }); }
 </script>
 </body>
 </html>
