@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.72 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.73 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -19143,8 +19143,10 @@ async function pgSalvar() {
 }
 async function pgExcluir(id) { const p = (dados.programacao || []).find(x => x.id === id); if (!p || !confirm('Tirar ' + p.servico + ' (' + p.frente + ') da programação desta semana?')) return;
   try { await fbDelete('programacao', id); } catch (e) {} dados.programacao = (dados.programacao || []).filter(x => x.id !== id); renderProgramacao(); _agendarResumoObras(); }
+let _pgCopiando = false;   // v4.73: trava contra clique duplo (gerava a semana em dobro)
 async function pgCopiarAnterior() {
-  const obra = _pgObraSel('pg-obra'), de = _pgItens(obra, _pgAdd(_pgSem, -7)), ja = _pgItens(obra, _pgSem); if (!de.length) return;
+  if (_pgCopiando) return; _pgCopiando = true; setTimeout(() => _pgCopiando = false, 4000);
+  const obra = _pgObraSel('pg-obra'), de = _pgItens(obra, _pgAdd(_pgSem, -7)), ja = _pgItens(obra, _pgSem); if (!de.length) { _pgCopiando = false; return; }
   const novos = de.filter(p => !ja.some(x => x.frente === p.frente && x.servico === p.servico)).map((p, i) => ({ id: 'pg' + Date.now().toString(36) + i, obra, semana: _pgSem, frente: p.frente, servico: p.servico, unid: p.unid, qtd: p.qtd, obs: '', criadoEm: new Date().toISOString(), criadoPor: usuarioLogado ? usuarioLogado.nome : '' }));
   await Promise.all(novos.map(n => fbSave('programacao', n.id, n).catch(() => {}))); (dados.programacao = dados.programacao || []).push(...novos);
   renderProgramacao(); _agendarResumoObras(); toast(novos.length + ' item(ns) copiado(s). Ajuste as quantidades se precisar.'); }
@@ -20183,6 +20185,15 @@ function _patExcel() {
   XLSX.utils.book_append_sheet(wb, sh, 'Patrulha');
   XLSX.writeFile(wb, 'Patrulha previsto x real - ' + String(getNomeObra(obra) || obra).replace(/[^\w-]+/g, '_').slice(0, 40) + (P.de || P.ate ? ' - ' + (P.de || 'inicio') + '_a_' + (P.ate || 'hoje') : '') + '.xlsx');
 }
+
+// v4.73: programação — avisa e remove itens repetidos (mesma semana, frente e serviço)
+function _pgDups(obra, seg) { const vis = new Map(), dup = []; _pgItens(obra, seg).slice().sort((a, b) => String(a.criadoEm || a.id).localeCompare(String(b.criadoEm || b.id))).forEach(p => { const k = p.frente + '|' + p.servico; if (vis.has(k)) dup.push(p); else vis.set(k, p); }); return dup; }
+async function pgRemoverDups() { const obra = _pgObraSel('pg-obra'), d = _pgDups(obra, _pgSem); if (!d.length) return;
+  await Promise.all(d.map(p => fbDelete('programacao', p.id).catch(() => {}))); const ids = new Set(d.map(p => p.id)); dados.programacao = (dados.programacao || []).filter(p => !ids.has(p.id));
+  renderProgramacao(); _agendarResumoObras(); toast(d.length + ' item(ns) repetido(s) removido(s).'); }
+(function () { const oR = renderProgramacao; renderProgramacao = window.renderProgramacao = function () { const r = oR.apply(this, arguments);
+  try { const obra = _pgObraSel('pg-obra'), d = obra ? _pgDups(obra, _pgSem) : [], c = document.getElementById('pg-corpo'); if (d.length && c) c.insertAdjacentHTML('afterbegin', `<div style="border:1.5px solid #D97706;background:rgba(217,119,6,.08);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span><b>${d.length} item(ns) repetido(s)</b> nesta semana (mesma frente e serviço). Fica o mais antigo de cada.</span><button class="btn btn-primary btn-sm" onclick="pgRemoverDups()">Remover repetidos</button></div>`); } catch (e) {}
+  return r; }; })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
