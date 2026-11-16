@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.66 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.67 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18703,7 +18703,7 @@ async function _pnSalvarSenha() {
 // Tudo fica marcado kick:true / id kk_… e o botão "Apagar kickoff" remove (logins ficam).
 // ═══════════════════════════════════════════════════════════════
 const _KK_COLS = ['ua', 'empresas', 'cargos', 'funcionarios', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'orcamentos', 'tanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
-  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'partesDiarias', 'mobilizacoes', 'turnos', 'obras'];
+  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'partesDiarias', 'mobilizacoes', 'precosContrato', 'prodTerceiros', 'turnos', 'obras'];
 function _kkCpf(n) { const b = String(100000000 + n * 7919 % 899999999).slice(0, 9).split('').map(Number);
   const dv = s => { const r = s.reduce((t, d, i) => t + d * (s.length + 1 - i), 0) % 11; return r < 2 ? 0 : 11 - r; };
   b.push(dv(b)); b.push(dv(b)); const c = b.join(''); return c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9); }
@@ -18738,7 +18738,7 @@ async function _kkGerar(nUsr) {
   // ── turnos (só se não houver)
   if (!(dados.turnos || []).length) { sv('turnos', { id: 'kk_t1', cod: 'T1', nome: 'Normal', inicio: '07:00', fim: '17:00', ...K }); sv('turnos', { id: 'kk_t2', cod: 'T2', nome: 'Sábado', inicio: '07:00', fim: '11:00', ...K }); }
   // ── empresas
-  const EMP = [['TEN', 'TENCO ENGENHARIA E CONSTRUÇÃO LTDA', 'Tenco', 'Própria'], ['ALF', 'ALFA LOCAÇÃO DE EQUIPAMENTOS LTDA', 'Alfa Locações', 'Locadora'], ['BET', 'BETA MÁQUINAS E TERRAPLENAGEM LTDA', 'Beta Máquinas', 'Locadora'], ['GAM', 'GAMA TRANSPORTES LTDA', 'Gama Transportes', 'Locadora'], ['HID', 'HIDROMAQ MANUTENÇÃO DE MÁQUINAS LTDA', 'Hidromaq', 'Oficina']]
+  const EMP = [['TEN', 'TENCO ENGENHARIA E CONSTRUÇÃO LTDA', 'Tenco', 'Própria'], ['ALF', 'ALFA LOCAÇÃO DE EQUIPAMENTOS LTDA', 'Alfa Locações', 'Locadora'], ['BET', 'BETA MÁQUINAS E TERRAPLENAGEM LTDA', 'Beta Máquinas', 'Locadora'], ['GAM', 'GAMA TRANSPORTES LTDA', 'Gama Transportes', 'Locadora'], ['HID', 'HIDROMAQ MANUTENÇÃO DE MÁQUINAS LTDA', 'Hidromaq', 'Oficina'], ['DEL', 'DELTA SANEAMENTO E OBRAS LTDA', 'Delta Saneamento', 'Empreiteira'], ['EPS', 'ÉPSILON LIGAÇÕES PREDIAIS LTDA', 'Épsilon Ligações', 'Empreiteira']]
     .map(([cod, nome, fantasia, tipo], i) => sv('empresas', { id: 'kk_emp' + i, cod, nome, fantasia, tipo, cnpj: '00.000.000/000' + (i + 1) + '-0' + (i + 1), resp: '', ...X }));
   const PROP = EMP[0];
   // ── cargos
@@ -18800,6 +18800,18 @@ async function _kkGerar(nUsr) {
     orc.salarios = usadas.map((cod, k) => { const c = cg(cod); return { funcao: cod, salario: Math.round((c ? c.salRef : 3000) * [1, .96, 1.04, .98][k % 4]) }; });
     orc.diesel = [['ESC', 15], ['RET', 7], ['CB', 9], ['ROL', 8], ['PD', 12]].map(([familia, lh]) => ({ familia, lh, precoL: 6.15 }));
   } }
+  // v4.67: terceiros — empreiteiras com preço de contrato e produção lançada no campo (aprovada, pendente e uma recusada)
+  { const TER = [{ e: 'kk_emp5', nome: 'Delta Saneamento', itens: [['SV-01', 88, 'FR-007', 34, 6, [['ESC', 1], ['CB', 1]]], ['SV-12', 64, 'FR-001', 52, 5, [['RET', 1]]]] },
+                 { e: 'kk_emp6', nome: 'Épsilon Ligações', itens: [['SV-06', 130, 'FR-003', 9, 4, [['RET', 1]]], ['SV-07', 105, 'FR-003', 11, 3, []]] }];
+    TER.forEach(t => t.itens.forEach(([cod, preco]) => { const s = SV.find(z => z.cod === cod); if (s) sv('precosContrato', { id: 'kk_pc_' + t.e + '_' + cod, obra: O, empresa: t.e, empresaNome: t.nome, servico: s.nome, unid: s.unidade, preco, ...K }); }));
+    let k = 0;
+    for (let d = 24; d >= 0; d--) { const dt = dia(d), wd = new Date(dt + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;
+      TER.forEach(t => t.itens.forEach(([cod, preco, fr, base, pes, maq], ii) => { if ((d + ii) % 2) return; const s = SV.find(z => z.cod === cod); if (!s) return;
+        const qtd = Math.max(1, Math.round(base * (0.75 + R() * 0.5))), st = d <= 1 ? 'pendente' : (k === 7 ? 'recusado' : 'aprovado'), r = st === 'aprovado' ? uaResolver(O, fr, s.nome) : null, u = r && (r.ua || r.cands[0]);
+        sv('prodTerceiros', { id: 'kk_pt' + (k++), obra: O, data: dt, empresa: t.e, empresaNome: t.nome, frente: fr, servico: s.nome, unid: s.unidade, qtd, pessoas: pes + RI(-1, 1), maquinas: maq.map(([familia, q]) => ({ familia, qtd: q })),
+          obs: '', fotos: [], origem: 'interno', lancadoPor: 'Apontador ' + (1 + (k % 3)), lancadoEm: dt + 'T16:30:00', status: st, motivo: st === 'recusado' ? 'Quantidade acima do medido na frente — refazer' : '',
+          ua: u ? u.cod : '', uaNome: u ? u.nome : '', preco: st === 'aprovado' ? preco : null, valor: st === 'aprovado' ? r2(qtd * preco) : null, aprovadoPor: st === 'pendente' ? '' : 'Custos', ...K }); })); }
+  }
   const CHUVA = new Set([dia(33), dia(19), dia(8)]), QUEBRA = { [dia(26)]: [0, 'Manutenção corretiva — mangueira estourada', 3.5], [dia(12)]: [2, 'Manutenção corretiva — defeito elétrico', 5], [dia(4)]: [6, 'Aguardando peças', 4] };
   const TQ = [sv('tanques', { id: 'kk_tq1', cod: 'TQ-01', nome: 'Tanque fixo do canteiro', cap: 15000, saldo: 8650, local: 'Canteiro', preco: 6.12, ativo: true, ...X }), sv('tanques', { id: 'kk_tq2', cod: 'CB-01', nome: 'Caminhão comboio', cap: 4000, saldo: 1820, local: 'Móvel', preco: 6.19, ativo: true, ...X })];
   const ultAbs = EQ.map(() => null), lancou = i => FS[i].nome;
@@ -19784,6 +19796,199 @@ function _vePessoal() {
     } catch (e) {}
     return r;
   };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.67: PRODUÇÃO DE TERCEIROS — preço do contrato por empreiteira + lançamentos do app de campo (qtd, efetivo, máquinas)
+// Aprovação → UA (frente + serviço) → avanço físico e custo (qtd × preço do contrato), separado do custo próprio.
+// Coleções: precosContrato {obra, empresa, empresaNome, servico, unid, preco} · prodTerceiros {obra, data, empresa, frente, servico, qtd, pessoas, maquinas[], status…}
+// ═══════════════════════════════════════════════════════════════
+dados.precosContrato = dados.precosContrato || []; dados.prodTerceiros = dados.prodTerceiros || [];
+try { _COLS_AO_VIVO.push('prodTerceiros'); } catch (e) {}
+try { ['precosContrato', 'prodTerceiros'].forEach(c => { if (!_KK_ZERAR.includes(c)) _KK_ZERAR.push(c); }); } catch (e) {}
+const _ptBRL = v => (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function _ptEmpresas(obra) { return (dados.empresas || []).filter(e => (!obra || !e.obra || e.obra === obra) && !/pr[oó]pria/i.test(e.tipo || '')).sort((a, b) => String(a.nome || a.razao).localeCompare(String(b.nome || b.razao), 'pt-BR')); }
+function _ptEmpNome(id) { const e = (dados.empresas || []).find(x => x.id === id); return e ? (e.fantasia || e.nome || e.razao || e.cod) : id || '—'; }
+function _ptPreco(obra, empresa, servico) { return (dados.precosContrato || []).find(p => p.obra === obra && p.empresa === empresa && p.servico === servico) || null; }
+async function _ptCarregar() { if (!(db && _firebaseReady)) return; const [a, b] = await Promise.all([fbLoadAll('precosContrato').catch(() => null), fbLoadAll('prodTerceiros').catch(() => null)]); if (a) dados.precosContrato = a; if (b) dados.prodTerceiros = b; }
+
+// ── Preços do contrato (Fornecedores)
+let _pc = null;
+function pcAbrir(empId) {
+  const obra = _pgObraSel('__x') || ((dados.obras || []).find(o => o.status !== 'Encerrada') || {}).id || '';
+  _pc = { obra, empresa: empId || '', linhas: [] }; _pcCarregaLinhas();
+  if (!document.getElementById('modal-pc')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-pc"><div class="modal" style="max-width:860px;width:96vw">
+    <div class="modal-header"><span class="modal-title">Preços do contrato — terceiros</span><button class="modal-close" onclick="closeModal('modal-pc')">×</button></div>
+    <div class="modal-body" id="pc-corpo" style="max-height:72vh;overflow:auto"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-pc')">Cancelar</button><button class="btn btn-primary" onclick="pcSalvar()">Salvar preços</button></div></div></div>`);
+  _pcRender(); openModal('modal-pc');
+}
+function _pcCarregaLinhas() { _pc.linhas = (dados.precosContrato || []).filter(p => p.obra === _pc.obra && p.empresa === _pc.empresa).map(p => ({ servico: p.servico, unid: p.unid || '', preco: p.preco })); }
+function _pcServicos(obra) { return (dados.tiposServico || []).filter(s => (!s.obra || s.obra === obra) && s.ativo !== false).map(s => ({ nome: s.nome || s.desc || s.cod, unid: s.unidade || s.unid || '' })); }
+function _pcRender() {
+  const P = _pc, ob = (dados.obras || []).filter(o => o.status !== 'Encerrada'), emps = _ptEmpresas(P.obra), svs = _pcServicos(P.obra);
+  document.getElementById('pc-corpo').innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div><label class="form-label">Obra</label><select class="form-control" style="min-width:220px" onchange="_pc.obra=this.value;_pc.empresa='';_pcCarregaLinhas();_pcRender()">${ob.map(o => `<option value="${_e(o.id)}" ${o.id === P.obra ? 'selected' : ''}>${_e(o.nome || o.cod)}</option>`).join('')}</select></div>
+      <div style="flex:1"><label class="form-label">Empreiteira</label><select class="form-control" onchange="_pc.empresa=this.value;_pcCarregaLinhas();_pcRender()"><option value="">Escolha…</option>${emps.map(e => `<option value="${_e(e.id)}" ${e.id === P.empresa ? 'selected' : ''}>${_e(e.fantasia || e.nome || e.razao)}${e.tipo ? ' · ' + _e(e.tipo) : ''}</option>`).join('')}</select></div>
+      <div style="align-self:flex-end;display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="pcModelo()">⬇ Planilha</button><label class="btn btn-outline btn-sm" style="cursor:pointer">↑ Importar<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="pcImportar(this)"/></label></div></div>
+    ${!P.empresa ? '<div style="color:var(--text-3);font-size:13px;padding:14px 0">Escolha a empreiteira para ver e lançar os preços. A planilha traz todas as empreiteiras da obra de uma vez.</div>' : `
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:8px">No app de campo, o terceiro só pode lançar os serviços que estão aqui (o preço não aparece para quem não vê custo).</div>
+    <div class="table-wrap"><table style="font-size:13px"><thead><tr><th>Serviço</th><th style="width:90px">Unidade</th><th style="width:150px">Preço unitário (R$)</th><th style="width:40px"></th></tr></thead><tbody>
+    ${P.linhas.map((l, i) => `<tr><td><select class="form-control" onchange="const s=_pcServicos(_pc.obra).find(x=>x.nome===this.value);_pc.linhas[${i}].servico=this.value;if(s&&!_pc.linhas[${i}].unid)_pc.linhas[${i}].unid=s.unid;_pcRender()"><option value="">Escolha o serviço…</option>${svs.map(s => `<option ${s.nome === l.servico ? 'selected' : ''}>${_e(s.nome)}</option>`).join('')}</select></td>
+      <td><input class="form-control" value="${_e(l.unid)}" onchange="_pc.linhas[${i}].unid=this.value"/></td><td><input class="form-control" type="number" step="0.01" min="0" value="${l.preco ?? ''}" onchange="_pc.linhas[${i}].preco=this.value"/></td>
+      <td><button class="btn btn-outline btn-sm" onclick="_pc.linhas.splice(${i},1);_pcRender()" aria-label="Remover">🗑</button></td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--text-3);text-align:center;padding:14px">Nenhum preço ainda.</td></tr>'}
+    </tbody></table></div><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="_pc.linhas.push({servico:'',unid:'',preco:''});_pcRender()">+ Serviço</button>`}`;
+}
+function _pcId(obra, emp, sv) { let h = 0; String(sv).split('').forEach(c => h = (h * 31 + c.charCodeAt(0)) | 0); return 'pc_' + obra + '_' + emp + '_' + Math.abs(h).toString(36); }
+async function pcSalvar() {
+  const P = _pc; if (!P.empresa) { closeModal('modal-pc'); return; }
+  const ls = P.linhas.filter(l => l.servico); if (ls.some(l => l.preco === '' || isNaN(+l.preco))) { toast('Preencha o preço de todos os serviços.', 'error'); return; }
+  if (new Set(ls.map(l => l.servico)).size !== ls.length) { toast('Há serviço repetido.', 'error'); return; }
+  const antes = (dados.precosContrato || []).filter(p => p.obra === P.obra && p.empresa === P.empresa), novos = ls.map(l => ({ id: _pcId(P.obra, P.empresa, l.servico), obra: P.obra, empresa: P.empresa, empresaNome: _ptEmpNome(P.empresa), servico: l.servico, unid: l.unid || '', preco: +l.preco }));
+  const sai = antes.filter(a => !novos.some(n => n.id === a.id));
+  try { await Promise.all([...novos.map(n => fbSave('precosContrato', n.id, n)), ...sai.map(a => fbDelete('precosContrato', a.id))]); } catch (e) { toast('Não consegui salvar: ' + (e.code || e.message), 'error'); return; }
+  dados.precosContrato = (dados.precosContrato || []).filter(p => !(p.obra === P.obra && p.empresa === P.empresa)).concat(novos);
+  closeModal('modal-pc'); toast(novos.length + ' preço(s) salvos para ' + _ptEmpNome(P.empresa) + '.');
+}
+function pcModelo() {
+  const P = _pc, emps = _ptEmpresas(P.obra), svs = _pcServicos(P.obra);
+  const rows = [['Código do fornecedor', 'Empreiteira', 'Serviço', 'Unidade', 'Preço unitário (R$)']];
+  emps.forEach(e => { const ps = (dados.precosContrato || []).filter(p => p.obra === P.obra && p.empresa === e.id); (ps.length ? ps : [{}]).forEach(p => rows.push([e.cod || '', e.fantasia || e.nome || e.razao, p.servico || '', p.unid || '', p.preco ?? ''])); });
+  const wb = XLSX.utils.book_new(), sh = XLSX.utils.aoa_to_sheet(rows); sh['!cols'] = [{ wch: 18 }, { wch: 36 }, { wch: 42 }, { wch: 10 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, sh, 'Preços do contrato');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Serviços desta obra (copie o nome exato)'], ...svs.map(s => [s.nome, s.unid])]), 'Serviços');
+  XLSX.writeFile(wb, 'Precos do contrato - ' + String(getNomeObra(P.obra) || P.obra).replace(/[^\w-]+/g, '_').slice(0, 40) + '.xlsx');
+}
+function pcImportar(inp) {
+  const f = inp.files && inp.files[0]; if (!f) return; const rd = new FileReader();
+  rd.onload = async ev => { try {
+    const wb = XLSX.read(ev.target.result, { type: 'binary' }), rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+    const H = (rows[0] || []).map(h => _uaN(h)), ix = re => H.findIndex(h => re.test(h)), cCod = ix(/CODIGO/), cEmp = ix(/EMPREIT|FORNEC|EMPRESA/), cSv = ix(/SERVICO/), cUn = ix(/UNIDADE/), cPr = ix(/PRECO/);
+    if (cSv < 0 || cPr < 0) { toast('A planilha precisa das colunas Serviço e Preço unitário.', 'error'); return; }
+    const P = _pc, emps = _ptEmpresas(P.obra), svs = _pcServicos(P.obra), num = v => typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
+    const novos = [], erros = [];
+    rows.slice(1).forEach((r, i) => { const sv = String(r[cSv] || '').trim(), pr = num(r[cPr]); if (!sv && !String(r[cPr]).trim()) return;
+      const e = emps.find(x => (cCod >= 0 && String(r[cCod]).trim() && String(x.cod) === String(r[cCod]).trim()) || (cEmp >= 0 && _uaN(x.fantasia || x.nome || x.razao) === _uaN(r[cEmp]))) || (P.empresa && cCod < 0 && cEmp < 0 ? emps.find(x => x.id === P.empresa) : null);
+      const s = svs.find(x => _uaN(x.nome) === _uaN(sv));
+      if (!e) { erros.push('linha ' + (i + 2) + ': empreiteira não encontrada'); return; } if (!s) { erros.push('linha ' + (i + 2) + ': serviço "' + sv + '" não existe na obra'); return; } if (isNaN(pr)) { erros.push('linha ' + (i + 2) + ': preço inválido'); return; }
+      novos.push({ id: _pcId(P.obra, e.id, s.nome), obra: P.obra, empresa: e.id, empresaNome: e.fantasia || e.nome || e.razao, servico: s.nome, unid: String(cUn >= 0 ? r[cUn] : '').trim() || s.unid, preco: pr }); });
+    if (!novos.length) { toast('Nada para importar. ' + erros.slice(0, 3).join(' · '), 'error'); return; }
+    await Promise.all(novos.map(n => fbSave('precosContrato', n.id, n).catch(() => {})));
+    const ids = new Set(novos.map(n => n.id)); dados.precosContrato = (dados.precosContrato || []).filter(p => !ids.has(p.id)).concat(novos);
+    if (!P.empresa) P.empresa = novos[0].empresa; _pcCarregaLinhas(); _pcRender();
+    toast(novos.length + ' preço(s) importado(s)' + (erros.length ? ' · ' + erros.length + ' com problema: ' + erros.slice(0, 2).join(' · ') : '') + '.');
+  } catch (e) { console.error(e); toast('Não consegui ler a planilha.', 'error'); } finally { inp.value = ''; } };
+  rd.readAsBinaryString(f);
+}
+
+// ── Página "Produção de terceiros" (Dia a dia)
+function renderTerceiros() {
+  const $ = id => document.getElementById(id); _pgObrasOpts('pt-obra'); const obra = _pgObraSel('pt-obra'), corpo = $('pt-corpo'); if (!corpo) return;
+  if (!obra) { corpo.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-3);padding:30px">Escolha a obra.</div></div>'; return; }
+  const mes = $('pt-mes')?.value || _hojeLocal().slice(0, 7), st = $('pt-st')?.value || '', emp = $('pt-emp')?.value || '';
+  const empS = $('pt-emp'); if (empS) { const v = empS.value; empS.innerHTML = '<option value="">Todas as empreiteiras</option>' + _ptEmpresas(obra).map(e => `<option value="${_e(e.id)}" ${e.id === v ? 'selected' : ''}>${_e(e.fantasia || e.nome || e.razao)}</option>`).join(''); }
+  const todos = (dados.prodTerceiros || []).filter(p => p.obra === obra && String(p.data || '').startsWith(mes) && (!emp || p.empresa === emp));
+  const l = todos.filter(p => !st || (p.status || 'pendente') === st).sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(a.empresaNome).localeCompare(String(b.empresaNome)));
+  const vc = typeof _vePessoal === 'function' ? true : true;
+  // resumo por empreiteira e serviço (aprovado no mês)
+  const res = {}; todos.forEach(p => { const k = p.empresa; const r = res[k] = res[k] || { nome: p.empresaNome || _ptEmpNome(p.empresa), apr: 0, pend: 0, rec: 0, v: 0, sv: {} };
+    const s = p.status || 'pendente'; if (s === 'aprovado') { r.apr++; r.v += +p.valor || 0; const y = r.sv[p.servico] = r.sv[p.servico] || { q: 0, u: p.unid || '', v: 0 }; y.q += +p.qtd || 0; y.v += +p.valor || 0; } else if (s === 'recusado') r.rec++; else r.pend++; });
+  const nPend = todos.filter(p => (p.status || 'pendente') === 'pendente').length;
+  corpo.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:12px">${Object.values(res).map(r => `<div class="card"><div class="card-body">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${_e(r.nome)}</b><b class="td-mono">${_ptBRL(r.v)}</b></div>
+      <div style="font-size:12px;color:var(--text-3);margin:2px 0 8px">${r.apr} aprovado(s) · ${r.pend} pendente(s)${r.rec ? ' · ' + r.rec + ' recusado(s)' : ''} · no mês</div>
+      ${Object.entries(r.sv).map(([s, y]) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0"><span>${_e(s)}</span><span class="td-mono">${_n1(y.q)} ${_e(y.u)} · ${_ptBRL(y.v)}</span></div>`).join('') || '<div style="font-size:12px;color:var(--text-3)">Nada aprovado no mês.</div>'}
+    </div></div>`).join('') || '<div class="card"><div class="card-body" style="color:var(--text-3)">Nenhum lançamento de terceiro neste mês.</div></div>'}</div>
+    <div class="card"><div class="card-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px"><b>Lançamentos</b>${nPend ? `<button class="btn btn-primary btn-sm" onclick="ptAprovarTodos()">✓ Aprovar os ${nPend} pendentes com UA automática</button>` : ''}</div>
+      <div class="table-wrap"><table style="font-size:12.5px"><thead><tr><th>Data</th><th>Empreiteira</th><th>Frente</th><th>Serviço</th><th style="text-align:right">Qtd</th><th>Efetivo · máquinas</th><th style="text-align:right">Valor</th><th>UA</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${l.map(p => { const s = p.status || 'pendente', pr = _ptPreco(obra, p.empresa, p.servico), val = s === 'aprovado' ? +p.valor || 0 : pr ? (+p.qtd || 0) * pr.preco : 0;
+        const maq = (p.maquinas || []).filter(m => +m.qtd).map(m => m.qtd + ' ' + _e(_nomeFamilia(m.familia) || m.familia)).join(', ');
+        return `<tr><td class="td-mono">${_e(fmtData(p.data))}</td><td>${_e(p.empresaNome || _ptEmpNome(p.empresa))}<div style="font-size:11px;color:var(--text-3)">${_e(p.lancadoPor || '')}${p.origem === 'terceiro' ? ' · terceiro' : ''}</div></td>
+          <td><b class="td-mono">${_e(p.frente)}</b></td><td>${_e(p.servico)}</td><td class="td-mono" style="text-align:right;white-space:nowrap">${_n1(+p.qtd || 0)} ${_e(p.unid || '')}</td>
+          <td style="font-size:12px">${+p.pessoas ? p.pessoas + ' pessoa(s)' : '—'}${maq ? '<br>' + maq : ''}${+p.pessoas && +p.qtd ? `<div style="color:var(--text-3)">${_n1(p.qtd / p.pessoas)} ${_e(p.unid || '')}/pessoa</div>` : ''}</td>
+          <td class="td-mono" style="text-align:right">${val ? _ptBRL(val) : (pr ? '' : '<span style="color:var(--amber);font-size:11px">sem preço</span>')}</td>
+          <td class="td-mono" style="font-size:11.5px">${_e(p.ua || '')}</td>
+          <td>${s === 'aprovado' ? tag('Aprovado', 'green') : s === 'recusado' ? tag('Recusado', 'red') + (p.motivo ? `<div style="font-size:11px;color:var(--text-3)">${_e(p.motivo)}</div>` : '') : tag('Pendente', 'amber')}</td>
+          <td style="white-space:nowrap">${(p.fotos || []).length ? `<button class="btn btn-outline btn-sm" onclick="ptFotos('${_e(p.id)}')" title="Fotos">📷 ${p.fotos.length}</button> ` : ''}${s !== 'aprovado' ? `<button class="btn btn-outline btn-sm" onclick="ptAprovar('${_e(p.id)}')">✓</button> ` : ''}${s !== 'recusado' ? `<button class="btn btn-outline btn-sm" onclick="ptRecusar('${_e(p.id)}')" title="Recusar">✗</button>` : ''}</td></tr>`; }).join('')
+        || '<tr><td colspan="10" style="text-align:center;color:var(--text-3);padding:18px">Nada com esse filtro.</td></tr>'}
+      </tbody></table></div></div></div>`;
+}
+async function _ptGravar(p) { try { await fbSave('prodTerceiros', p.id, p); return true; } catch (e) { toast('Não consegui salvar: ' + (e.code || e.message), 'error'); return false; } }
+function _ptEscolherUA(cands) { return new Promise(ok => {
+  document.getElementById('modal-pt-ua')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay open" id="modal-pt-ua"><div class="modal" style="max-width:560px"><div class="modal-header"><span class="modal-title">Em qual UA cai?</span></div>
+    <div class="modal-body"><div style="font-size:12.5px;color:var(--text-3);margin-bottom:8px">Frente + serviço deram mais de uma UA possível. Escolha a certa.</div>${cands.map((u, i) => `<label style="display:flex;gap:8px;padding:6px 0;cursor:pointer"><input type="radio" name="ptua" value="${i}" ${i ? '' : 'checked'}/><span><b class="td-mono">${_e(u.cod)}</b> ${_e(u.nome)}</span></label>`).join('')}</div>
+    <div class="modal-footer"><button class="btn btn-outline" id="ptua-n">Cancelar</button><button class="btn btn-primary" id="ptua-s">Aprovar nesta UA</button></div></div></div>`);
+  const fim = v => { document.getElementById('modal-pt-ua')?.remove(); ok(v); };
+  document.getElementById('ptua-n').onclick = () => fim(null);
+  document.getElementById('ptua-s').onclick = () => fim(cands[+document.querySelector('input[name=ptua]:checked').value]);
+}); }
+async function ptAprovar(id, auto) {
+  const p = (dados.prodTerceiros || []).find(x => x.id === id); if (!p) return false;
+  const r = uaResolver(p.obra, p.frente, p.servico); let u = r.ua;
+  if (!u && r.cands && r.cands.length) { if (auto) return false; u = await _ptEscolherUA(r.cands); if (!u) return false; }
+  const pr = _ptPreco(p.obra, p.empresa, p.servico);
+  Object.assign(p, { status: 'aprovado', motivo: '', ua: u ? u.cod : '', uaNome: u ? u.nome : '', preco: pr ? pr.preco : null, valor: pr ? Math.round((+p.qtd || 0) * pr.preco * 100) / 100 : null, aprovadoPor: usuarioLogado?.nome || '', aprovadoEm: new Date().toISOString() });
+  const ok = await _ptGravar(p); if (!auto) { renderTerceiros(); if (ok) toast('Aprovado' + (u ? ' · UA ' + u.cod : ' (sem UA — confira frente e serviço)') + (pr ? '' : ' · sem preço de contrato') + '.'); } return ok;
+}
+async function ptAprovarTodos() {
+  const obra = _pgObraSel('pt-obra'), mes = document.getElementById('pt-mes')?.value || _hojeLocal().slice(0, 7);
+  const l = (dados.prodTerceiros || []).filter(p => p.obra === obra && String(p.data || '').startsWith(mes) && (p.status || 'pendente') === 'pendente');
+  let n = 0; for (const p of l) if (await ptAprovar(p.id, true)) n++;
+  renderTerceiros(); toast(n + ' aprovado(s).' + (l.length - n ? ' ' + (l.length - n) + ' ficaram pendentes porque a UA precisa ser escolhida — aprove um a um.' : ''));
+}
+async function ptRecusar(id) {
+  const p = (dados.prodTerceiros || []).find(x => x.id === id); if (!p) return;
+  const m = prompt('Motivo da recusa (o lançador vê no app):'); if (m === null) return; if (!m.trim()) { toast('Escreva o motivo.', 'error'); return; }
+  Object.assign(p, { status: 'recusado', motivo: m.trim(), ua: '', uaNome: '', valor: null, aprovadoPor: usuarioLogado?.nome || '', aprovadoEm: new Date().toISOString() });
+  await _ptGravar(p); renderTerceiros();
+}
+async function ptFotos(id) {
+  const p = (dados.prodTerceiros || []).find(x => x.id === id); if (!p) return; const w = window.open('', '_blank'); if (!w) return;
+  w.document.write('<title>Fotos</title><body style="font-family:sans-serif;background:#111;color:#eee"><p>Carregando…</p>');
+  const imgs = []; for (const f of p.fotos || []) { try { const d = await db.collection('fotos').doc(f).get(); if (d.exists) imgs.push(d.data().img); } catch (e) {} }
+  w.document.body.innerHTML = `<h3>${_e(p.empresaNome)} · ${_e(p.servico)} · ${_e(p.frente)} · ${_e(fmtData(p.data))}</h3>` + imgs.map(i => `<img src="${i}" style="max-width:100%;margin:6px 0;display:block">`).join('') + (imgs.length ? '' : '<p>Sem fotos.</p>');
+}
+// UA, avanço e programação passam a contar os terceiros aprovados
+(function () {
+  const oA = window._uaApropriado || _uaApropriado;
+  _uaApropriado = window._uaApropriado = function (obra) {
+    const m = oA.apply(this, arguments);
+    const corte = new Map((dados.ua || []).filter(u => u.obra === obra && u.antData).map(u => [u.cod, u.antData])), un = v => String(v || '').toLowerCase().replace('metro', 'm').trim(), uU = new Map((dados.ua || []).filter(u => u.obra === obra).map(u => [u.cod, un(u.unid)]));
+    (dados.prodTerceiros || []).filter(p => p.obra === obra && p.status === 'aprovado' && p.ua && (!corte.get(p.ua) || String(p.data) > corte.get(p.ua))).forEach(p => {
+      const x = m[p.ua] = m[p.ua] || { qtd: 0, hn: 0, he: 0, hp: 0, hpar: 0, cmo: 0, ceq: 0, comb: {} }, q = +p.qtd || 0, v = +p.valor || 0;
+      if (!uU.get(p.ua) || un(p.unid) === uU.get(p.ua)) x.qtd += q; x.cterc = (x.cterc || 0) + v; x.ceq += v;   // custo de terceiro entra no custo real da UA
+      const k = (p.frente || '—') + '|' + p.servico + ' (terceiro: ' + (p.empresaNome || '') + ')', y = x.comb[k] = x.comb[k] || { qtd: 0, custo: 0, dias: new Set(), unid: p.unid || '' }; y.qtd += q; y.custo += v; y.dias.add(p.data); });
+    return m;
+  };
+  const oF = window._pgFeito || _pgFeito;
+  _pgFeito = window._pgFeito = function (obra, seg, ate) { const m = oF.apply(this, arguments), fim = _pgAdd(seg, 6);
+    (dados.prodTerceiros || []).forEach(p => { if (p.obra !== obra || p.status === 'recusado' || p.data < seg || p.data > fim || (ate && p.data >= ate)) return; const k = (p.frente || '') + '|' + p.servico; m[k] = (m[k] || 0) + (+p.qtd || 0); });
+    return m; };
+  const oD = window._avDados || _avDados;
+  _avDados = window._avDados = function (obra) { const r = oD.apply(this, arguments); if (!r) return r;
+    const t = {}; (dados.prodTerceiros || []).filter(p => p.obra === obra && p.status === 'aprovado').forEach(p => { const y = t[p.servico] = t[p.servico] || { q: 0, v: 0 }; y.q += +p.qtd || 0; y.v += +p.valor || 0; });
+    r.servicos.forEach(s => { const y = t[s.servico]; if (!y) return; s.execTerc = y.q; s.exec += y.q; s.pct = s.qtd ? s.exec / s.qtd * 100 : 0; s.custoReal += y.v; s.custoPrevExec = s.custoUnitPrev * s.exec; });
+    return r; };
+})();
+// menu, tela e botões
+(function () {
+  const $ = id => document.getElementById(id), sb = document.querySelector('.sidebar');
+  const ref = $('page-aprovacao') || $('page-obras');
+  if (ref && !$('page-terceiros')) ref.insertAdjacentHTML('afterend', `<div class="page" id="page-terceiros"><div class="page-header"><div><div class="page-title">Produção de terceiros</div><div class="page-sub">Lançado no app de campo · aprovação · UA · valor pelo preço do contrato</div></div>
+    <div class="btn-group"><select class="form-control" id="pt-obra" onchange="renderTerceiros()" style="min-width:200px"></select><input class="form-control" type="month" id="pt-mes" onchange="renderTerceiros()" style="width:150px"/>
+      <select class="form-control" id="pt-emp" onchange="renderTerceiros()" style="min-width:180px"></select><select class="form-control" id="pt-st" onchange="renderTerceiros()" style="width:140px"><option value="">Todas</option><option value="pendente">Pendentes</option><option value="aprovado">Aprovadas</option><option value="recusado">Recusadas</option></select>
+      <button class="btn btn-outline btn-sm" onclick="pcAbrir()">💲 Preços do contrato</button></div></div><div id="pt-corpo"></div></div>`);
+  const ap = sb && (sb.querySelector(`.nav-item[onclick*="showPage('aprovacao'"]`));
+  if (ap && !sb.querySelector(`.nav-item[onclick*="showPage('terceiros'"]`)) ap.insertAdjacentHTML('afterend', `<div class="nav-item" onclick="showPage('terceiros',this)" title="Produção de terceiros"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg><span>Produção de terceiros</span></div>`);
+  const eh = document.querySelector('#page-empresas .page-header .btn-group'); if (eh && !eh.querySelector('#btn-pc')) eh.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline btn-sm" id="btn-pc" onclick="pcAbrir()">💲 Preços do contrato</button>');
+  const oInit = window.pageInit; window.pageInit = function (id) { const r = oInit ? oInit.apply(this, arguments) : undefined;
+    if (id === 'terceiros') { const m = $('pt-mes'); if (m && !m.value) m.value = _hojeLocal().slice(0, 7); renderTerceiros(); _ptCarregar().then(renderTerceiros); }
+    if (id === 'ua' || id === 'avanco' || id === 'programacao') _ptCarregar().then(() => { try { if (id === 'ua') renderUA(); if (id === 'avanco') renderAvanco(); if (id === 'programacao') renderProgramacao(); } catch (e) {} });
+    return r; };
+  setTimeout(() => _ptCarregar(), 3500);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);

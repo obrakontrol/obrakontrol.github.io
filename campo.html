@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.22</div>
+  <div class="login-versao">ObraKontrol Campo · v3.23</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7403,6 +7403,121 @@ function _manPrevLista() {
     for (const [id, v] of ap.eq) { if (!v || !v.operadorId) continue; if (vis.has(v.operadorId)) dup.push(v.operador); else vis.set(v.operadorId, id); }
     if (dup.length) { toast('Operador repetido em dois equipamentos: ' + [...new Set(dup)].join(', ') + '. Cada equipamento precisa de um operador diferente.', 'err'); apTab('eq'); return; }
     return oSalvar.apply(this, arguments);
+  };
+})();
+// ══════════════════════════════════════════════════════════════
+// v3.23: PRODUÇÃO DE TERCEIRO — empreiteira, frente, serviço do contrato, quantidade, efetivo e máquinas deles, fotos
+// Vai para "prodTerceiros" (pendente) e o fiscal/custos aprova no painel. Sem nomes e sem crachá da equipe do terceiro.
+// ══════════════════════════════════════════════════════════════
+let pt = null;
+const _ptE = s => _esc(String(s ?? ''));
+function _ptEmps() { return _daObraCampo(dadosCampo.empresas || []).filter(e => !/pr[oó]pria/i.test(e.tipo || '')).sort((a, b) => (/empreit/i.test(b.tipo || '') - /empreit/i.test(a.tipo || '')) || String(a.fantasia || a.nome).localeCompare(String(b.fantasia || b.nome), 'pt-BR')); }
+function _ptEmpNome(e) { return e ? (e.fantasia || e.nome || e.razao || e.cod) : ''; }
+async function _ptPrecos() {
+  let l = null; try { l = await Promise.race([fbCarregar('precosContrato'), new Promise(r => setTimeout(() => r(null), 6000))]); } catch (e) {}
+  if (l) { try { localStorage.setItem('campo_cache_precos', JSON.stringify(l)); } catch (e) {} } else { try { l = JSON.parse(localStorage.getItem('campo_cache_precos') || '[]'); } catch (e) { l = []; } }
+  const o = usuarioCampo?.obra || ''; return (l || []).filter(p => !o || p.obra === o);
+}
+function _ptServicos() { const ps = (pt.precos || []).filter(p => p.empresa === pt.empresa);
+  if (ps.length) return ps.map(p => ({ nome: p.servico, unid: p.unid || '' }));
+  return _daObraCampo(dadosCampo.tiposServico || []).filter(s => s.ativo !== false).map(s => ({ nome: s.nome || s.desc || s.cod, unid: s.unidade || s.unid || '', semPreco: true })); }
+function _ptFams() { const m = new Map(); (dadosCampo.familias || []).filter(f => f.cod && !/reprov|recus/i.test(f.status || '')).forEach(f => { if (!m.has(f.cod)) m.set(f.cod, f.desc || f.nome || f.cod); }); return [...m].sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'pt-BR')); }
+function _ptTela() {
+  if (document.getElementById('screen-pt')) return;
+  const back = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
+  document.getElementById('screen-home').insertAdjacentHTML('afterend', `<div class="screen" id="screen-pt"><div class="topbar"><div class="topbar-row"><div class="tb-left"><button class="tb-back" onclick="ptSair()" aria-label="Voltar">${back}</button><div><div class="topbar-title">Produção de terceiro</div><div class="topbar-sub" id="pt-sub">Empreiteira</div></div></div></div></div>
+    <div class="content" id="pt-content"></div><div class="mob-bar" id="pt-bar"></div></div>`);
+  const css = document.createElement('style');
+  css.textContent = `.pt-mq{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.15)}.pt-mq:last-child{border-bottom:0}
+    .pt-st{display:flex;align-items:center;gap:12px}.pt-st button{width:38px;height:38px;border-radius:50%;border:1px solid rgba(127,127,127,.35);background:transparent;color:var(--text);font-size:20px;line-height:1}
+    .pt-st b{min-width:26px;text-align:center;font-size:18px}.pt-it{border-top:1px solid rgba(127,127,127,.15);padding:10px 0}.pt-tag{display:inline-block;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;margin-top:4px}`;
+  document.head.appendChild(css);
+}
+async function ptAbrir() {
+  _ptTela(); const emps = _ptEmps();
+  pt = { modo: 'novo', empresa: emps.length === 1 ? emps[0].id : (localStorage.getItem('campo_pt_emp') || ''), frente: '', servico: '', unid: '', qtd: '', pessoas: 0, maquinas: [], fotos: [], obs: '', data: _hojeISO(), precos: [] };
+  if (!emps.some(e => e.id === pt.empresa)) pt.empresa = '';
+  showScreen('pt'); ptRender(); pt.precos = await _ptPrecos(); ptRender();
+  _geoPegar(15000).then(g => { if (pt) pt.gps = g; }).catch(() => {});
+}
+function ptSair() { pt = null; showScreen('home'); }
+function ptCampo(k, v, rr) { pt[k] = v; if (k === 'empresa') { pt.servico = ''; pt.unid = ''; try { localStorage.setItem('campo_pt_emp', v); } catch (e) {} } if (k === 'servico') { const s = _ptServicos().find(x => x.nome === v); pt.unid = s ? s.unid : ''; } if (rr) ptRender(); }
+function ptPes(d) { pt.pessoas = Math.max(0, (+pt.pessoas || 0) + d); ptRender(); }
+function ptMaq(i, d) { const m = pt.maquinas[i]; m.qtd = Math.max(0, (+m.qtd || 0) + d); if (!m.qtd) pt.maquinas.splice(i, 1); ptRender(); }
+function ptMaqAdd(cod) { if (!cod) return; const m = pt.maquinas.find(x => x.familia === cod); if (m) m.qtd++; else pt.maquinas.push({ familia: cod, qtd: 1 }); ptRender(); }
+async function ptFoto(inp) { const fs = [...(inp.files || [])].slice(0, 4 - pt.fotos.length); for (const f of fs) { try { pt.fotos.push(await _reduzirFoto(f)); } catch (e) {} } inp.value = ''; ptRender(); }
+function ptRender() {
+  const el = document.getElementById('pt-content'), bar = document.getElementById('pt-bar'); if (!el || !pt) return; const E = _ptE;
+  const emps = _ptEmps(), emp = emps.find(e => e.id === pt.empresa), frs = _daObraCampo(dadosCampo.frentes || []).filter(f => f.cod && f.ativo !== false), svs = pt.empresa ? _ptServicos() : [], fams = _ptFams(), fn = new Map(fams);
+  document.getElementById('pt-sub').textContent = emp ? _ptEmpNome(emp) : 'Empreiteira';
+  if (pt.modo === 'lista') { _ptLista(el, bar); return; }
+  const fr = frs.find(f => f.cod === pt.frente), prod = +pt.pessoas && +String(pt.qtd).replace(',', '.') ? (+String(pt.qtd).replace(',', '.') / pt.pessoas) : 0;
+  el.innerHTML = `<div class="card"><div class="card-body">
+      <div class="form-group"><label class="form-label">Empreiteira *</label><select class="form-control" onchange="ptCampo('empresa',this.value,true)"><option value="">Escolha a empreiteira…</option>${emps.map(e => `<option value="${E(e.id)}" ${e.id === pt.empresa ? 'selected' : ''}>${E(_ptEmpNome(e))}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Frente *</label><div style="display:flex;gap:8px"><select class="form-control" style="flex:1" onchange="ptCampo('frente',this.value,true)"><option value="">Escolha a frente…</option>${frs.map(f => `<option value="${E(f.cod)}" ${f.cod === pt.frente ? 'selected' : ''}>${E(f.cod + (f.desc || f.nome ? ' · ' + (f.desc || f.nome) : ''))}</option>`).join('')}</select>
+        <button type="button" class="btn btn-outline" style="width:auto;padding:0 14px" onclick="abrirQR('ptfrente')">QR</button></div></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">Serviço *</label><select class="form-control" ${pt.empresa ? '' : 'disabled'} onchange="ptCampo('servico',this.value,true)"><option value="">${pt.empresa ? 'Escolha o serviço…' : 'Escolha a empreiteira primeiro'}</option>${svs.map(s => `<option ${s.nome === pt.servico ? 'selected' : ''}>${E(s.nome)}</option>`).join('')}</select>
+        ${pt.empresa && svs.length && svs[0].semPreco ? '<div style="font-size:11.5px;color:#F59E0B;margin-top:4px">Esta empreiteira ainda não tem preços do contrato no painel — mostrando todos os serviços.</div>' : ''}</div>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <div class="form-group"><label class="form-label">Quantidade executada hoje *</label><div style="display:flex;gap:8px;align-items:center"><input class="form-control" style="flex:1;font-size:20px;font-weight:800" type="number" inputmode="decimal" step="any" min="0" value="${E(pt.qtd)}" oninput="ptCampo('qtd',this.value);ptProd()"/><div style="min-width:44px;text-align:center;font-weight:800">${E(pt.unid || '')}</div></div></div>
+      <div class="form-label" style="margin:6px 0 2px">Efetivo e máquinas deles</div>
+      <div class="pt-mq"><span>Pessoas</span><span class="pt-st"><button type="button" onclick="ptPes(-1)" aria-label="Menos">−</button><b>${+pt.pessoas || 0}</b><button type="button" onclick="ptPes(1)" aria-label="Mais">+</button></span></div>
+      ${pt.maquinas.map((m, i) => `<div class="pt-mq"><span>${E(fn.get(m.familia) || m.familia)}</span><span class="pt-st"><button type="button" onclick="ptMaq(${i},-1)" aria-label="Menos">−</button><b>${m.qtd}</b><button type="button" onclick="ptMaq(${i},1)" aria-label="Mais">+</button></span></div>`).join('')}
+      <select class="form-control" style="margin-top:8px" onchange="ptMaqAdd(this.value)"><option value="">+ Adicionar máquina…</option>${fams.filter(([c]) => !pt.maquinas.some(m => m.familia === c)).map(([c, n]) => `<option value="${E(c)}">${E(n)}</option>`).join('')}</select>
+      <div id="pt-prod" style="font-size:12.5px;color:var(--text2);margin-top:8px">${prod ? 'Produtividade: <b>' + (Math.round(prod * 10) / 10).toString().replace('.', ',') + ' ' + E(pt.unid) + '/pessoa</b>' : ''}</div>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <div class="form-label">Fotos do serviço (até 4)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${pt.fotos.map((f, i) => `<div style="position:relative"><img src="${f}" style="width:70px;height:70px;object-fit:cover;border-radius:10px"/><button type="button" onclick="pt.fotos.splice(${i},1);ptRender()" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#DC2626;color:#fff;font-size:12px" aria-label="Tirar foto">×</button></div>`).join('')}
+        ${pt.fotos.length < 4 ? `<label style="width:70px;height:70px;border-radius:10px;border:1.5px dashed rgba(127,127,127,.5);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer">📷<input type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="ptFoto(this)"/></label>` : ''}</div>
+      <div class="form-group" style="margin:0"><label class="form-label">Observação</label><input class="form-control" value="${E(pt.obs)}" oninput="ptCampo('obs',this.value)" placeholder="Ex.: trecho entre PV-12 e PV-14"/></div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:8px">📍 Horário e localização gravados automaticamente.</div>
+    </div></div>
+    <div style="text-align:center;margin:6px 0 80px"><button type="button" class="btn btn-outline" style="width:auto;padding:8px 16px" onclick="ptVerLista()">Ver lançamentos de hoje${emp ? ' · ' + E(_ptEmpNome(emp)) : ''}</button></div>`;
+  bar.innerHTML = '<button class="btn btn-outline" onclick="ptSair()">Sair</button><button class="btn btn-green" onclick="ptSalvar()">✓ Salvar produção</button>';
+}
+function ptProd() { const el = document.getElementById('pt-prod'); if (!el) return; const q = +String(pt.qtd).replace(',', '.'), p = +pt.pessoas; el.innerHTML = q && p ? 'Produtividade: <b>' + (Math.round(q / p * 10) / 10).toString().replace('.', ',') + ' ' + _ptE(pt.unid) + '/pessoa</b>' : ''; }
+async function ptSalvar() {
+  const q = parseFloat(String(pt.qtd).replace(',', '.')), f = [];
+  if (!pt.empresa) f.push('a empreiteira'); if (!pt.frente) f.push('a frente'); if (!pt.servico) f.push('o serviço'); if (!(q > 0)) f.push('a quantidade'); if (!(+pt.pessoas > 0)) f.push('o número de pessoas');
+  if (f.length) { toast('Falta: ' + f.join(', ') + '.', 'err'); return; }
+  const emp = _ptEmps().find(e => e.id === pt.empresa), ag = new Date().toISOString(), id = 'pt' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), obra = usuarioCampo?.obra || emp?.obra || '';
+  const fotos = []; for (const img of pt.fotos) { const fid = 'fpt' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); await fbSalvar('fotos', { id: fid, tipo: 'producao_terceiro', prodId: id, data: pt.data, obra, lancadoPor: usuarioCampo.nome, tiradaEm: ag, img }); fotos.push(fid); }
+  const doc = { id, obra, data: pt.data, empresa: pt.empresa, empresaNome: _ptEmpNome(emp), frente: pt.frente, servico: pt.servico, unid: pt.unid || '', qtd: q, pessoas: +pt.pessoas, maquinas: pt.maquinas.filter(m => m.qtd > 0),
+    fotos, obs: String(pt.obs || '').trim(), gps: pt.gps || null, origem: usuarioCampo?.empresaTerceiro ? 'terceiro' : 'interno', lancadoPor: usuarioCampo.nome, lancadoMat: usuarioCampo.mat || '', lancadoEm: ag, status: 'pendente' };
+  await fbSalvar('prodTerceiros', doc);
+  try { const l = JSON.parse(localStorage.getItem('campo_pt_meus') || '[]'); l.unshift(doc); localStorage.setItem('campo_pt_meus', JSON.stringify(l.slice(0, 60))); } catch (e) {}
+  toast('Produção de ' + _ptEmpNome(emp) + ' salva ✓ — vai para aprovação', 'ok');
+  const e0 = pt.empresa, p0 = pt.precos; pt = { modo: 'novo', empresa: e0, frente: pt.frente, servico: '', unid: '', qtd: '', pessoas: 0, maquinas: [], fotos: [], obs: '', data: _hojeISO(), precos: p0, gps: pt.gps };
+  ptRender(); window.scrollTo(0, 0);
+}
+async function ptVerLista() { pt.modo = 'lista'; ptRender();
+  let l = null; if (db && _fbReady && isOnline) { try { const sn = await db.collection('prodTerceiros').where('data', '==', _hojeISO()).get(); l = sn.docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) {} }
+  if (l) { const meus = JSON.parse(localStorage.getItem('campo_pt_meus') || '[]'); l.forEach(x => { const i = meus.findIndex(y => y.id === x.id); if (i >= 0) meus[i] = x; }); try { localStorage.setItem('campo_pt_meus', JSON.stringify(meus)); } catch (e) {} pt._lista = l; }
+  if (pt && pt.modo === 'lista') ptRender(); }
+function _ptLista(el, bar) {
+  const E = _ptE, o = usuarioCampo?.obra || '', hoje = _hojeISO();
+  let l = pt._lista || JSON.parse(localStorage.getItem('campo_pt_meus') || '[]').filter(x => x.data === hoje); l = l.filter(x => (!o || x.obra === o) && (!pt.empresa || x.empresa === pt.empresa));
+  const cor = s => s === 'aprovado' ? ['Aprovado', '#16A34A'] : s === 'recusado' ? ['Recusado', '#DC2626'] : ['Pendente', '#D97706'];
+  el.innerHTML = `<div class="card"><div class="card-body"><div style="font-weight:800;font-size:16px">${E(l[0]?.empresaNome || 'Hoje')}</div><div style="font-size:12.5px;color:var(--text2);margin-bottom:6px">${l.length} lançamento(s) hoje</div>
+    ${l.map(x => { const [t, c] = cor(x.status); const mq = (x.maquinas || []).map(m => m.qtd + ' ' + E((new Map(_ptFams())).get(m.familia) || m.familia)).join(', ');
+      return `<div class="pt-it"><div style="display:flex;justify-content:space-between;gap:8px"><b>${E(x.servico)} · ${E(x.frente)}</b><b>${String(x.qtd).replace('.', ',')} ${E(x.unid || '')}</b></div>
+        <div style="font-size:12px;color:var(--text2)">${x.pessoas} pessoa(s)${mq ? ' · ' + mq : ''}${x.pessoas ? ' · ' + (Math.round(x.qtd / x.pessoas * 10) / 10).toString().replace('.', ',') + ' ' + E(x.unid || '') + '/pessoa' : ''}</div>
+        <span class="pt-tag" style="background:${c}22;color:${c}">${t}</span>${x.status === 'recusado' && x.motivo ? `<div style="font-size:12px;color:#DC2626;margin-top:2px">Motivo: ${E(x.motivo)}</div>` : ''}</div>`; }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0">Nada lançado hoje ainda.</div>'}
+  </div></div>`;
+  bar.innerHTML = '<button class="btn btn-outline" onclick="ptSair()">Sair</button><button class="btn btn-green" onclick="pt.modo=\'novo\';pt._lista=null;ptRender()">+ Novo lançamento</button>';
+}
+(function () {
+  const res = document.querySelector('.hcard[onclick="abrirMeuResumo()"]');
+  if (res && !document.getElementById('card-pt')) res.parentElement.insertAdjacentHTML('beforeend', `<div class="hcard" onclick="ptAbrir()" id="card-pt" style="display:none"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg><div class="hcard-t">Produção de terceiro</div><div class="hcard-s">Empreiteiras · qtd e efetivo</div></div>`);
+  const mostra = () => { const c = document.getElementById('card-pt'); if (!c) return; let pode = true; try { pode = typeof podeModulo === 'function' ? podeModulo('apontamentos') : true; } catch (e) {} c.style.display = pode && usuarioCampo ? '' : 'none'; };
+  setInterval(mostra, 1500);
+  const oP = processarQR;
+  processarQR = function (texto, contexto) {
+    if (contexto === 'ptfrente') { const c = typeof _fhCodDe === 'function' ? _fhCodDe(texto) : String(texto).replace(/^frente:/i, '').trim(); const fr = _daObraCampo(dadosCampo.frentes || []).find(f => f.cod === c);
+      if (fr && pt) { pt.frente = fr.cod; ptRender(); } else toast('Frente não encontrada: ' + (c || texto), 'err'); return { ok: !!fr }; }
+    return oP.apply(this, arguments);
   };
 })();
 </script>
