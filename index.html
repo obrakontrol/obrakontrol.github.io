@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.71 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.72 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -19621,7 +19621,7 @@ renderUA = window.renderUA = function () {
 // v4.62: AVANÇO — patrulha prevista (orçamento) × patrulha real (média por dia de equipe), MO por função e EQ por família
 // ═══════════════════════════════════════════════════════════════
 function _patReal(obra, servico) {
-  const ok = a => a.obra === obra && (a.servico || a.tipoServico) === servico && _ehAprovado(a);
+  const P = window._patPer || {}, ok = a => a.obra === obra && (a.servico || a.tipoServico) === servico && _ehAprovado(a) && (!P.de || a.data >= P.de) && (!P.ate || a.data <= P.ate);
   const mo = (dados.aponMO || []).filter(ok), eq = (dados.aponEQ || []).filter(ok), un = new Set(mo.map(a => a.data + '|' + a.frente));
   eq.forEach(a => un.add(a.data + '|' + a.frente));
   const n = un.size, fu = {}, fa = {}, famDe = a => a.tipo || ((dados.equipamentos || []).find(e => e.tag === a.equip || e.id === a.equipId) || {}).familia || '?';
@@ -20122,7 +20122,7 @@ function _patRender(obra) {
   const its = (v.itens || []).filter(i => (i.equipe || []).length || (i.equipamentos || []).length);
   if (!its.length) { el.innerHTML = '<div class="card-body"><div style="font-weight:800">Patrulha — previsto × real</div><div style="color:var(--text-3);font-size:12.5px;margin-top:6px">O orçamento vigente não tem patrulha (equipe/equipamentos) nos serviços. Preencha em Orçamento previsto → editar serviço.</div></div>'; return; }
   if (!window._patAb) window._patAb = new Set([its[0].servico]);
-  const L = its.map(i => { const R = _patReal(obra, i.servico), pP = sm(i.equipe || []), pR = sr(R.fu), eP = sm(i.equipamentos || []), eR = sr(R.fa); return { i, R, pP, pR, eP, eR, st: R.n ? _patTol(pR, pP) : null }; });
+  const L = its.map(i => { const R = _patReal(obra, i.servico), pP = sm(i.equipe || []), pR = sr(R.fu), eP = sm(i.equipamentos || []), eR = sr(R.fa); const sP = R.n ? _patTol(pR, pP) : null, sE = R.n ? _patTol(eR, eP) : null, pior = [sP, sE].includes('abaixo') ? 'abaixo' : [sP, sE].includes('acima') ? 'acima' : sP; return { i, R, pP, pR, eP, eR, sP, sE, st: pior }; });
   const com = L.filter(x => x.R.n), cnt = k => com.filter(x => x.st === k).length, avg = f => com.length ? com.reduce((t, x) => t + f(x), 0) / com.length : 0;
   const pill = (r, p, st, big) => { const [c, b] = _PAT_COR[st || 'ok']; return `<span style="display:inline-block;padding:${big ? '6px 14px' : '3px 9px'};border-radius:999px;background:${st ? b : 'var(--bg)'};color:${st ? c : 'var(--text-3)'};font-weight:800;font-size:${big ? 15 : 12}px;white-space:nowrap">${st ? n1(r) + ' / ' + n1(p) : '— / ' + n1(p)}</span>`; };
   const delta = (r, p) => { const st = _patTol(r, p), [c, b] = _PAT_COR[st], d = r - p; return `<span style="display:inline-block;min-width:78px;text-align:center;padding:2px 8px;border-radius:999px;background:${b};color:${c};font-weight:800;font-size:11.5px;white-space:nowrap">${d > 0 ? '+' : ''}${n1(d)}${p ? ' (' + (d > 0 ? '+' : '') + Math.round(d / p * 100) + '%)' : ' (fora)'}</span>`; };
@@ -20139,26 +20139,49 @@ function _patRender(obra) {
   const linhas = L.map(x => { const ab = window._patAb.has(x.i.servico), k = _e(x.i.servico).replace(/'/g, '&#39;');
     const mo = (x.i.equipe || []).map(y => ({ k: y.funcao, q: y.qtd })), eq = (x.i.equipamentos || []).map(y => ({ k: y.familia, q: y.qtd }));
     const nMo = new Set([...mo.map(y => y.k), ...Object.keys(x.R.fu)]).size, nEq = new Set([...eq.map(y => y.k), ...Object.keys(x.R.fa)]).size;
-    return `<div style="display:grid;grid-template-columns:minmax(200px,1.1fr) 140px minmax(300px,1.6fr) minmax(280px,1.4fr);border-top:1px solid var(--border);${ab ? 'background:rgba(37,99,235,.04)' : ''}">
+    return `<div style="display:grid;grid-template-columns:minmax(200px,1.1fr) 190px minmax(300px,1.6fr) minmax(280px,1.4fr);border-top:1px solid var(--border);${ab ? 'background:rgba(37,99,235,.04)' : ''}">
       <div onclick="_patToggle('${k}')" style="cursor:pointer;padding:10px 12px;display:flex;gap:8px;align-items:flex-start"><span style="color:var(--text-3);font-size:13px;margin-top:1px">${ab ? '▾' : '▸'}</span><div><b>${_e(x.i.servico)}</b><div style="font-size:11.5px;color:var(--text-3)">${x.R.n ? x.R.n + ' dia(s) de equipe' : 'sem apontamento aprovado'}</div></div></div>
-      <div style="padding:10px 8px;text-align:center;border-left:1px solid var(--border)">${pill(x.pR, x.pP, x.st, true)}<div style="font-size:11px;color:var(--text-3);margin-top:4px">equip. ${x.R.n ? n1(x.eR) : '—'} / ${n1(x.eP)}</div></div>
+      <div style="padding:8px 10px;border-left:1px solid var(--border);display:flex;flex-direction:column;gap:6px;justify-content:center">${_patBloco(icMO, 'Pessoas', x.pR, x.pP, x.sP)}${_patBloco(icEQ, 'Equipamentos', x.eR, x.eP, x.sE)}</div>
       <div style="border-left:1px solid var(--border);padding:${ab ? '4px 6px' : '6px 4px'}">${!x.R.n ? '<div style="padding:8px 10px;font-size:12px;color:var(--text-3)">—</div>' : ab ? mini(mo, x.R.fu, _nomeFuncao, 'Função') : fech(nMo, nMo === 1 ? 'função' : 'funções', x.i.servico, icMO)}</div>
       <div style="border-left:1px solid var(--border);padding:${ab ? '4px 6px' : '6px 4px'}">${!x.R.n ? '<div style="padding:8px 10px;font-size:12px;color:var(--text-3)">—</div>' : ab ? mini(eq, x.R.fa, _nomeFamilia, 'Equipamento / família') : fech(nEq, nEq === 1 ? 'família' : 'famílias', x.i.servico, icEQ)}</div></div>`; }).join('');
   el.innerHTML = `<div class="card-body">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px">
       <div><div style="font-weight:800;font-size:16px">Patrulha — previsto × real</div><div style="font-size:12px;color:var(--text-3)">Equipe e equipamentos por dia: orçamento vigente × média por dia de equipe (frente × dia) nos apontamentos aprovados.</div></div>
-      <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="_patTodos(true)">Abrir todos</button><button class="btn btn-outline btn-sm" onclick="_patTodos(false)">Fechar todos</button></div></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;color:var(--text-3)">Período</span><input type="date" class="form-control" style="width:145px;padding:4px 8px" value="${_e((window._patPer || {}).de || '')}" onchange="(window._patPer=window._patPer||{}).de=this.value;_patRender(_pgObraSel('av-obra'))"/><span style="color:var(--text-3)">a</span><input type="date" class="form-control" style="width:145px;padding:4px 8px" value="${_e((window._patPer || {}).ate || '')}" onchange="(window._patPer=window._patPer||{}).ate=this.value;_patRender(_pgObraSel('av-obra'))"/>
+        ${(window._patPer || {}).de || (window._patPer || {}).ate ? `<button class="btn btn-outline btn-sm" onclick="window._patPer={};_patRender(_pgObraSel('av-obra'))">Tudo</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="_patTodos(true)">Abrir todos</button><button class="btn btn-outline btn-sm" onclick="_patTodos(false)">Fechar todos</button><button class="btn btn-outline btn-sm" onclick="_patExcel()">⬇ Exportar</button></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px solid var(--border);border-radius:14px;padding:8px;margin-bottom:10px">
       ${box('', com.length, 'serviços com apontamento')}<div style="width:1px;align-self:stretch;background:var(--border)"></div>
-      ${box('', n1(avg(x => x.pR)) + ' / ' + n1(avg(x => x.pP)), 'patrulha média (real / prevista)')}<div style="width:1px;align-self:stretch;background:var(--border)"></div>
+      ${box('', n1(avg(x => x.pR)) + ' / ' + n1(avg(x => x.pP)), 'pessoas/dia (real / prevista)')}<div style="width:1px;align-self:stretch;background:var(--border)"></div>
+      ${box('', n1(avg(x => x.eR)) + ' / ' + n1(avg(x => x.eP)), 'equipamentos/dia (real / previsto)')}<div style="width:1px;align-self:stretch;background:var(--border)"></div>
       ${box('✓', cnt('ok'), 'no previsto', _PAT_COR.ok[0], _PAT_COR.ok[1])}${box('!', cnt('acima'), 'acima do previsto', _PAT_COR.acima[0], _PAT_COR.acima[1])}${box('✕', cnt('abaixo'), 'abaixo do previsto', _PAT_COR.abaixo[0], _PAT_COR.abaixo[1])}</div>
     <div style="font-size:11.5px;color:var(--text-2);margin:0 0 8px;text-align:right">${legenda}</div>
     <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden"><div style="overflow-x:auto"><div style="min-width:940px">
-      <div style="display:grid;grid-template-columns:minmax(200px,1.1fr) 140px minmax(300px,1.6fr) minmax(280px,1.4fr)">
-        <div style="padding:8px 12px;font-weight:800;font-size:12.5px;background:var(--bg)">Serviço</div><div style="padding:8px;font-weight:800;font-size:12px;background:var(--bg);text-align:center;border-left:1px solid var(--border)">Pessoas/dia<br><span style="font-weight:400;color:var(--text-3)">real / prevista</span></div>
+      <div style="display:grid;grid-template-columns:minmax(200px,1.1fr) 190px minmax(300px,1.6fr) minmax(280px,1.4fr)">
+        <div style="padding:8px 12px;font-weight:800;font-size:12.5px;background:var(--bg)">Serviço</div><div style="padding:8px;font-weight:800;font-size:12px;background:var(--bg);text-align:center;border-left:1px solid var(--border)">Patrulha por dia<br><span style="font-weight:400;color:var(--text-3)">real / prevista</span></div>
         <div style="${H}">${icMO} Mão de obra por função <span style="font-weight:400;opacity:.75">(previsto × real)</span></div><div style="${H};border-left:2px solid #fff">${icEQ} Equipamentos por família <span style="font-weight:400;opacity:.75">(previsto × real)</span></div></div>
       ${linhas}</div></div></div>
-    <div style="font-size:11.5px;color:var(--text-3);margin-top:8px">Status do serviço pela quantidade de pessoas/dia. Δ = real − previsto (por dia de equipe). "Fora" = função ou família que não estava na patrulha prevista.</div></div>`;
+    <div style="font-size:11.5px;color:var(--text-3);margin-top:8px">${(window._patPer || {}).de || (window._patPer || {}).ate ? 'Período: ' + _e(fmtData((window._patPer || {}).de) || 'início') + ' a ' + _e(fmtData((window._patPer || {}).ate) || 'hoje') + '. ' : 'Período: toda a obra. '}Status do serviço = o pior entre pessoas e equipamentos. Δ = real − previsto (por dia de equipe). "Fora" = função ou família que não estava na patrulha prevista.</div></div>`;
+}
+
+// v4.72: bloco de pessoas / equipamentos com o mesmo peso
+function _patBloco(ic, rot, r, p, st) { const [c, b] = _PAT_COR[st || 'ok'], d = st && p ? Math.round((r - p) / p * 100) : null;
+  return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:${st ? b : 'var(--bg)'}">
+    <span style="color:${st ? c : 'var(--text-3)'};display:flex">${ic.replace('width="15" height="15"', 'width="18" height="18"')}</span>
+    <div style="flex:1;min-width:0"><div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3)">${rot}</div>
+      <div style="font-weight:900;font-size:16px;color:${st ? c : 'var(--text-3)'};line-height:1.15">${st ? _n1(Math.round(r * 10) / 10) : '—'} <span style="font-weight:600;font-size:12.5px;color:var(--text-3)">/ ${_n1(Math.round(p * 10) / 10)}</span></div></div>
+    ${d != null ? `<span style="font-size:11px;font-weight:800;color:${c}">${d > 0 ? '+' : ''}${d}%</span>` : ''}</div>`; }
+function _patExcel() {
+  const obra = _pgObraSel('av-obra'), v = obra && orcVigente(obra); if (!v) return; const P = window._patPer || {};
+  const rows = [['Serviço', 'Dias de equipe', 'Tipo', 'Função / família', 'Previsto por dia', 'Real por dia', 'Δ', 'Δ %', 'Status']];
+  (v.itens || []).filter(i => (i.equipe || []).length || (i.equipamentos || []).length).forEach(i => { const R = _patReal(obra, i.servico);
+    const lin = (tipo, prev, real, nome) => { const ks = [...new Set([...prev.map(x => x.k), ...Object.keys(real)])]; ks.forEach(k => { const p = +((prev.find(x => x.k === k) || {}).q || 0), r = Math.round((real[k] || 0) * 100) / 100;
+      rows.push([i.servico, R.n, tipo, nome(k) || k, p, R.n ? r : '', R.n ? Math.round((r - p) * 100) / 100 : '', R.n && p ? Math.round((r - p) / p * 100) / 100 : '', R.n ? { ok: 'No previsto', acima: 'Acima', abaixo: 'Abaixo' }[_patTol(r, p)] : 'Sem apontamento']); }); };
+    lin('Mão de obra', (i.equipe || []).map(x => ({ k: x.funcao, q: x.qtd })), R.fu, _nomeFuncao); lin('Equipamento', (i.equipamentos || []).map(x => ({ k: x.familia, q: x.qtd })), R.fa, _nomeFamilia); });
+  const wb = XLSX.utils.book_new(), sh = XLSX.utils.aoa_to_sheet(rows); sh['!cols'] = [{ wch: 40 }, { wch: 12 }, { wch: 13 }, { wch: 32 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 14 }];
+  for (let r = 1; r < rows.length; r++) { const c = sh[XLSX.utils.encode_cell({ r, c: 7 })]; if (c && typeof c.v === 'number') c.z = '0%'; }
+  XLSX.utils.book_append_sheet(wb, sh, 'Patrulha');
+  XLSX.writeFile(wb, 'Patrulha previsto x real - ' + String(getNomeObra(obra) || obra).replace(/[^\w-]+/g, '_').slice(0, 40) + (P.de || P.ate ? ' - ' + (P.de || 'inicio') + '_a_' + (P.ate || 'hoje') : '') + '.xlsx');
 }
 // Apply configs on load
 setTimeout(applyConfigs, 200);
