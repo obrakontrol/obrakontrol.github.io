@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.73 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.74 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18889,6 +18889,53 @@ async function _kkGerar(nUsr) {
   sv('republicas', { id: 'kk_r1', cod: 'REP-001', nome: 'República Centro', tipo: 'República', endereco: 'Rua Barão de Monte Santo, 410', vagas: 6, responsavel: 'Maria Souza', aluguel: 3200, agua: 160, luz: 320, internet: 110, inicio: dia(60), fim: '2027-06-30', moradores: MOR([5, 6, 8, 13, 15], dia(58)), ...X });
   sv('republicas', { id: 'kk_r2', cod: 'REP-002', nome: 'Alojamento do canteiro', tipo: 'Alojamento', endereco: 'Canteiro de obras', vagas: 12, responsavel: PROP.fantasia, aluguel: 0, agua: 400, luz: 900, internet: 150, extras: [{ desc: 'Limpeza', valor: 1200 }], moradores: MOR([9, 10, 11, 16, 17, 18, 23, 24, 25, 30], dia(56)), ...X });
   // ── mobilizações (registro de chegada de 2 máquinas e 1 veículo)
+  // ── v4.74: kickoff completo — RDOs dos turnos, termo de mobilização de todos os equipamentos, equipes, tipos de perda, notas de diesel e movimentação do tanque
+  { const nomeFam = c => (typeof _nomeFamilia === 'function' && _nomeFamilia(c)) || c, modNome = e => ((dados.modelos || []).find(m => m.cod === e.codModelo) || {}).nome || e.codModelo || '';
+    // assinatura de exemplo (rabisco) para os termos
+    const assin = (nome, sem) => { try { const c = document.createElement('canvas'); c.width = 360; c.height = 110; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 360, 110); g.strokeStyle = '#1e3a8a'; g.lineWidth = 2.4; g.lineCap = 'round'; g.beginPath();
+      let x = 20, y = 70, s = sem; g.moveTo(x, y); for (let i = 0; i < 22; i++) { s = (s * 9301 + 49297) % 233280; x += 13 + (s % 5); y = 45 + (s % 50); g.quadraticCurveTo(x - 7, 25 + (s % 70), x, y); } g.stroke();
+      g.font = '12px Arial'; g.fillStyle = '#666'; g.fillText(nome, 20, 104); return c.toDataURL('image/png'); } catch (e) { return ''; } };
+    const fotoEx = (t, s, cor) => { try { return _exFoto(t, s, cor); } catch (e) { return ''; } };
+    // 1) termo de mobilização para todos os equipamentos
+    const CORF = ['#7A6A55', '#6B7B5A', '#5F6B73', '#86725A', '#6E5F4E', '#8B6F47'];
+    EQ.forEach((e, i) => { if (i === 7) { e.mobilizacaoId = 'kk_mb1'; return; } if (i === 4) { e.mobilizacaoId = 'kk_mb2'; return; }
+      const dm = e.dataMob || dia(55 - i), id = 'kk_mbE' + i, fh = 'kk_ftm' + i + 'h', ff = 'kk_ftm' + i + 'f';
+      sv('fotos', { id: fh, tipo: 'mobilizacao', mobId: id, obra: O, data: dm, img: fotoEx(e.tag, 'Horímetro na chegada', CORF[i % 6]), ...K });
+      sv('fotos', { id: ff, tipo: 'mobilizacao', mobId: id, obra: O, data: dm, img: fotoEx(e.tag, 'Vista frontal', CORF[(i + 2) % 6]), ...K });
+      const nok = i % 3 === 1;
+      sv('mobilizacoes', { id, tipo: 'mobilizacao', tag: e.tag, equipId: e.id, data: dm, hora: '08:' + String(10 + i * 4).padStart(2, '0'), familiaNome: nomeFam(e.familia), modeloNome: modNome(e), empresaNome: e.prop || '', placa: e.placa || '', serie: e.serie || '', hor: String(1800 + i * 640), comb: ['Cheio', '3/4', '1/2'][i % 3],
+        checklist: [{ t: 'Nível do óleo do motor', st: 'ok' }, { t: 'Nível do líquido de arrefecimento', st: 'ok' }, { t: 'Pneus ou esteiras', st: nok ? 'nok' : 'ok', obs: nok ? 'Desgaste acima do normal' : '' }, { t: 'Vazamentos', st: 'ok' }, { t: 'Extintor e itens de segurança', st: i % 4 === 2 ? 'nok' : 'ok', obs: i % 4 === 2 ? 'Extintor vencido — trocar' : '' }, { t: 'Luzes e buzina', st: 'ok' }],
+        avarias: i % 3 === 0 ? [{ desc: 'Riscos na lateral' }] : [], fotoHor: fh, fotos: { frente: ff }, acess: 'Manual do operador, chave reserva',
+        nomeRec: NOMES[i % 3], sigRec: assin(NOMES[i % 3], i + 3), nomeEnt: 'Motorista da locadora', cpfEnt: '529.982.247-25', sigEnt: assin('Motorista da locadora', i + 11), lancadoPor: NOMES[i % 3], validadoEm: dm + 'T09:00:00', ...X });
+      e.mobilizacaoId = id; });
+    // 2) RDO de cada turno (últimos 14 dias), fotos nos 3 últimos
+    const grupos = {}; (dados.aponMO || []).filter(a => String(a.id).startsWith('kk_am') && a.apropriacao).forEach(a => (grupos[a.apropriacao] = grupos[a.apropriacao] || []).push(a));
+    const eqDe = {}; (dados.aponEQ || []).filter(a => String(a.id).startsWith('kk_ae') && a.apropriacao).forEach(a => (eqDe[a.apropriacao] = eqDe[a.apropriacao] || []).push(a));
+    const parDe = {}; (dados.perdas || []).filter(p => String(p.id).startsWith('kk_p') && p.apropriacao).forEach(p => (parDe[p.apropriacao] = parDe[p.apropriacao] || []).push(p));
+    const lim = dia(14), lim3 = dia(3), CLIMA = ['Bom', 'Bom', 'Nublado', 'Bom', 'Nublado'];
+    const MAT = { 'VCA': [['Tubo PVC DN150 esgoto', 'm'], ['Areia média (berço)', 'm³']], 'Furo': [['Tubo PEAD DN110', 'm'], ['Bentonita', 'sc']], 'Liga': [['Kit ligação domiciliar', 'un'], ['Tubo PVC DN100', 'm']], 'Poço': [['Anel de concreto PV', 'un'], ['Tampão FoFo', 'un']], 'Recomp': [['CBUQ', 't'], ['Emulsão RR-1C', 'L']] };
+    Object.entries(grupos).forEach(([ap, l], k) => { const a0 = l[0]; if (a0.data < lim) return;
+      const fr = FR.find(f => f.cod === a0.frente) || {}, eqs = eqDe[ap] || [], pars = parDe[ap] || [], chuva = pars.some(p => p.motivo === 'Chuva');
+      const qtd = l.reduce((t, a) => t + (+a.qtd || 0), 0), un = (l.find(a => a.unid) || {}).unid || '', mk = Object.keys(MAT).find(m => a0.servico.includes(m)), mats = mk ? MAT[mk].map(([d, u], j) => ({ desc: d, unid: u, qtd: j ? Math.max(1, Math.round(qtd * .08)) : Math.max(1, Math.round(qtd * (u === 'm' ? 1.02 : .3))) })) : [];
+      const fotos = a0.data >= lim3 ? [{ id: 'f1', em: a0.data + 'T10:30:00', img: fotoEx(a0.frente, a0.servico.slice(0, 28), CORF[k % 6]) }, { id: 'f2', em: a0.data + 'T15:10:00', img: fotoEx(a0.frente, 'Frente ao fim do turno', CORF[(k + 3) % 6]) }] : [];
+      const parList = []; const vis = new Set(); pars.forEach(p => { const kk = p.motivo + p.horaIni; if (vis.has(kk)) return; vis.add(kk); parList.push({ ini: p.horaIni, fim: p.horaFim, motivo: p.motivo, quem: p.escopo === 'tudo' ? 'Todos' : p.recurso, horas: p.horas }); });
+      eqs.filter(e => e.hpar && e.motivo && e.motivo !== 'Chuva').forEach(e => parList.push({ ini: '—', fim: '', motivo: e.motivo, quem: e.equip, horas: e.hpar }));
+      sv('rdos', { id: 'kk_rdo_' + ap, uid: ap, obra: O, data: a0.data, frente: a0.frente, frenteDesc: fr.desc || '', servico: a0.servico, horaIni: a0.horaIni, horaFim: a0.horaFim, apontador: a0.lancadoPor, qtd: Math.round(qtd * 10) / 10, unid: un, prodStatus: 'informada',
+        mo: l.map(a => ({ nome: a.func, mat: a.mat, funcao: (typeof _nomeFuncao === 'function' && _nomeFuncao(a.funcao)) || a.funcao })), eq: eqs.map(e => ({ tag: e.equip, desc: nomeFam(e.tipo), operador: e.operador || '', hp: e.hp, hpar: e.hpar, motivo: e.motivo || '' })),
+        par: parList, mat: mats, fotos, climaM: chuva ? 'Chuva' : CLIMA[k % 5], climaT: chuva ? 'Nublado' : CLIMA[(k + 2) % 5], ocorr: chuva ? 'Chuva forte pela manhã; frente liberada após drenagem da vala.' : k % 4 === 0 ? 'Interferência com rede de água não cadastrada — contornada com apoio da concessionária.' : 'Sem ocorrências.', atualizadoEm: a0.data + 'T17:30:00', ...K }); });
+    // 3) equipes (uma por frente de trabalho, com o encarregado como líder)
+    EQP.forEach((g, gi) => { const lid = FS[g.ap]; sv('equipes', { id: 'kk_eqp' + gi, cod: 'EQ-' + String(gi + 1).padStart(2, '0'), nome: 'Equipe ' + (gi + 1) + ' · ' + ([].concat(g.fr).map(i => FR[i].cod).filter((v, j, a) => a.indexOf(v) === j).join(' / ')), lider: lid.mat, membros: g.mo.map(i => FS[i].mat), obs: '', obra: O, ...K }); });
+    // 4) tipos de perda (se ainda não houver)
+    if (!(dados.tiposPerdas || []).length) [['CHU', 'Chuva', 'Ambos', 'blue'], ['MAN', 'Manutenção corretiva', 'EQ', 'red'], ['PEC', 'Aguardando peças', 'EQ', 'amber'], ['FRE', 'Aguardando frente', 'Ambos', 'amber'], ['MAT', 'Falta de material', 'Ambos', 'gray'], ['INT', 'Interferência', 'Ambos', 'gray']]
+      .forEach(([cod, nome, aplica, cor], i) => sv('tiposPerdas', { id: 'kk_tp' + i, cod, nome, aplica, cor, obs: '', ...K }));
+    // 5) notas fiscais de diesel e movimentação do tanque fixo
+    let saldo = 6200; const T1 = TQ[0];
+    [40, 33, 26, 19, 12, 5].forEach((n, i) => { const d = dia(n), litros = [8000, 7500, 8000, 6000, 8000, 7000][i], unit = [6.05, 6.08, 6.10, 6.12, 6.12, 6.15][i], nid = 'kk_nf' + i;
+      sv('notasFiscais', { id: nid, numero: String(184230 + i * 37), serie: '1', chave: '', dtEmissao: dia(n + 1), dtReceb: d, horaReceb: '08:40', fornecedor: 'DISTRIBUIDORA DE COMBUSTÍVEIS SUL LTDA', cnpj: '12.345.678/0001-90', placa: 'CTN' + (2100 + i), produto: 'Óleo Diesel S-10', unidade: 'Litros', qtd: litros, unit, total: Math.round(litros * unit * 100) / 100, tanqueId: T1.id, obs: '', origem: 'manual', obra: O, status: 'Recebida', lancadoPor: NOMES[0], lancadoEm: d + 'T09:00:00', ...K });
+      const antes = saldo; saldo = Math.max(800, saldo - [5200, 5600, 5900, 4800, 6100, 5300][i]); const a2 = saldo; saldo += litros;
+      sv('movTanques', { id: 'kk_mv' + i, tanqueId: T1.id, obra: O, dt: d + ' 08:45', tipo: 'entrada', litros, saldoAntes: a2, saldoDepois: saldo, ref: nid, obs: 'NF ' + (184230 + i * 37) + ' — Distribuidora Sul', por: NOMES[0], ...K }); });
+    T1.saldo = saldo - 9800;
+  }
   sv('mobilizacoes', { id: 'kk_mb1', tipo: 'mobilizacao', tag: EQ[7].tag, equipId: EQ[7].id, data: dia(53), hora: '08:20', familiaNome: 'Rolo compactador', modeloNome: 'Dynapac CA250', empresaNome: 'BETA MÁQUINAS E TERRAPLENAGEM LTDA', hor: '2780', comb: '3/4',
     checklist: [{ t: 'Nível do óleo do motor', st: 'ok' }, { t: 'Pneus ou esteiras', st: 'ok' }, { t: 'Vazamentos', st: 'nok', obs: 'Vazamento leve no cilindro' }], avarias: [{ desc: 'Amassado no capô' }], nomeRec: NOMES[0], nomeEnt: 'Motorista da locadora', cpfEnt: '529.982.247-25', lancadoPor: NOMES[0], validadoEm: dia(53) + 'T08:40:00', ...X });
   sv('mobilizacoes', { id: 'kk_mb2', tipo: 'mobilizacao', tag: EQ[4].tag, equipId: EQ[4].id, data: dia(48), hora: '09:10', familiaNome: 'Retroescavadeira', modeloNome: 'JCB 3CX', empresaNome: 'ALFA LOCAÇÃO DE EQUIPAMENTOS LTDA', hor: '4660', comb: '1/2',
@@ -18930,7 +18977,7 @@ async function kkApagar(silencioso) {
   const ps = [];
   _KK_COLS.forEach(col => { (dados[col] || []).filter(x => x && (x.kick || String(x.id).startsWith('kk_'))).forEach(x => ps.push(fbDelete(col, x.id).catch(() => {}))); dados[col] = (dados[col] || []).filter(x => !(x && (x.kick || String(x.id).startsWith('kk_')))); });
   // ordens/planos/produtos que ainda não estão em memória (carregados à parte)
-  for (const col of ['ordensServico', 'planosPrev', 'produtos', 'partesDiarias']) { try { const s = await db.collection(col).where('kick', '==', true).get(); s.docs.forEach(d => ps.push(fbDelete(col, d.id).catch(() => {}))); } catch (e) {} }
+  for (const col of ['ordensServico', 'planosPrev', 'produtos', 'partesDiarias', 'rdos', 'fotos', 'equipes', 'notasFiscais', 'movTanques', 'tiposPerdas']) { try { const s = await db.collection(col).where('kick', '==', true).get(); s.docs.forEach(d => ps.push(fbDelete(col, d.id).catch(() => {}))); } catch (e) {} }
   for (let i = 0; i < ps.length; i += 80) { if (!silencioso) _kkProg('Apagando ' + Math.min(i + 80, ps.length) + ' de ' + ps.length + '…'); await Promise.all(ps.slice(i, i + 80)); }
   _kkProg('');
   if (!silencioso) { toast('Dados do kickoff apagados.'); try { renderObras(); } catch (e) {} }
@@ -20194,6 +20241,28 @@ async function pgRemoverDups() { const obra = _pgObraSel('pg-obra'), d = _pgDups
 (function () { const oR = renderProgramacao; renderProgramacao = window.renderProgramacao = function () { const r = oR.apply(this, arguments);
   try { const obra = _pgObraSel('pg-obra'), d = obra ? _pgDups(obra, _pgSem) : [], c = document.getElementById('pg-corpo'); if (d.length && c) c.insertAdjacentHTML('afterbegin', `<div style="border:1.5px solid #D97706;background:rgba(217,119,6,.08);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span><b>${d.length} item(ns) repetido(s)</b> nesta semana (mesma frente e serviço). Fica o mais antigo de cada.</span><button class="btn btn-primary btn-sm" onclick="pgRemoverDups()">Remover repetidos</button></div>`); } catch (e) {}
   return r; }; })();
+
+// v4.74: tela de Tanques de verdade — saldo, capacidade e % do tanque + histórico de movimentações (entradas por NF e ajustes)
+function _tqCap(t) { return +t.cap || +t.capacidade || 0; }
+window.renderTanquesCards = renderTanquesCards = function (gridId) {
+  const g = document.getElementById(gridId); if (!g) return; const o = _okObraAtual(), t = (dados.tanques || []).filter(x => o === 'todas' || !x.obra || x.obra === o);
+  g.innerHTML = t.length ? t.map(x => { const cap = _tqCap(x), sd = +x.saldo || 0, pc = cap ? Math.max(0, Math.min(100, sd / cap * 100)) : 0, cor = pc < 20 ? '#DC2626' : pc < 40 ? '#D97706' : '#16A34A';
+    return `<div class="card"><div class="card-body" style="padding:14px 16px"><div style="display:flex;justify-content:space-between;gap:8px"><div><div style="font-weight:800">${_e(x.nome || x.cod || 'Tanque')}</div><div style="font-size:12px;color:var(--text-3)">${_e(x.cod || '')}${x.local ? ' · ' + _e(x.local) : ''}</div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:900;color:${cor}">${Math.round(sd).toLocaleString('pt-BR')} L</div><div style="font-size:11.5px;color:var(--text-3)">${cap ? 'de ' + cap.toLocaleString('pt-BR') + ' L · ' + Math.round(pc) + '%' : 'sem capacidade cadastrada'}</div></div></div>
+      ${cap ? `<div style="height:8px;border-radius:6px;background:var(--border);margin-top:10px"><div style="height:100%;width:${pc}%;border-radius:6px;background:${cor}"></div></div>` : ''}
+      <div style="font-size:12px;color:var(--text-3);margin-top:8px">${x.preco ? 'Preço médio: R$ ' + (+x.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + '/L' : ''}</div></div></div>`; }).join('')
+    : '<div style="grid-column:1/-1;text-align:center;color:var(--text-3);padding:1.5rem">Nenhum tanque cadastrado</div>';
+};
+window.renderTanques = renderTanques = function () {
+  renderTanquesCards('tanques-grid');
+  const tb = document.getElementById('tbody-mov-tanques'); if (!tb) return; const o = _okObraAtual(), tqs = new Map((dados.tanques || []).map(t => [t.id, t]));
+  const l = (dados.movTanques || []).filter(m => { const t = tqs.get(m.tanqueId); return o === 'todas' || m.obra === o || (t && t.obra === o); }).sort((a, b) => String(b.dt).localeCompare(String(a.dt)));
+  const n = v => (Math.round((+v || 0) * 10) / 10).toLocaleString('pt-BR');
+  tb.innerHTML = l.length ? l.map(m => { const t = tqs.get(m.tanqueId) || {}; const ent = (+m.litros || 0) >= 0;
+    return `<tr><td class="td-mono">${_e(fmtData(String(m.dt).slice(0, 10)))} ${_e(String(m.dt).slice(11, 16))}</td><td>${_e(t.nome || t.cod || '—')}</td><td>${ent ? tag(m.tipo === 'entrada' ? 'Entrada' : (m.tipo || 'Entrada'), 'green') : tag(m.tipo === 'estorno' ? 'Estorno' : (m.tipo || 'Saída'), 'red')}</td>
+      <td class="td-mono" style="text-align:right;color:${ent ? '#15803D' : '#B91C1C'}">${ent ? '+' : ''}${n(m.litros)}</td><td class="td-mono" style="text-align:right">${n(m.saldoAntes)}</td><td class="td-mono" style="text-align:right"><b>${n(m.saldoDepois)}</b></td><td>${_e(m.por || '—')}</td><td style="font-size:12px">${_e(m.obs || '')}</td></tr>`; }).join('')
+    : '<tr><td colspan="8" class="empty-row">Nenhuma movimentação. As entradas aparecem aqui ao lançar uma nota fiscal de diesel ou um abastecimento de tanque.</td></tr>';
+};
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
