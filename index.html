@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.69 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.70 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -20088,6 +20088,37 @@ function _equipesDiaHTML(data, ob) {
         const lab = t.metodologia ? _e(t.metodologia) : `<span style="color:var(--text-3)" title="automático">${_e(_metDe(t.nome, t.obra))}</span>`; tr.children[im - 1].insertAdjacentHTML('afterend', `<td style="font-size:12px">${lab}</td>`); });
     } catch (e) {}
     return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.70: PROGRAMAÇÃO — produção dia a dia (Seg a Sáb; Dom só se teve lançamento), sem tirar nada da tabela
+// Verde = bateu a meta do dia (programado ÷ 6) · laranja = produziu abaixo · "—" = dia passado sem produção
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const oR = renderProgramacao;
+  renderProgramacao = window.renderProgramacao = function () {
+    const r = oR.apply(this, arguments);
+    try {
+      const obra = _pgObraSel('pg-obra'), tb = document.querySelector('#pg-corpo table'); if (!obra || !tb) return r;
+      const seg = _pgSem, hoje = _hojeLocal(), dias = [0, 1, 2, 3, 4, 5, 6].map(i => _pgAdd(seg, i));
+      const cum = dias.map((d, i) => _pgFeito(obra, seg, i < 6 ? dias[i + 1] : _pgAdd(seg, 7)));   // acumulado até o fim de cada dia
+      const doDia = (k, i) => (cum[i][k] || 0) - (i ? (cum[i - 1][k] || 0) : 0);
+      const itens = new Map(_pgItens(obra, seg).map(p => [p.id, p]));
+      const temDom = [...itens.values()].some(p => doDia(p.frente + '|' + p.servico, 6) > 0);
+      const nd = temDom ? 7 : 6, NOM = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+      const h = tb.querySelector('thead tr'); if (!h || h.dataset.dias) return r; h.dataset.dias = '1';
+      h.children[1].insertAdjacentHTML('afterend', dias.slice(0, nd).map((d, i) => `<th style="text-align:center;padding-left:4px;padding-right:4px;${d === hoje ? 'color:#E30613' : ''}">${NOM[i]}<div style="font-weight:400;font-size:10.5px;letter-spacing:0;text-transform:none">${d.slice(8, 10)}/${d.slice(5, 7)}</div></th>`).join(''));
+      tb.querySelectorAll('tbody tr').forEach(tr => {
+        const id = (tr.innerHTML.match(/pgEditar\('([^']+)'\)/) || [])[1], p = id && itens.get(id); if (!p) return;
+        const k = p.frente + '|' + p.servico, meta = (+p.qtd || 0) / 6, svc = tr.children[tr.querySelector('td[rowspan]') ? 1 : 0];
+        svc.insertAdjacentHTML('afterend', dias.slice(0, nd).map((d, i) => { const q = doDia(k, i), fut = d > hoje, hj = d === hoje;
+          const st = q <= 0 ? (fut ? 'color:var(--text-3)' : 'color:var(--text-3)') : q >= meta - 1e-9 ? 'background:rgba(22,163,74,.14);color:#15803D' : 'background:rgba(217,119,6,.14);color:#B45309';
+          return `<td style="text-align:center;padding:4px 3px;${hj ? 'box-shadow:inset 0 0 0 1.5px rgba(227,6,19,.35);' : ''}"><span class="td-mono" title="${_e(fmtData(d))}${meta ? ' · meta do dia ' + _n1(meta) + ' ' + _e(p.unid || '') : ''}" style="display:inline-block;min-width:34px;padding:3px 5px;border-radius:7px;font-size:12px;font-weight:700;${st}">${q > 0 ? _n1(q) : fut ? '' : '—'}</span></td>`; }).join(''));
+      });
+      const nota = document.querySelector('#pg-corpo .card-body > div[style*="font-size:11.5px"]');
+      if (nota && !nota.dataset.dias) { nota.dataset.dias = '1'; nota.insertAdjacentHTML('beforeend', ' Dias: produção lançada em cada dia — <span style="color:#15803D;font-weight:700">verde</span> bateu a meta do dia (programado ÷ 6), <span style="color:#B45309;font-weight:700">laranja</span> abaixo, — sem produção.'); }
+    } catch (e) { console.warn('programação por dia', e); }
+    return r;
+  };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
