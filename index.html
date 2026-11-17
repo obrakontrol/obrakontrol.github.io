@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.81 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.82 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -8388,7 +8388,7 @@ function editarPerfil(id) {
   $('pf-cor').value = p ? (p.cor||'gray') : 'green';
   $('pf-tipo').value = p ? (p.tipo||'painel') : 'painel';
   $('pf-titulo').textContent = p ? 'Editar perfil' : 'Novo perfil';
-  $('pf-perms').innerHTML = MODULOS.map(([k,l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pf-perm-${k}" ${(p?.perms?.[k] ?? (k === 'cargaEquip' && p?.nome === 'Custos')) ? 'checked' : ''}/> ${l}</label>`).join('');
+  $('pf-perms').innerHTML = MODULOS.map(([k,l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pf-perm-${k}" ${(p?.perms?.[k] ?? ((k === 'cargaEquip' && p?.nome === 'Custos') || (k === 'vincApont' && /supervisor/i.test(p?.nome || '')))) ? 'checked' : ''}/> ${l}</label>`).join('');
   pfTipoMudou();
   document.getElementById('modal-perfil').classList.add('open');
 }
@@ -20455,6 +20455,51 @@ function _nfProxima() {
   const oS = window.salvarNotaFiscal; window.salvarNotaFiscal = function () { const n0 = (dados.notasFiscais || []).length, r = oS.apply(this, arguments);
     const m = document.getElementById('modal-nova-nf'); if (_nfFila.length && (!m || !m.classList.contains('open') || (dados.notasFiscais || []).length > n0)) setTimeout(_nfProxima, 300); else if (!_nfFila.length && _nfFilaTot && (!m || !m.classList.contains('open'))) { _nfFilaTot = 0; } return r; };
   const oC = window.closeModal; window.closeModal = function (id) { const r = oC.apply(this, arguments); return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.82: QUEM VINCULA O APROPRIADOR + BLOQUEIO AUTOMÁTICO DO APP
+// DP sobe o efetivo; quem vincula o apropriador (libera o app) é o master / Admin / Supervisor (ou perfil com "vincApont").
+// Tirou o apropriador ou o funcionário saiu (demissão / desligado) → acesso ao app fica Inativo sozinho; voltou → reativa.
+// ═══════════════════════════════════════════════════════════════
+function _podeVincApont() {
+  const u = typeof usuarioLogado !== 'undefined' ? usuarioLogado : null; if (!u) return false;
+  if (u.perfil === 'Admin' || u.master || u.dev || (typeof _okEhDev === 'function' && _okEhDev(u.email))) return true;
+  const p = perfilPorNome(u.perfil), v = p && p.perms ? p.perms.vincApont : undefined; return v === undefined ? /supervisor/i.test(u.perfil || '') : !!v;
+}
+function _fnSaiu(f) { const hj = _hojeLocal(); return f.status === 'Desligado' || (!!f.demissao && f.demissao <= hj); }
+function _usrsDoFunc(f) { const cpf = String(f.cpf || '').replace(/\D/g, '');
+  return USUARIOS.filter(u => (u.origem === 'apropriador' || u.perfil === 'Colaborador') && (u.funcId === f.id || (cpf.length === 11 && String(u.cpf || '').replace(/\D/g, '') === cpf))); }
+function _apropSinc(f, silencioso) {
+  const us = _usrsDoFunc(f); if (!us.length) return 0; const deveAtivo = f.apropriador === 'Sim' && !_fnSaiu(f); let n = 0;
+  us.forEach(u => {
+    if (!deveAtivo && u.status !== 'Inativo') { u.status = 'Inativo'; u.inativoAuto = true; u.inativoMotivo = _fnSaiu(f) ? 'saiu da obra' : 'deixou de ser apropriador'; u.inativoEm = new Date().toISOString(); n++;
+      if (!silencioso) toast('Acesso ao app de ' + f.nome + ' bloqueado (' + u.inativoMotivo + ').'); }
+    else if (deveAtivo && u.status === 'Inativo' && u.inativoAuto) { u.status = 'Ativo'; delete u.inativoAuto; delete u.inativoMotivo; delete u.inativoEm; n++; if (!silencioso) toast('Acesso ao app de ' + f.nome + ' reativado.'); }
+  });
+  if (n) try { saveUsuarios(); } catch (e) {}
+  return n;
+}
+function _apropSincTodos() { let n = 0; (dados.funcionarios || []).forEach(f => { n += _apropSinc(f, true); }); if (n) toast(n + ' acesso(s) ao app atualizados (apropriadores que saíram ficam bloqueados).'); return n; }
+(function () {
+  try { MODULOS.push(['vincApont', 'Vincular apropriador no funcionário (libera o acesso ao app de campo)', []]); } catch (e) {}
+  // cadastro do funcionário: quem não pode vincular vê o campo travado
+  const oOpen = window.openModal; window.openModal = function (id) { const r = oOpen.apply(this, arguments);
+    if (id === 'modal-novo-func') setTimeout(() => { const s = document.getElementById('func-aprop'); if (!s) return; const pode = _podeVincApont(); s.disabled = !pode;
+      let d = document.getElementById('func-aprop-trava'); if (!pode && !d) s.insertAdjacentHTML('afterend', '<div id="func-aprop-trava" style="font-size:11px;color:var(--text-3);margin-top:4px">🔒 Quem vincula o apropriador é a gestão da ferramenta (master / supervisor).</div>'); else if (pode && d) d.remove(); }, 60);
+    return r; };
+  const oSave = window.salvarFuncionario; window.salvarFuncionario = function () {
+    const idEd = document.getElementById('func-edit-id')?.value, ant = idEd ? ((dados.funcionarios || []).find(x => x.id === idEd) || {}).apropriador : 'Não';
+    if (!_podeVincApont()) { const s = document.getElementById('func-aprop'); if (s) s.value = ant === 'Sim' ? 'Sim' : 'Não'; }
+    const r = oSave.apply(this, arguments);
+    try { const f = idEd ? (dados.funcionarios || []).find(x => x.id === idEd) : null; if (f) _apropSinc(f); } catch (e) {}
+    return r; };
+  const oLote = window.fnApropLote; if (oLote) window.fnApropLote = fnApropLote = async function (sim) { if (!_podeVincApont()) { toast('Quem vincula o apropriador é a gestão da ferramenta (master / supervisor).', 'error'); return; }
+    const r = await oLote.apply(this, arguments); try { _apropSincTodos(); } catch (e) {} return r; };
+  // importação do efetivo pelo DP: funcionário novo entra sem apropriador se quem importa não pode vincular
+  try { const D = IMPORT_DEF.funcionarios; if (D) { const m = D.map; D.map = g => { const x = m(g); if (!_podeVincApont()) x.apropriador = 'Não'; return x; }; } } catch (e) {}
+  const oGrav = window._gravarImportados; window._gravarImportados = async function (tipo) { const r = await oGrav.apply(this, arguments); if (tipo === 'funcionarios') try { _apropSincTodos(); } catch (e) {} return r; };
+  // na abertura: quem gere a ferramenta sincroniza (pega quem teve a demissão vencida)
+  setTimeout(() => { try { if (_podeVincApont() && (dados.funcionarios || []).length && USUARIOS.length) _apropSincTodos(); } catch (e) {} }, 6000);
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
