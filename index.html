@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.78 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.79 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -20362,6 +20362,56 @@ function rpExcel() {
     try { const obra = _pgObraSel('pt-obra'); document.querySelectorAll('#pt-corpo > div:first-child > .card').forEach(c => { const nm = c.querySelector('.card-body > div:first-child > b')?.textContent; const e = (dados.prodTerceiros || []).find(p => p.obra === obra && (p.empresaNome || _ptEmpNome(p.empresa)) === nm);
       if (e && !c.querySelector('.rp-b')) c.querySelector('.card-body').insertAdjacentHTML('beforeend', `<button class="btn btn-outline btn-sm rp-b" style="margin-top:8px" onclick="rpAbrir('${_e(e.empresa)}')">📄 Relatório de produção</button>`); }); } catch (e) {}
     return r; }; })();
+// ═══════════════════════════════════════════════════════════════
+// v4.79: FARÓIS NO MENU — quem atualiza cada tela e com que frequência (para a apresentação)
+// verde APP = automático (celular) · azul = só aprovar (diário) · amarelo = semanal · cinza = cadastro pontual (sigla do setor dono)
+// ═══════════════════════════════════════════════════════════════
+const _FAR_TIPO = { g: ['Automático', 'vem dos lançamentos no celular — ninguém atualiza, só acompanha'], a: ['Validação diária', 'só aprovar o que veio do campo'], y: ['Semanal', 'planejamento da semana'], c: ['Cadastro pontual', 'feito no início da obra; só muda se o executivo, contrato ou cadastro mudar'] };
+const _FAR_SETOR = { APP: 'App de campo', ENG: 'Engenharia / encarregado', PLN: 'Planejamento', MTZ: 'Matriz (custos e engenharia)', SUP: 'Suprimentos', DP: 'Departamento pessoal', PRD: 'Produção', EQP: 'Equipamentos', MAN: 'Manutenção', ALM: 'Almoxarifado', ADM: 'Administrativo' };
+const _FAROL = {
+  'dashboard': 'g APP', 'dash-mo': 'g APP', 'dash-eq': 'g APP', 'dash-abs': 'g APP', 'diario': 'g APP', 'relatorios': 'g APP',
+  'aprovacao': 'a ENG', 'terceiros': 'a ENG', 'mm-aprov': 'a ENG',
+  'apon-mo': 'g APP', 'apon-eq': 'g APP', 'perdas': 'g APP', 'apon-diesel': 'g APP', 'rdos': 'g APP', 'avanco': 'g APP', 'partes-diarias': 'g APP', 'manut': 'g APP', 'tanques': 'g APP', 'frota-abast': 'g APP', 'frota-acerto': 'g APP',
+  'frentes': 'y PLN', 'programacao': 'y PLN',
+  'obras': 'c MTZ', 'orcamento': 'c MTZ', 'ua': 'c MTZ', 'tipos-perdas': 'c MTZ', 'tipos-servico': 'c PLN', 'qrcodes': 'c PLN',
+  'empresas': 'c SUP', 'forn-banco': 'c SUP', 'funcionarios': 'c DP', 'cargos': 'c DP', 'turnos': 'c DP', 'equipes': 'c PRD',
+  'equipamentos': 'c EQP', 'familias': 'c EQP', 'modelos': 'c EQP', 'planos-prev': 'c MAN', 'produtos': 'c MAN', 'notas-diesel': 'c ALM',
+  'frota': 'c ADM', 'frota-resp': 'c ADM', 'frota-multas': 'c ADM', 'republicas': 'c ADM', 'alojados': 'c ADM', 'usuarios': 'c ADM', 'config': 'c ADM' };
+function _farOn() { try { return localStorage.getItem('ok_farol') !== '0'; } catch (e) { return true; } }
+function farolToggle() { try { localStorage.setItem('ok_farol', _farOn() ? '0' : '1'); } catch (e) {} _farAplicar(); }
+function _farAplicar() {
+  const on = _farOn(); document.body.classList.toggle('far-off', !on);
+  const vis = {};
+  document.querySelectorAll('.sidebar .nav-item').forEach(it => { const pid = ((it.getAttribute('onclick') || '').match(/showPage\('([^']+)/) || [])[1], f = _FAROL[pid]; if (!f) return;
+    const [c, s] = f.split(' '); if (it.offsetParent !== null || it.closest('.nav-group')) vis[pid] = c;
+    let b = it.querySelector('.far-b'); if (!b) { it.insertAdjacentHTML('beforeend', `<span class="far-b far-${c}" title="${_FAR_TIPO[c][0]} · ${_FAR_SETOR[s] || s}: ${_FAR_TIPO[c][1]}"><i></i>${s}</span>`); } });
+  const ct = { g: 0, a: 0, y: 0, c: 0 }; Object.values(vis).forEach(c => ct[c]++);
+  let lg = document.getElementById('far-legenda'); const sb = document.querySelector('.sidebar'); if (!sb) return;
+  if (!lg) { sb.insertAdjacentHTML('beforeend', '<div id="far-legenda"></div>'); lg = document.getElementById('far-legenda'); }
+  lg.innerHTML = `<button class="far-tg" onclick="farolToggle()">${on ? '◉ Faróis ligados' : '○ Mostrar faróis'}</button>` + (on ? `<div class="far-lg">
+    <div><span class="far-b far-g"><i></i>APP</span> automático <b>${ct.g}</b></div><div><span class="far-b far-a"><i></i>ENG</span> aprovar · diário <b>${ct.a}</b></div>
+    <div><span class="far-b far-y"><i></i>PLN</span> semanal <b>${ct.y}</b></div><div><span class="far-b far-c"><i></i>DP·SUP</span> cadastro pontual <b>${ct.c}</b></div>
+    <div class="far-tot">${ct.g} telas se alimentam sozinhas · só ${ct.a + ct.y} têm rotina</div></div>` : '');
+}
+(function () {
+  document.head.insertAdjacentHTML('beforeend', `<style>
+  .far-b{margin-left:auto;flex-shrink:0;font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:1px 6px 1px 5px;border-radius:999px;display:inline-flex;gap:4px;align-items:center;line-height:1.5;font-family:inherit}
+  .nav-badge+.far-b,.nav-item .nav-badge~.far-b{margin-left:6px}
+  .far-b i{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .far-g{background:rgba(99,153,34,.22);color:#C0DD97}.far-g i{background:#97C459;box-shadow:0 0 5px #97C459}
+  .far-a{background:rgba(55,138,221,.22);color:#B5D4F4}.far-a i{background:#5FA8F0;box-shadow:0 0 5px #5FA8F0}
+  .far-y{background:rgba(239,159,39,.22);color:#FAC775}.far-y i{background:#EF9F27;box-shadow:0 0 5px #EF9F27}
+  .far-c{background:rgba(180,178,169,.16);color:#C9C7BE}.far-c i{background:#9a9890}
+  body.far-off .nav-item .far-b{display:none}
+  #far-legenda{margin:14px 12px 18px;padding:10px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;color:#AEB9CC}
+  .far-tg{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#D0DCF0;border-radius:8px;padding:6px;font-size:11.5px;cursor:pointer;font-family:inherit}
+  .far-lg{margin-top:8px;display:flex;flex-direction:column;gap:5px}.far-lg>div{display:flex;align-items:center;gap:6px}.far-lg .far-b{margin-left:0;min-width:42px;justify-content:center}.far-lg b{margin-left:auto;color:#fff}
+  .far-tot{margin-top:4px;color:#fff;font-weight:600;line-height:1.35}
+  @media(max-width:900px){#far-legenda{display:none}}
+  </style>`);
+  setTimeout(_farAplicar, 600); setTimeout(_farAplicar, 2500);
+  const oS = window.showPage; if (oS) showPage = window.showPage = function () { const r = oS.apply(this, arguments); try { if (!document.querySelector('#far-legenda')) _farAplicar(); else document.querySelectorAll('.sidebar .nav-item').forEach(it => { if (!it.querySelector('.far-b')) throw 0; }); } catch (e) { _farAplicar(); } return r; };
+})();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
