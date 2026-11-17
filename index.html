@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.84 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.85 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18827,7 +18827,8 @@ async function _kkGerar(nUsr) {
   }
   const CHUVA = new Set([dia(33), dia(19), dia(8)]), QUEBRA = { [dia(26)]: [0, 'Manutenção corretiva — mangueira estourada', 3.5], [dia(12)]: [2, 'Manutenção corretiva — defeito elétrico', 5], [dia(4)]: [6, 'Aguardando peças', 4] };
   const TQ = [sv('tanques', { id: 'kk_tq1', cod: 'TQ-01', nome: 'Tanque fixo do canteiro', cap: 15000, saldo: 8650, local: 'Canteiro', preco: 6.12, ativo: true, ...X }), sv('tanques', { id: 'kk_tq2', cod: 'CB-01', nome: 'Caminhão comboio', cap: 4000, saldo: 1820, local: 'Móvel', preco: 6.19, ativo: true, ...X })];
-  const ultAbs = EQ.map(() => null), lancou = i => FS[i].nome;
+  window._kkFl = {}; const ultAbs = EQ.map(() => null), lancou = i => FS[i].nome;
+
   let nAp = 0;
   for (let n = 42; n >= 1; n--) {
     const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0) continue;
@@ -18853,13 +18854,20 @@ async function _kkGerar(nUsr) {
           let lt = u ? (km ? (QH[qi] - u.h) / kml : (QH[qi] - u.h) * lh) : md[3] * .7;
           if (n === 15 && qi === 0) lt = 470;                   // alerta: acima do tanque
           if (n === 9 && qi === 2) lt = lt * 1.6;               // alerta: consumo acima do previsto
-          lt = Math.round(Math.max(30, Math.min(lt, n === 15 && qi === 0 ? 470 : md[3]))); const t = TQ[qi === 5 || qi === 6 ? 0 : (qi % 2)];
-          sv('diesel', { id: 'kk_d' + n + '_' + qi, dt: d + ' ' + (sab ? '10:' : '16:') + String(10 + qi * 5).padStart(2, '0'), equip: e.tag, equipId: e.id, litros: lt, hor: String(QH[qi]), tanque: t.cod, tanqueId: t.id, precoL: t.preco, preco: t.preco,
+          if (n === 22 && qi === 1) lt = lt * 1.7;              // v4.85: mais um consumo alto
+          const FL = window._kkFl = window._kkFl || {}; const over = n === 15 && qi === 0 ? 470 : n === 6 && qi === 5 ? 310 : (qi === 7 && n <= 27 && !FL.o7 && (FL.o7 = 1)) ? 260 : null;   // v4.85: acima do tanque
+          lt = over || Math.round(Math.max(30, Math.min(lt, md[3]))); const t = TQ[qi === 5 || qi === 6 ? 0 : (qi % 2)];
+          const horAbs = qi === 4 && n <= 12 && u && !FL.h4 && (FL.h4 = 1) ? String(u.h) : String(QH[qi]);   // v4.85: horímetro que não andou
+          sv('diesel', { id: 'kk_d' + n + '_' + qi, dt: d + ' ' + (sab ? '10:' : '16:') + String(10 + qi * 5).padStart(2, '0'), equip: e.tag, equipId: e.id, litros: lt, hor: horAbs, tanque: t.cod, tanqueId: t.id, precoL: t.preco, preco: t.preco,
             lancadoPor: FS[12].nome, status: pend ? 'campo' : 'aprovado', lancadoEm: d + 'T19:00:00.000Z', ...X });
           ultAbs[qi] = { n, h: QH[qi] }; }
       });
     });
   }
+  // v4.85: abastecimentos de hoje (pendentes) para a demonstração
+  [[0, '07:40', 120], [2, '08:15', 95], [5, '09:05', 180], [3, '10:20', 70]].forEach(([qi, h, lt], k) => { const e = EQ[qi], t = TQ[qi === 5 ? 0 : (qi % 2)];
+    sv('diesel', { id: 'kk_dh' + k, dt: dia(0) + ' ' + h, equip: e.tag, equipId: e.id, litros: lt, hor: String(r1(QH[qi] + (() => { const md = MOD.find(m => m[0] === e.codModelo) || []; return e.medidor === 'hodometro' ? lt * (md[5] || 2.4) : lt / (md[4] || 10) * 1.05; })())), tanque: t.cod, tanqueId: t.id, precoL: t.preco, preco: t.preco,
+      lancadoPor: FS[12].nome, status: 'campo', lancadoEm: dia(0) + 'T' + h + ':00.000Z', ...X }); });
   try { _kkProgramacao(O, sv); } catch (e) { console.warn('kk prog', e); }   // v4.47
   // ── partes diárias (últimos 6 dias úteis, 4 máquinas)
   let pdn = 0; for (let n = 8; n >= 1; n--) { const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;
@@ -20600,6 +20608,95 @@ function _chBlocoHTML(g, pend) {
         ${linhas.length > 8 ? `<div style="font-size:12px;color:var(--text-3)">+ ${linhas.length - 8}</div>` : ''}<div style="font-size:12px;color:var(--text-3);margin-top:4px">Ligue para os encarregados: a mesma pessoa ou máquina não pode estar em duas frentes no mesmo horário. Na aprovação, o card aparece marcado.</div></div></div>`;
       const k = pg.querySelector('#dd-equipes') || pg.querySelector('.dx-kpis'); if (k) k.insertAdjacentHTML('afterend', html); } catch (e) { console.warn('choque dia', e); }
     return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.85: ABASTECIMENTOS (DIESEL) — painel mais apresentável
+// Saldo total dos tanques · cards que filtram (hoje, mês, pendentes, com alerta) · colunas família, tanque, R$ e L/h · filtro por tanque e família
+// ═══════════════════════════════════════════════════════════════
+window._absQ = window._absQ || '';
+function absQ(q) { window._absQ = window._absQ === q ? '' : q; window._absSoAlerta = false; renderDiesel(); }
+function _absEq(d) { return (dados.equipamentos || []).find(e => e.id === d.equipId) || (dados.equipamentos || []).find(e => e.tag === d.equip || e.placa === d.equip) || null; }
+function _absTq(d) { return (dados.tanques || []).find(t => t.id === d.tanqueId) || (dados.tanques || []).find(t => t.cod && t.cod === d.tanque) || null; }
+function _absPreco(d) { const t = _absTq(d); return +d.precoL || +d.preco || (t && +t.preco) || 0; }
+function _absFam(d) { const e = _absEq(d), c = e ? (e.familia || e.codFamilia) : ''; return c ? ((typeof _nomeFamilia === 'function' && _nomeFamilia(c)) || c) : '—'; }
+function _absDia(dt) { const s = String(dt || ''); return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4); }
+(function () {
+  const pg = document.getElementById('page-apon-diesel'); if (!pg) return;
+  document.head.insertAdjacentHTML('beforeend', `<style>
+  #abs-topo{display:grid;grid-template-columns:1.5fr repeat(4,1fr);gap:12px;margin-bottom:14px}
+  .abs-k{background:var(--surface,var(--card));border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;transition:transform .12s,box-shadow .12s;position:relative;min-width:0}
+  .abs-k:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.08)} .abs-k.on{border-color:var(--red);box-shadow:0 0 0 2px var(--red)}
+  .abs-k .l{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);font-weight:700} .abs-k .v{font-size:26px;font-weight:900;margin-top:4px;line-height:1.1;font-family:var(--mono,inherit)}
+  .abs-k .s{font-size:12px;color:var(--text-3);margin-top:3px} .abs-k .ic{position:absolute;right:14px;top:12px;font-size:20px;opacity:.85}
+  .abs-tq{cursor:default} .abs-tq .bar{height:8px;border-radius:6px;background:var(--border);margin-top:8px;overflow:hidden} .abs-tq .bar i{display:block;height:100%;border-radius:6px}
+  .abs-tq .ln{display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:6px;color:var(--text-2)} .abs-tq .ln b{font-family:var(--mono,inherit)}
+  #abs-chip{display:none;margin:-4px 0 12px;font-size:12.5px} #abs-chip span{background:var(--red-light,#FEE2E2);color:var(--red);border-radius:999px;padding:4px 12px;font-weight:700;cursor:pointer}
+  #tbody-diesel tr.abs-al td:first-child{box-shadow:inset 3px 0 0 #DC2626}
+  #tbody-diesel .sm{font-size:11.5px;color:var(--text-3);margin-top:2px} #tbody-diesel .lt{font-weight:800;font-family:var(--mono,inherit)}
+  .abs-fam{display:inline-block;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 9px;white-space:nowrap}
+  .abs-tqb{display:inline-block;font-size:11.5px;font-weight:700;border-radius:6px;padding:2px 7px;background:rgba(37,99,235,.1);color:#2563EB}
+  @media(max-width:1200px){#abs-topo{grid-template-columns:repeat(2,1fr)}}
+  </style>`);
+  // esconde os blocos antigos (pills e cards) e coloca o topo novo
+  const pills = [...pg.children].find(el => el.textContent.includes('Rápido:')); if (pills) pills.style.display = 'none';
+  const st = pg.querySelector('.stats-grid'); if (st) { st.style.display = 'none'; st.insertAdjacentHTML('beforebegin', '<div id="abs-topo"></div><div id="abs-chip"></div>'); }
+  // filtro por tanque + família funcionando
+  const fs = document.getElementById('filtro-abs-status'); if (fs && !document.getElementById('filtro-abs-tanque')) fs.closest('.form-group').insertAdjacentHTML('afterend', '<div class="form-group" style="min-width:150px"><label class="form-label">Tanque</label><select class="form-control" id="filtro-abs-tanque" onchange="renderDiesel()"><option value="">Todos</option></select></div>');
+  ['filtro-abs-tag', 'filtro-abs-familia', 'filtro-abs-status'].forEach(id => { const el = document.getElementById(id); if (el) el.onchange = () => renderDiesel(); });
+  const th = pg.querySelector('table thead'); if (th) th.innerHTML = '<tr><th>Data</th><th>Equipamento</th><th>Família</th><th>Tanque</th><th style="text-align:right">Litros</th><th>Horímetro / km</th><th>Lançado por</th><th>Alerta</th><th>Status</th><th></th></tr>';
+  const oLimpar = window.limparFiltrosAbs; window.limparFiltrosAbs = function () { window._absQ = ''; const t = document.getElementById('filtro-abs-tanque'); if (t) t.value = ''; return oLimpar ? oLimpar.apply(this, arguments) : renderDiesel(); };
+
+  renderDiesel = window.renderDiesel = function () {
+    const v = id => (document.getElementById(id) || {}).value || '';
+    const ini = v('filtro-abs-ini'), fim = v('filtro-abs-fim'), tagF = v('filtro-abs-tag'), famF = v('filtro-abs-familia'), stF = v('filtro-abs-status'), tqF = v('filtro-abs-tanque');
+    const o = _okObraAtual(), hj = hoje(), mes = hj.slice(0, 7), Q = window._absQ || (window._absSoAlerta ? 'alerta' : '');
+    const base = (dados.diesel || []).filter(d => o === 'todas' || !d.obra || d.obra === o);
+    // opções dos selects
+    const fill = (id, vals, lbl) => { const el = document.getElementById(id); if (!el) return; const cur = el.value; el.innerHTML = `<option value="">${lbl}</option>` + vals.map(([k, t]) => `<option value="${_e(k)}">${_e(t)}</option>`).join(''); el.value = vals.some(x => x[0] === cur) ? cur : ''; };
+    fill('filtro-abs-tag', [...new Set(base.map(d => d.equip).filter(Boolean))].sort().map(t => [t, t]), 'Todos');
+    fill('filtro-abs-familia', [...new Set(base.map(_absFam).filter(x => x && x !== '—'))].sort().map(t => [t, t]), 'Todas');
+    const tqs = (dados.tanques || []).filter(t => o === 'todas' || !t.obra || t.obra === o); fill('filtro-abs-tanque', tqs.map(t => [t.id, (t.cod ? t.cod + ' · ' : '') + (t.nome || '')]), 'Todos');
+    let L = base;
+    if (ini) L = L.filter(d => String(d.dt).slice(0, 10) >= ini); if (fim) L = L.filter(d => String(d.dt).slice(0, 10) <= fim);
+    if (tagF) L = L.filter(d => d.equip === tagF); if (famF) L = L.filter(d => _absFam(d) === famF); if (stF) L = L.filter(d => d.status === stF);
+    if (tqF) L = L.filter(d => (_absTq(d) || {}).id === tqF);
+    if (Q === 'hoje') L = L.filter(d => String(d.dt).startsWith(hj)); if (Q === 'mes') L = L.filter(d => String(d.dt).startsWith(mes));
+    if (Q === 'pend') L = L.filter(d => d.status === 'campo'); if (Q === 'alerta') L = L.filter(d => _absAlertas(d).length);
+    // ── topo
+    const soma = l => l.reduce((s, d) => s + (+d.litros || 0), 0), rs = l => l.reduce((s, d) => s + (+d.litros || 0) * _absPreco(d), 0), fL = x => Math.round(x).toLocaleString('pt-BR');
+    const bh = base.filter(d => String(d.dt).startsWith(hj)), bm = base.filter(d => String(d.dt).startsWith(mes)), bp = base.filter(d => d.status === 'campo'), ba = base.filter(d => _absAlertas(d).length);
+    const sd = tqs.reduce((s, t) => s + (+t.saldo || 0), 0), cp = tqs.reduce((s, t) => s + _tqCap(t), 0), pc = cp ? Math.max(0, Math.min(100, sd / cp * 100)) : 0, cor = p => p < 20 ? '#DC2626' : p < 40 ? '#D97706' : '#16A34A';
+    const topo = document.getElementById('abs-topo');
+    if (topo) topo.innerHTML = `
+      <div class="abs-k abs-tq" onclick="showPage('tanques')" style="cursor:pointer" title="Abrir Tanques e estoque"><span class="ic">⛽</span><div class="l">Saldo nos tanques</div><div class="v" style="color:${cor(pc)}">${fL(sd)} L</div>
+        <div class="s">${cp ? 'de ' + fL(cp) + ' L · ' + Math.round(pc) + '% · ' : ''}${tqs.length} tanque(s)</div>${cp ? `<div class="bar"><i style="width:${pc}%;background:${cor(pc)}"></i></div>` : ''}
+        ${tqs.slice(0, 3).map(t => { const c = _tqCap(t), p = c ? (+t.saldo || 0) / c * 100 : 0; return `<div class="ln"><span>${_e(t.cod || t.nome)}</span><b style="color:${cor(p)}">${fL(+t.saldo || 0)} L${c ? ' · ' + Math.round(p) + '%' : ''}</b></div>`; }).join('')}</div>
+      <div class="abs-k ${Q === 'hoje' ? 'on' : ''}" onclick="absQ('hoje')"><span class="ic">📅</span><div class="l">Hoje</div><div class="v">${fL(soma(bh))} L</div><div class="s">${bh.length} abastecimento(s) · R$ ${fL(rs(bh))}</div></div>
+      <div class="abs-k ${Q === 'mes' ? 'on' : ''}" onclick="absQ('mes')"><span class="ic">🗓</span><div class="l">No mês</div><div class="v">${fL(soma(bm))} L</div><div class="s">${bm.length} abastecimento(s) · R$ ${fL(rs(bm))}</div></div>
+      <div class="abs-k ${Q === 'pend' ? 'on' : ''}" onclick="absQ('pend')"><span class="ic">⏳</span><div class="l">Pendentes</div><div class="v" style="color:#D97706">${bp.length}</div><div class="s">aguardando aprovação · ${fL(soma(bp))} L</div></div>
+      <div class="abs-k ${Q === 'alerta' ? 'on' : ''}" onclick="absQ('alerta')"><span class="ic">⚠️</span><div class="l">Com alerta</div><div class="v" style="color:${ba.length ? '#DC2626' : 'inherit'}">${ba.length}</div><div class="s">acima do tanque, consumo alto ou horímetro parado</div></div>`;
+    const chip = document.getElementById('abs-chip'), nomes = { hoje: 'Hoje', mes: 'No mês', pend: 'Pendentes', alerta: 'Com alerta' };
+    if (chip) { chip.style.display = Q ? 'block' : 'none'; chip.innerHTML = Q ? `<span onclick="absQ('${Q}')">Filtrando: ${nomes[Q]} · ${L.length} registro(s) ✕</span>` : ''; }
+    const at = document.getElementById('abs-atualizado'); if (at) at.textContent = 'Atualizado às ' + new Date().toTimeString().slice(0, 5) + ' · ' + L.length + ' registro(s) · ' + fL(soma(L)) + ' L · R$ ' + fL(rs(L));
+    const M = _absMapa();
+    document.getElementById('tbody-diesel').innerHTML = L.length ? _linhasLimitadas('tbody-diesel', _maisRecentes(L, 'dt'), d => { const e = _absEq(d), t = _absTq(d), al = _absAlertas(d), mp = M[d.id] || {}, pr = _absPreco(d);
+      const mod = e ? ((dados.modelos || []).find(m => m.cod === e.codModelo) || {}).nome || e.modelo || '' : '';
+      return `<tr class="${al.length ? 'abs-al' : ''}">
+        <td style="white-space:nowrap"><b>${_absDia(d.dt)}</b><div class="sm">${_e(String(d.dt).slice(11, 16))}</div></td>
+        <td><strong>${_e(d.equip)}</strong><div class="sm">${_e(mod)}${d.obs ? ' · ' + _e(d.obs) : ''}</div></td>
+        <td><span class="abs-fam">${_e(_absFam(d))}</span></td>
+        <td>${t ? `<span class="abs-tqb">${_e(t.cod || 'TQ')}</span><div class="sm">${_e(t.nome || '')}</div>` : '<span style="color:var(--text-3)">—</span>'}</td>
+        <td style="text-align:right;white-space:nowrap"><span class="lt">${(+d.litros || 0).toLocaleString('pt-BR')} L</span><div class="sm">${pr ? 'R$ ' + ((+d.litros || 0) * pr).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</div></td>
+        <td style="white-space:nowrap">${_e(d.hor ?? '—')}${d.fotoHor ? ` <button class="btn btn-outline btn-sm" style="padding:2px 7px;font-size:11px" onclick="verFotoHorimetro('${d.fotoHor}','${_e(d.equip)}')" title="Foto do horímetro">📷</button>` : ''}<div class="sm">${e && e.medidor === 'hodometro' ? (mp.dh && +d.litros ? _fmtN(mp.dh / +d.litros) + ' km/L' + (((dados.modelos || []).find(m => m.cod === e.codModelo) || {}).consumoKmL ? ' · prev. ' + _fmtN(((dados.modelos || []).find(m => m.cod === e.codModelo) || {}).consumoKmL) : '') : '') : (mp.lph ? _fmtN(mp.lph) + ' L/h' + (mp.prev ? ' · prev. ' + _fmtN(mp.prev) : '') : '')}</div></td>
+        <td>${_e(d.lancadoPor || 'Escritório')}</td>
+        <td style="max-width:240px">${_absAlertaHtml(d)}</td>
+        <td>${tagStatus(d.status)}</td>
+        <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" style="padding:3px 8px;font-size:12px" onclick="verTicket('${d.id}')" title="Ver ticket">🧾</button> ${acoesCell(`corrigirDiesel('${d.id}')`, `deletar('diesel','${d.id}')`)}</td></tr>`; }, 10, 'renderDiesel')
+      : '<tr><td colspan="10" style="text-align:center;color:var(--text-3);padding:2rem">Nenhum abastecimento com esses filtros</td></tr>';
+    try { atualizarBadgeAprovacao && atualizarBadgeAprovacao(); } catch (e) {}
+  };
+  window.absSoAlertas = function () { absQ('alerta'); };
+  window.filtroRapidoAbs = function (s) { window._absQ = s === 'campo' ? 'pend' : ''; const el = document.getElementById('filtro-abs-status'); if (el && s !== 'campo') el.value = s; renderDiesel(); };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
