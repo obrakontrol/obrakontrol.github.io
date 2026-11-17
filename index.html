@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.86 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.87 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -2135,7 +2135,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <div><div class="page-title">Registro de Perdas</div><div class="page-sub">Horas improdutivas de MO e equipamentos</div></div>
     <div class="btn-group">
       <button class="btn btn-outline btn-sm" onclick="exportarCSV('perdas')">↓ Exportar CSV</button>
-      <button class="btn btn-primary" onclick="openModal('modal-nova-perda')">+ Nova perda</button>
+      <button class="btn btn-primary" onclick="openModal('modal-nova-perda')">+ Nova interferência</button>
     </div>
   </div>
   <div class="alert alert-warning">
@@ -12993,7 +12993,7 @@ function _ehMaster() { const u = usuarioLogado; return !!(u && (u.master || u.de
   tit('apon-mo', 'Lançamentos de MO'); tit('apon-eq', 'Lançamentos de EQ'); tit('apon-diesel', 'Abastecimentos — controle de diesel');
   tit('perdas', 'Interferências'); tit('tipos-perdas', 'Tipos de interferência'); tit('cargos', 'Funções'); tit('empresas', 'Fornecedores'); tit('qrcodes', 'QR Codes e placas');
   const sub = (pg, t) => { const e = document.querySelector('#page-' + pg + ' .page-sub'); if (e) e.textContent = t; };
-  sub('perdas', 'Horas paradas de pessoas e equipamentos registradas no campo');
+  sub('perdas', 'Horas improdutivas de pessoas e equipamentos e quanto custaram (no app: paradas)');
   sub('tipos-perdas', 'Lista padrão da empresa — vale para todas as obras. Só o Master altera.');
 
   // permissões: cada item aparece se a pessoa pode ver a tela; o grupo aparece se tiver algum item
@@ -18825,6 +18825,8 @@ async function _kkGerar(nUsr) {
           obs: '', fotos: [], origem: 'interno', lancadoPor: 'Apontador ' + (1 + (k % 3)), lancadoEm: dt + 'T16:30:00', status: st, motivo: st === 'recusado' ? 'Quantidade acima do medido na frente — refazer' : '',
           ua: u ? u.cod : '', uaNome: u ? u.nome : '', preco: st === 'aprovado' ? preco : null, valor: st === 'aprovado' ? r2(qtd * preco) : null, aprovadoPor: st === 'pendente' ? '' : 'Custos', ...K }); })); }
   }
+  /* v4.87: interferências variadas para a demonstração [motivo, horas, equipe] */
+  const INTF = { [dia(30)]: ['Interferência com rede da concessionária', 2, 0], [dia(27)]: ['Aguardando material', 1.5, 1], [dia(23)]: ['Frente não liberada', 3, 2], [dia(16)]: ['Aguardando topografia', 1, 3], [dia(13)]: ['Paralisação pela comunidade', 2, 0], [dia(9)]: ['Aguardando caminhão de bota-fora', 1.5, 4], [dia(5)]: ['Interferência com rede da concessionária', 2.5, 1], [dia(3)]: ['Aguardando material', 1, 2] };
   const CHUVA = new Set([dia(33), dia(19), dia(8)]), QUEBRA = { [dia(26)]: [0, 'Manutenção corretiva — mangueira estourada', 3.5], [dia(12)]: [2, 'Manutenção corretiva — defeito elétrico', 5], [dia(4)]: [6, 'Aguardando peças', 4] };
   const TQ = [sv('tanques', { id: 'kk_tq1', cod: 'TQ-01', nome: 'Tanque fixo do canteiro', cap: 15000, saldo: 8650, local: 'Canteiro', preco: 6.12, ativo: true, ...X }), sv('tanques', { id: 'kk_tq2', cod: 'CB-01', nome: 'Caminhão comboio', cap: 4000, saldo: 1820, local: 'Móvel', preco: 6.19, ativo: true, ...X })];
   window._kkFl = {}; const ultAbs = EQ.map(() => null), lancou = i => FS[i].nome;
@@ -18843,11 +18845,16 @@ async function _kkGerar(nUsr) {
       let k = 0;
       g.mo.forEach(fi => { if (R() < .05) return; const f = FS[fi];
         sv('aponMO', { ...base, id: 'kk_am' + nAp + '_' + fi, hora: hIni, horaIni: hIni, horaFim: hFim, hn, he: heX, qtd: k === 0 ? Math.max(1, Math.round(qtd)) : 0, unid: s.unidade, func: f.nome, funcao: f.codFuncao, mat: f.mat, empresa: f.empresa }); k++;
+        const itf = INTF[d] && INTF[d][2] === gi ? INTF[d] : null;
+        if (itf) sv('perdas', { ...base, id: 'kk_pi' + nAp + '_' + fi, tipo: 'Mão de Obra', motivo: itf[0], horaIni: '13:30', horaFim: _chHora(810 + itf[1] * 60), horas: itf[1], escopo: 'tudo', recurso: f.nome, mat: f.mat, funcao: f.codFuncao });
         if (parH) sv('perdas', { ...base, id: 'kk_pm' + nAp + '_' + fi, tipo: 'Mão de Obra', motivo: 'Chuva', horaIni: '09:10', horaFim: '10:' + String(Math.round((parH - 1) * 60) + 10).padStart(2, '0'), horas: parH, escopo: 'tudo', recurso: f.nome, mat: f.mat, funcao: f.codFuncao }); });
       g.eq.forEach(qi => { const e = EQ[qi], km = e.medidor === 'hodometro', q = QUEBRA[d] && QUEBRA[d][0] === qi ? QUEBRA[d] : null;
         const hpar = Math.round(parH + (q ? q[2] : 0) + (!q && R() < .12 ? 1 : 0)), tot = sab ? 4 : 9, hp = Math.max(0, tot - hpar - (R() < .3 ? 1 : 0));
         QH[qi] = r1(QH[qi] + (km ? 60 + R() * 70 : hp)); const op = FS[g.op[qi]];
         sv('aponEQ', { ...base, id: 'kk_ae' + nAp + '_' + qi, hora: hIni, horaIni: hIni, horaFim: hFim, fotoHor: '', hp, hpar, motivo: q ? q[1] : chuva ? 'Chuva' : hpar ? 'Aguardando frente' : '', hor: QH[qi], equip: e.tag, equipId: e.id, tipo: e.familia, operador: op ? op.nome : '' });
+        { const itf = INTF[d] && INTF[d][2] === gi ? INTF[d] : null; if (itf) sv('perdas', { ...base, id: 'kk_pj' + nAp + '_' + qi, tipo: 'Equipamento', motivo: itf[0], horaIni: '13:30', horaFim: _chHora(810 + itf[1] * 60), horas: itf[1], escopo: 'tudo', recurso: e.tag, equipId: e.id });
+          if (q) sv('perdas', { ...base, id: 'kk_pq' + nAp + '_' + qi, tipo: 'Equipamento', motivo: q[1].startsWith('Aguardando') ? 'Aguardando peças' : 'Manutenção corretiva', obs: q[1], horaIni: '08:00', horaFim: _chHora(480 + q[2] * 60), horas: q[2], escopo: 'tudo', recurso: e.tag, equipId: e.id });
+          else if (!chuva && hpar) sv('perdas', { ...base, id: 'kk_pf' + nAp + '_' + qi, tipo: 'Equipamento', motivo: 'Aguardando frente', horaIni: '14:00', horaFim: _chHora(840 + hpar * 60), horas: hpar, escopo: 'tudo', recurso: e.tag, equipId: e.id }); }
         if (parH) sv('perdas', { ...base, id: 'kk_pe' + nAp + '_' + qi, tipo: 'Equipamento', motivo: 'Chuva', horaIni: '09:10', horaFim: '10:30', horas: parH, escopo: 'tudo', recurso: e.tag, equipId: e.id });
         // diesel: a cada 2–3 dias de uso
         const u = ultAbs[qi]; if (!u || n <= u.n - RI(2, 3)) { const md = MOD.find(m => m[0] === e.codModelo), lh = md[4], kml = md[5];
@@ -18949,7 +18956,7 @@ async function _kkGerar(nUsr) {
     // 3) equipes (uma por frente de trabalho, com o encarregado como líder)
     EQP.forEach((g, gi) => { const lid = FS[g.ap]; sv('equipes', { id: 'kk_eqp' + gi, cod: 'EQ-' + String(gi + 1).padStart(2, '0'), nome: 'Equipe ' + (gi + 1) + ' · ' + ([].concat(g.fr).map(i => FR[i].cod).filter((v, j, a) => a.indexOf(v) === j).join(' / ')), lider: lid.mat, membros: g.mo.map(i => FS[i].mat), obs: '', obra: O, ...K }); });
     // 4) tipos de perda (se ainda não houver)
-    if (!(dados.tiposPerdas || []).length) [['CHU', 'Chuva', 'Ambos', 'blue'], ['MAN', 'Manutenção corretiva', 'EQ', 'red'], ['PEC', 'Aguardando peças', 'EQ', 'amber'], ['FRE', 'Aguardando frente', 'Ambos', 'amber'], ['MAT', 'Falta de material', 'Ambos', 'gray'], ['INT', 'Interferência', 'Ambos', 'gray']]
+    if (!(dados.tiposPerdas || []).length) [['CHU', 'Chuva', 'Ambos', 'blue'], ['MAN', 'Manutenção corretiva', 'EQ', 'red'], ['PEC', 'Aguardando peças', 'EQ', 'amber'], ['FRE', 'Aguardando frente', 'Ambos', 'amber'], ['MAT', 'Aguardando material', 'Ambos', 'gray'], ['INT', 'Interferência com rede da concessionária', 'Ambos', 'gray'], ['LIB', 'Frente não liberada', 'Ambos', 'amber'], ['TOP', 'Aguardando topografia', 'Ambos', 'gray'], ['COM', 'Paralisação pela comunidade', 'Ambos', 'red'], ['BOT', 'Aguardando caminhão de bota-fora', 'Ambos', 'gray']]
       .forEach(([cod, nome, aplica, cor], i) => sv('tiposPerdas', { id: 'kk_tp' + i, cod, nome, aplica, cor, obs: '', ...K }));
     // 5) notas fiscais de diesel e movimentação do tanque fixo
     let saldo = 6200; const T1 = TQ[0];
@@ -20697,6 +20704,70 @@ function _absDia(dt) { const s = String(dt || ''); return s.slice(8, 10) + '/' +
   };
   window.absSoAlertas = function () { absQ('alerta'); };
   window.filtroRapidoAbs = function (s) { window._absQ = s === 'campo' ? 'pend' : ''; const el = document.getElementById('filtro-abs-status'); if (el && s !== 'campo') el.value = s; renderDiesel(); };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.87: INTERFERÊNCIAS — total de horas improdutivas e custo (pessoas e equipamentos), por motivo, com filtros
+// Custo = horas improdutivas × custo/hora (MO: salário/função da obra; EQ: custo/h do equipamento)
+// ═══════════════════════════════════════════════════════════════
+window._itf = window._itf || { de: '', ate: '', tipo: '', mot: '' };
+function _itfMO(p) { return p.tipo === 'mo' || p.tipo === 'Mão de Obra'; }
+function _itfMotivo(p) { const tp = (dados.tiposPerdas || []).find(t => t.cod === p.motivo); return tp ? tp.nome : (p.motivo || '—'); }
+function _itfCusto(p) { const h = +p.horas || 0; if (!h) return 0;
+  try { if (_itfMO(p)) { const c = custoMO({ mat: p.mat, func: p.recurso, funcao: p.funcao, hn: h, he: 0, data: p.data, frente: p.frente, obra: p.obra }); return (c.normal || 0) + (c.extra || 0) + (c.domFer || 0); }
+    return (custoEQ({ equipId: p.equipId, equip: p.recurso, hp: 0, hpar: h, data: p.data, frente: p.frente, obra: p.obra }) || {}).parado || 0; } catch (e) { return 0; } }
+function itfF(k, v) { window._itf[k] = window._itf[k] === v && (k === 'tipo' || k === 'mot') ? '' : v; renderPerdas(); }
+(function () {
+  const pg = document.getElementById('page-perdas'); if (!pg) return;
+  document.head.insertAdjacentHTML('beforeend', `<style>
+  #itf-topo{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+  .itf-k{background:var(--surface,var(--card));border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;min-width:0}.itf-k.on{border-color:var(--red);box-shadow:0 0 0 2px var(--red)}
+  .itf-k .l{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);font-weight:700}.itf-k .v{font-size:25px;font-weight:900;margin-top:4px;font-family:var(--mono,inherit)}.itf-k .s{font-size:12px;color:var(--text-3);margin-top:3px}
+  #itf-mot{background:var(--surface,var(--card));border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+  .itf-r{display:grid;grid-template-columns:minmax(160px,1.4fr) 3fr 90px 110px;gap:12px;align-items:center;padding:6px 4px;border-radius:8px;cursor:pointer;font-size:13px}.itf-r:hover{background:var(--bg)}.itf-r.on{background:rgba(220,38,38,.08)}
+  .itf-b{height:12px;border-radius:6px;background:var(--border);overflow:hidden;display:flex}.itf-b i{display:block;height:100%}
+  .itf-fl{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}.itf-fl .form-group{margin:0}
+  @media(max-width:1100px){#itf-topo{grid-template-columns:repeat(2,1fr)}.itf-r{grid-template-columns:1fr 2fr 70px 90px}}
+  </style>`);
+  const al = pg.querySelector('.alert'); if (al) al.style.display = 'none';
+  const cardT = pg.querySelector('.card'); if (cardT && !document.getElementById('itf-topo')) cardT.insertAdjacentHTML('beforebegin', `<div class="itf-fl">
+    <div class="form-group"><label class="form-label">De</label><input type="date" class="form-control" id="itf-de" onchange="_itf.de=this.value;renderPerdas()"/></div>
+    <div class="form-group"><label class="form-label">Até</label><input type="date" class="form-control" id="itf-ate" onchange="_itf.ate=this.value;renderPerdas()"/></div>
+    <button class="btn btn-outline btn-sm" onclick="const h=hoje();_itf.de=h.slice(0,8)+'01';_itf.ate=h;document.getElementById('itf-de').value=_itf.de;document.getElementById('itf-ate').value=_itf.ate;renderPerdas()">Este mês</button>
+    <button class="btn btn-outline btn-sm" onclick="window._itf={de:'',ate:'',tipo:'',mot:''};document.getElementById('itf-de').value='';document.getElementById('itf-ate').value='';renderPerdas()">✕ Limpar</button></div>
+    <div id="itf-topo"></div><div id="itf-mot"></div>`);
+  const th = pg.querySelector('table thead'); if (th) th.innerHTML = '<tr><th>Data</th><th>Tipo</th><th>Recurso</th><th>Motivo</th><th style="text-align:right">Horas improdutivas</th><th style="text-align:right">Custo</th><th>Frente</th><th>Lançado por</th><th></th></tr>';
+  const oR = window.renderPerdas;
+  const nv = function () {
+    const ob = typeof obraAtiva !== 'undefined' && obraAtiva && obraAtiva.id && obraAtiva.id !== 'todas' ? obraAtiva.id : '', de = ob ? _lancObraMapa() : null;
+    const F = window._itf; let base = (dados.perdas || []).filter(p => !ob || de(p) === ob);
+    if (F.de) base = base.filter(p => String(p.data) >= F.de); if (F.ate) base = base.filter(p => String(p.data) <= F.ate);
+    let L = base; if (F.tipo) L = L.filter(p => F.tipo === 'mo' ? _itfMO(p) : !_itfMO(p)); if (F.mot) L = L.filter(p => _itfMotivo(p) === F.mot);
+    const vp = typeof _vePessoal === 'function' ? _vePessoal() : true, R$ = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR'), H = v => (Math.round(v * 10) / 10).toLocaleString('pt-BR') + ' h';
+    const sum = (l, f) => l.reduce((s, p) => s + f(p), 0), hor = p => +p.horas || 0;
+    const lm = base.filter(_itfMO), le = base.filter(p => !_itfMO(p)), cm = sum(lm, _itfCusto), ce = sum(le, _itfCusto), hm = sum(lm, hor), he = sum(le, hor);
+    const mots = {}; base.forEach(p => { const k = _itfMotivo(p), m = mots[k] = mots[k] || { hm: 0, he: 0, c: 0, cm: 0, n: 0 }, cc = _itfCusto(p); if (_itfMO(p)) { m.hm += hor(p); m.cm += cc; } else m.he += hor(p); m.c += cc; m.n++; });
+    const ML = Object.entries(mots).sort((a, b) => b[1].c - a[1].c), top = ML[0], maxC = Math.max(1, ...ML.map(x => x[1].c));
+    const t = document.getElementById('itf-topo');
+    if (t) t.innerHTML = `
+      <div class="itf-k ${!F.tipo ? '' : ''}" onclick="itfF('tipo','')"><div class="l">Horas improdutivas</div><div class="v">${H(hm + he)}</div><div class="s">${base.length} registro(s) · ${new Set(base.map(p => p.data)).size} dia(s)</div></div>
+      <div class="itf-k ${F.tipo === 'mo' ? 'on' : ''}" onclick="itfF('tipo','mo')"><div class="l">Pessoas</div><div class="v" style="color:#16A34A">${H(hm)}</div><div class="s">custo ${R$(cm)}</div></div>
+      <div class="itf-k ${F.tipo === 'eq' ? 'on' : ''}" onclick="itfF('tipo','eq')"><div class="l">Equipamentos</div><div class="v" style="color:#2563EB">${H(he)}</div><div class="s">custo ${R$(ce)}</div></div>
+      <div class="itf-k" style="border-color:rgba(220,38,38,.5)"><div class="l">Custo das interferências</div><div class="v" style="color:#DC2626">${R$(cm + ce)}</div><div class="s">${top ? 'maior: ' + _e(top[0]) + ' (' + Math.round(top[1].c / Math.max(1, cm + ce) * 100) + '%)' : '—'}</div></div>`;
+    const m = document.getElementById('itf-mot');
+    if (m) m.innerHTML = !ML.length ? '' : `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>Por motivo</b><span style="font-size:12px;color:var(--text-3)"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#16A34A"></span> pessoas &nbsp; <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#2563EB"></span> equipamentos · clique para filtrar</span></div>` +
+      ML.map(([k, v]) => `<div class="itf-r ${F.mot === k ? 'on' : ''}" onclick="itfF('mot',${_e(JSON.stringify(k))})"><div><b>${_e(k)}</b><div style="font-size:11.5px;color:var(--text-3)">${v.n} registro(s) · ${H(v.hm)} pessoas · ${H(v.he)} equip.</div></div>
+        <div class="itf-b" style="width:${Math.max(4, v.c / maxC * 100)}%"><i style="width:${v.c ? v.cm / v.c * 100 : 50}%;background:#16A34A"></i><i style="flex:1;background:#2563EB"></i></div>
+        <div style="text-align:right;font-family:var(--mono,inherit)">${H(v.hm + v.he)}</div><div style="text-align:right;font-weight:800;font-family:var(--mono,inherit)">${R$(v.c)}</div></div>`).join('');
+    window.__itfMot = mots;
+    document.getElementById('tbody-perdas').innerHTML = L.length ? _linhasLimitadas('tbody-perdas', _maisRecentes(L, 'data'), p => { const mo = _itfMO(p), c = _itfCusto(p);
+      return `<tr><td class="td-mono" style="white-space:nowrap">${fmtData(p.data)}${p.horaIni ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(p.horaIni)}${p.horaFim ? '–' + _e(p.horaFim) : ''}</div>` : ''}</td>
+        <td>${tag(mo ? 'Pessoa' : 'Equipamento', mo ? 'green' : 'blue')}</td><td><strong>${_e(p.recurso || '—')}</strong>${p.obs ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(p.obs)}</div>` : ''}</td>
+        <td>${_e(_itfMotivo(p))}</td><td class="td-mono" style="text-align:right">${H(+p.horas || 0)}</td>
+        <td class="td-mono" style="text-align:right">${mo && !vp ? '<span style="color:var(--text-3)" title="Custo de pessoal restrito">🔒</span>' : (c ? R$(c) : '—')}</td>
+        <td>${_e(p.frente || '—')}</td><td>${_e(p.lancadoPor || '—')}</td><td>${acoesCell('', `deletar('perdas','${p.id}')`)}</td></tr>`; }, 9, 'renderPerdas')
+      : '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:2rem">Nenhuma interferência com esses filtros</td></tr>';
+  };
+  window.renderPerdas = nv; try { renderPerdas = nv; } catch (e) {}
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
