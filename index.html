@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.76 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.77 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18714,11 +18714,20 @@ function _kkProg(t) { let o = document.getElementById('kk-prog');
 async function _kkGravar(lista) {   // [[col, obj], ...] em lotes
   for (let i = 0; i < lista.length; i += 60) {
     _kkProg('Gravando ' + Math.min(i + 60, lista.length) + ' de ' + lista.length + ' registros…');
-    await Promise.all(lista.slice(i, i + 60).map(([c, o]) => fbSave(c, o.id, o).catch(e => console.warn('kk', c, e))));
+    await Promise.all(lista.slice(i, i + 60).map(([c, o]) => (db && _firebaseReady ? db.collection(c).doc(o.id).set(o, { merge: true }) : fbSave(c, o.id, o))
+      .catch(e => { console.warn('kk', c, o.id, e); (window._kkFalhas = window._kkFalhas || {})[c] = ((window._kkFalhas || {})[c] || 0) + 1; window._kkErro = e.code || e.message; })));
   }
+}
+// v4.77: antes de gerar, confere se esta aba está com a versão publicada (aba antiga = kickoff antigo, sem RDO/termos)
+async function _kkVersaoOk() {
+  try { const ver = t => { const m = String(t).match(/ObraKontrol v(\d+)\.(\d+) ·/); return m ? +m[1] * 1000 + +m[2] : 0; };
+    const atual = ver(document.documentElement.innerHTML), pub = ver(await (await fetch(location.pathname + '?nc=' + Date.now(), { cache: 'no-store' })).text());
+    if (pub && atual && pub > atual) { alert('Esta aba está com uma versão antiga do painel (v' + Math.floor(atual / 1000) + '.' + (atual % 1000) + ').\nA publicada é a v' + Math.floor(pub / 1000) + '.' + (pub % 1000) + '.\n\nVou recarregar a página — depois clique de novo no botão.'); location.reload(); return false; } } catch (e) {}
+  return true;
 }
 async function kkPreparar() {
   if (!_exDemo()) { toast('Disponível só no ambiente DEMO.', 'error'); return; }
+  if (!(await _kkVersaoOk())) return;
   const qtdTxt = prompt('Preparar a obra para o kickoff.\n\nVou gerar ~6 semanas de dados (equipe, equipamentos, apropriações, diesel, manutenção, frota, alojamento) e criar logins para os participantes.\n\nQuantos logins de participante? (0 = nenhum)', '15');
   if (qtdTxt === null) return; const nUsr = Math.max(0, Math.min(40, parseInt(qtdTxt, 10) || 0));
   try { _kkProg('Limpando o kickoff anterior…'); await kkApagar(true);
@@ -18955,7 +18964,7 @@ async function _kkGerar(nUsr) {
       USUARIOS = (USUARIOS || []).filter(z => z.id !== id); USUARIOS.push(u); W.push(['usuarios', u]);
     }
   }
-  await _kkGravar(W);
+  window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
   try { _roHash && delete _roHash[O]; _publicarResumoObras(); } catch (e) {}   // v4.46: "Frente hoje" do app já mostra meta e avanço
   try { window._absCache = { k: '', m: {} }; } catch (e) {}
   _kkProg('');
@@ -18968,8 +18977,8 @@ function kkResumo(obra, nUsr, nMO, nEQ, nD) {
   const L = _accLinks();
   const txt = `ObraKontrol · KICKOFF\n\nObra: ${obra.nome}\n\n📊 Painel: ${L.painel}\n📲 App de campo: ${L.campo}\n\n👤 Login: kickoff01 a kickoff${String(nUsr || 0).padStart(2, '0')} (cada um pega um número)\n🔑 Senha: Demo@2026\n\nNo app: Apropriação (frente → equipe → equipamentos), Parada, Abastecimento, Movimentação e Manutenção. Tudo que você lançar aparece no painel para aprovação.`;
   if (!document.getElementById('modal-kk')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-kk"><div class="modal" style="max-width:560px"><div class="modal-header"><div class="modal-title">🎬 Kickoff pronto</div><button class="modal-close" onclick="closeModal('modal-kk')">×</button></div><div class="modal-body" id="kk-body"></div><div class="modal-footer"><button class="btn btn-outline" onclick="navigator.clipboard.writeText(document.getElementById('kk-msg').value).then(()=>toast('Copiado.'))">📋 Copiar</button><button class="btn btn-primary" onclick="closeModal('modal-kk')">Fechar</button></div></div></div>`);
-  document.getElementById('kk-body').innerHTML = `<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Gerado: <b>${nMO}</b> apontamentos de mão de obra, <b>${nEQ}</b> de equipamentos, <b>${nD}</b> abastecimentos, 8 ordens de manutenção, 5 veículos, 2 alojamentos${nUsr ? ' e <b>' + nUsr + '</b> logins' : ''}. Os 2 últimos dias ficaram <b>pendentes de aprovação</b> para você aprovar ao vivo.</div>
-    <label class="form-label">Mensagem para os participantes</label><textarea class="form-control" id="kk-msg" rows="12" style="width:100%;font-size:13px">${_e(txt)}</textarea>`;
+  document.getElementById('kk-body').innerHTML = `<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Gerado: <b>${nMO}</b> apontamentos de mão de obra, <b>${(dados.rdos || []).filter(r => String(r.id).startsWith('kk_')).length || '—'}</b> RDOs, <b>${(dados.mobilizacoes || []).filter(r => String(r.id).startsWith('kk_')).length}</b> termos de mobilização, <b>${nEQ}</b> de equipamentos, <b>${nD}</b> abastecimentos, 8 ordens de manutenção, 5 veículos, 2 alojamentos${nUsr ? ' e <b>' + nUsr + '</b> logins' : ''}. Os 2 últimos dias ficaram <b>pendentes de aprovação</b> para você aprovar ao vivo.</div>
+    ${Object.keys(window._kkFalhas || {}).length ? `<div class="alert alert-danger" style="margin-bottom:10px;font-size:13px">⚠ Alguns registros <b>não foram gravados</b> no Firebase: ${Object.entries(window._kkFalhas).map(([c, n]) => n + ' em ' + c).join(', ')} (${_e(window._kkErro || '')}). Me mande um print desta mensagem.</div>` : ''}<label class="form-label">Mensagem para os participantes</label><textarea class="form-control" id="kk-msg" rows="12" style="width:100%;font-size:13px">${_e(txt)}</textarea>`;
   openModal('modal-kk');
 }
 async function kkApagar(silencioso) {
@@ -18985,9 +18994,10 @@ async function kkApagar(silencioso) {
 // v4.55: zera a base DEMO inteira (não só o que o kickoff gerou) e gera o kickoff limpo.
 // Mantém: logins/usuários, perfis, famílias, turnos, tipos de perda e configurações.
 const _KK_ZERAR = ['ua', 'empresas', 'cargos', 'funcionarios', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'servicos', 'orcamentos', 'tanques', 'movTanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
-  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'vistoriasRep', 'partesDiarias', 'mobilizacoes', 'programacao', 'resumoObra', 'turnosAbertos', 'rdos', 'notasFiscais', 'equipes', 'fotos', 'obras'];
+  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'vistoriasRep', 'partesDiarias', 'mobilizacoes', 'programacao', 'resumoObra', 'turnosAbertos', 'rdos', 'notasFiscais', 'equipes', 'fotos', 'precosContrato', 'prodTerceiros', 'obras'];
 async function kkZerarTudo() {
   if (!_exDemo() || !_okCli()) { toast('Disponível só no ambiente DEMO.', 'error'); return; }
+  if (!(await _kkVersaoOk())) return;
   const r = prompt('ZERAR A BASE DEMO\n\nApaga TUDO da base demo: obras, cadastros, apropriações, testes, partes diárias, programação…\nContinuam: logins, perfis, famílias, turnos e tipos de perda.\nDepois gera o kickoff limpo.\n\nPara confirmar, digite ZERAR:');
   if (r === null) return; if (String(r).trim().toUpperCase() !== 'ZERAR') { toast('Nada foi apagado (precisa digitar ZERAR).', 'error'); return; }
   let tot = 0;
