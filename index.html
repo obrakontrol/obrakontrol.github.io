@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.79 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.80 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -8304,6 +8304,7 @@ const MODULOS = [
   ['abastecimento', 'Abastecimento no app de campo', []],
   ['mobilizacao', 'Movimentação no app de campo (equipamentos e veículos)', []],
   ['custoPessoal', 'Ver custo de pessoal (salários, custo/hora da função e lista de funcionários)', []],   // v4.66
+  ['cargaEquip', 'Cadastrar / importar equipamentos no painel (carga inicial — Matriz). Sem isso, equipamento só entra pela mobilização no app', []],   // v4.80
 ];
 const PERFIS_PADRAO = [
   { id:'pf-admin',       nome:'Admin',       tipo:'painel', cor:'red',   sistema:true, desc:'acesso total',
@@ -8387,7 +8388,7 @@ function editarPerfil(id) {
   $('pf-cor').value = p ? (p.cor||'gray') : 'green';
   $('pf-tipo').value = p ? (p.tipo||'painel') : 'painel';
   $('pf-titulo').textContent = p ? 'Editar perfil' : 'Novo perfil';
-  $('pf-perms').innerHTML = MODULOS.map(([k,l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pf-perm-${k}" ${p?.perms?.[k] ? 'checked' : ''}/> ${l}</label>`).join('');
+  $('pf-perms').innerHTML = MODULOS.map(([k,l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pf-perm-${k}" ${(p?.perms?.[k] ?? (k === 'cargaEquip' && p?.nome === 'Custos')) ? 'checked' : ''}/> ${l}</label>`).join('');
   pfTipoMudou();
   document.getElementById('modal-perfil').classList.add('open');
 }
@@ -20375,7 +20376,7 @@ const _FAROL = {
   'frentes': 'y PLN', 'programacao': 'y PLN',
   'obras': 'c MTZ', 'orcamento': 'c MTZ', 'ua': 'c MTZ', 'tipos-perdas': 'c MTZ', 'tipos-servico': 'c PLN', 'qrcodes': 'c PLN',
   'empresas': 'c SUP', 'forn-banco': 'c SUP', 'funcionarios': 'c DP', 'cargos': 'c DP', 'turnos': 'c DP', 'equipes': 'c PRD',
-  'equipamentos': 'c EQP', 'familias': 'c EQP', 'modelos': 'c EQP', 'planos-prev': 'c MAN', 'produtos': 'c MAN', 'notas-diesel': 'c ALM',
+  'equipamentos': 'g APP Carga inicial pela Matriz; depois toda mobilização e desmobilização vem pelo app de campo', 'familias': 'c EQP', 'modelos': 'c EQP', 'planos-prev': 'c MAN', 'produtos': 'c MAN', 'notas-diesel': 'c ALM',
   'frota': 'c ADM', 'frota-resp': 'c ADM', 'frota-multas': 'c ADM', 'republicas': 'c ADM', 'alojados': 'c ADM', 'usuarios': 'c ADM', 'config': 'c ADM' };
 function _farOn() { try { return localStorage.getItem('ok_farol') !== '0'; } catch (e) { return true; } }
 function farolToggle() { try { localStorage.setItem('ok_farol', _farOn() ? '0' : '1'); } catch (e) {} _farAplicar(); }
@@ -20383,8 +20384,8 @@ function _farAplicar() {
   const on = _farOn(); document.body.classList.toggle('far-off', !on);
   const vis = {};
   document.querySelectorAll('.sidebar .nav-item').forEach(it => { const pid = ((it.getAttribute('onclick') || '').match(/showPage\('([^']+)/) || [])[1], f = _FAROL[pid]; if (!f) return;
-    const [c, s] = f.split(' '); if (it.offsetParent !== null || it.closest('.nav-group')) vis[pid] = c;
-    let b = it.querySelector('.far-b'); if (!b) { it.insertAdjacentHTML('beforeend', `<span class="far-b far-${c}" title="${_FAR_TIPO[c][0]} · ${_FAR_SETOR[s] || s}: ${_FAR_TIPO[c][1]}"><i></i>${s}</span>`); } });
+    const [c, s, ...nt] = f.split(' '); if (it.offsetParent !== null || it.closest('.nav-group')) vis[pid] = c;
+    let b = it.querySelector('.far-b'); if (!b) { it.insertAdjacentHTML('beforeend', `<span class="far-b far-${c}" title="${_FAR_TIPO[c][0]} · ${_FAR_SETOR[s] || s}: ${nt.length ? nt.join(' ') : _FAR_TIPO[c][1]}"><i></i>${s}</span>`); } });
   const ct = { g: 0, a: 0, y: 0, c: 0 }; Object.values(vis).forEach(c => ct[c]++);
   let lg = document.getElementById('far-legenda'); const sb = document.querySelector('.sidebar'); if (!sb) return;
   if (!lg) { sb.insertAdjacentHTML('beforeend', '<div id="far-legenda"></div>'); lg = document.getElementById('far-legenda'); }
@@ -20411,6 +20412,25 @@ function _farAplicar() {
   </style>`);
   setTimeout(_farAplicar, 600); setTimeout(_farAplicar, 2500);
   const oS = window.showPage; if (oS) showPage = window.showPage = function () { const r = oS.apply(this, arguments); try { if (!document.querySelector('#far-legenda')) _farAplicar(); else document.querySelectorAll('.sidebar .nav-item').forEach(it => { if (!it.querySelector('.far-b')) throw 0; }); } catch (e) { _farAplicar(); } return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.80: EQUIPAMENTO SÓ ENTRA PELO APP — cadastro/importação no painel só para quem tem "cargaEquip" (Matriz: Admin, Custos)
+// ═══════════════════════════════════════════════════════════════
+function _podeCargaEquip() {
+  const u = typeof usuarioLogado !== 'undefined' ? usuarioLogado : null; if (!u) return false;
+  if (u.perfil === 'Admin' || u.master || (typeof _okEhDev === 'function' && _okEhDev(u.email))) return true;
+  const p = perfilPorNome(u.perfil); if (!p) return false; const v = p.perms && p.perms.cargaEquip; return v === undefined ? p.nome === 'Custos' : !!v;
+}
+function _ceAplicar() {
+  const pode = _podeCargaEquip(); document.body.classList.toggle('sem-carga-eq', !pode);
+  const pg = document.querySelector('#page-equipamentos .page-header'); if (!pg) return;
+  let n = document.getElementById('ce-aviso'); if (!pode && !n) { pg.insertAdjacentHTML('afterend', '<div id="ce-aviso" style="margin:-6px 0 14px;padding:9px 12px;border-radius:10px;background:var(--bg);font-size:13px;color:var(--text-2)">📱 Equipamentos entram e saem da obra pela <b>mobilização no app de campo</b> (termo com fotos e assinatura). A carga inicial é feita pela Matriz.</div>'); }
+  else if (pode && n) n.remove();
+}
+(function () {
+  document.head.insertAdjacentHTML('beforeend', `<style>body.sem-carga-eq #page-equipamentos .btn-group button[onclick*="abrirImportacao('equipamentos')"],body.sem-carga-eq #page-equipamentos .btn-group button[onclick*="baixarTemplate('equipamentos')"],body.sem-carga-eq #page-equipamentos .btn-group button[onclick*="modal-novo-equip"]{display:none!important}</style>`);
+  setTimeout(_ceAplicar, 800); setTimeout(_ceAplicar, 3000);
+  const oS = window.showPage; if (oS) showPage = window.showPage = function (id) { const r = oS.apply(this, arguments); if (id === 'equipamentos') try { _ceAplicar(); } catch (e) {} return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
