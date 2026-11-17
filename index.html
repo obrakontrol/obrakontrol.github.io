@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.82 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.83 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -16021,7 +16021,10 @@ function frCorrigirResp(vid) { closeModal('modal-veiculo'); frVincular(vid); win
     return r; };
 })();
 // v3.47: termos usam a logo da obra (cadastrada em Obras → Editar); sem logo, vai a do ObraKontrol
-function _logoTermo(obraId) { const o = (dados.obras || []).find(x => x.id === obraId); return (o && o.logo) || (typeof _TK_LOGO !== 'undefined' ? _TK_LOGO : ''); }
+const _LOGO_TENCO_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 312 60" role="img" aria-label="TENCO"><g fill="#E30613"><rect x="0" y="0" width="48" height="12"/><rect x="18" y="0" width="12" height="60"/><rect x="62" y="0" width="44" height="12"/><rect x="62" y="24" width="44" height="12"/><rect x="62" y="48" width="44" height="12"/><rect x="120" y="0" width="12" height="60"/><rect x="168" y="0" width="12" height="60"/><polygon points="120,0 133,0 180,60 167,60"/></g><g fill="none" stroke="#E30613" stroke-width="12"><path d="M240.4 14.6 A24 24 0 1 0 240.4 45.4"/><circle cx="282" cy="30" r="24"/></g></svg>');
+/* v4.83: sem logo na obra → logo do cliente (Tenco / demo da Tenco); outros clientes → logo do ObraKontrol */
+function _logoTermo(obraId) { const o = (dados.obras || []).find(x => x.id === obraId); if (o && o.logo) return o.logo; const c = String(window.OK_CLIENTE || 'tenco');
+  return /tenco|demo/i.test(c) ? _LOGO_TENCO_SVG : (typeof _TK_LOGO !== 'undefined' ? _TK_LOGO : ''); }
 // v3.48: GRÁFICO DE ROSCA ocupa o espaço do painel — maior, centralizado na altura e legenda maior
 _donut = function (rows, centro, sub, fmt) {
   const tot = rows.reduce((s, r) => s + r.v, 0);
@@ -17615,7 +17618,7 @@ function renderRdos() {
 function rdoMarcar(id, on) { if (on) window._rdoSel.add(id); else window._rdoSel.delete(id); renderRdos(); }
 function rdoMarcarTodos(on) { window._rdoSel = on ? new Set(_rdoLista().map(x => x.id)) : new Set(); renderRdos(); }
 function _rdoPagina(x, FT) {
-  const E = _e, o = (dados.obras || []).find(y => y.id === x.obra) || {}, lg = o.logo || '';
+  const E = _e, o = (dados.obras || []).find(y => y.id === x.obra) || {}, lg = o.logo || (typeof _logoTermo === 'function' ? _logoTermo(o.id) : '') || '';
   const tb = (cab, linhas) => `<table><thead><tr>${cab.map(c => `<th${/^(Qtd|Horas|Trab|Parado)/.test(c) ? ' class="n"' : ''}>${c}</th>`).join('')}</tr></thead><tbody>${linhas.join('') || `<tr><td colspan="${cab.length}" class="vz">—</td></tr>`}</tbody></table>`;
   const porF = {}; (x.mo || []).forEach(p => { const f = p.funcao || 'Sem função'; porF[f] = (porF[f] || 0) + 1; });
   return `<section class="pg"><div class="hd">${lg ? `<img src="${lg}" alt="">` : '<span></span>'}<div class="tt"><b>RELATÓRIO DIÁRIO DE OBRA</b>${E((o.nomeProjeto || o.nome || '').trim())}</div></div>
