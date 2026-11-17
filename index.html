@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.75 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.76 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -20263,6 +20263,93 @@ window.renderTanques = renderTanques = function () {
       <td class="td-mono" style="text-align:right;color:${ent ? '#15803D' : '#B91C1C'}">${ent ? '+' : ''}${n(m.litros)}</td><td class="td-mono" style="text-align:right">${n(m.saldoAntes)}</td><td class="td-mono" style="text-align:right"><b>${n(m.saldoDepois)}</b></td><td>${_e(m.por || '—')}</td><td style="font-size:12px">${_e(m.obs || '')}</td></tr>`; }).join('')
     : '<tr><td colspan="8" class="empty-row">Nenhuma movimentação. As entradas aparecem aqui ao lançar uma nota fiscal de diesel ou um abastecimento de tanque.</td></tr>';
 };
+// ═══════════════════════════════════════════════════════════════
+// v4.76: RELATÓRIO DE PRODUÇÃO POR EMPREITEIRA — documento A4 para anexar à medição do terceiro (PDF) + Excel
+// Totais só com lançamentos APROVADOS (opcional mostrar pendentes à parte). Resumo por serviço (qtd × preço do contrato) + detalhe diário + fotos opcionais.
+// ═══════════════════════════════════════════════════════════════
+let _rp = null;
+function rpAbrir(emp) {
+  const obra = _pgObraSel('pt-obra'); if (!obra) { toast('Escolha a obra.', 'error'); return; }
+  const mes = document.getElementById('pt-mes')?.value || _hojeLocal().slice(0, 7), fim = new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
+  const emps = [...new Set((dados.prodTerceiros || []).filter(p => p.obra === obra).map(p => p.empresa))].map(id => ({ id, nome: _ptEmpNome(id) })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  _rp = { obra, emp: emp || document.getElementById('pt-emp')?.value || (emps[0] || {}).id || '', de: mes + '-01', ate: mes + '-' + String(fim).padStart(2, '0'), pend: false, fotos: false, emps };
+  document.getElementById('modal-rp')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay open" id="modal-rp"><div class="modal" style="max-width:560px"><div class="modal-header"><span class="modal-title">Relatório de produção do terceiro</span><button class="modal-close" onclick="document.getElementById('modal-rp').remove()">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Empreiteira</label><select class="form-control" onchange="_rp.emp=this.value;_rpPrev()">${emps.map(e => `<option value="${_e(e.id)}" ${e.id === _rp.emp ? 'selected' : ''}>${_e(e.nome)}</option>`).join('') || '<option value="">Nenhuma empreiteira com lançamento nesta obra</option>'}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="form-group"><label class="form-label">De</label><input class="form-control" type="date" value="${_rp.de}" onchange="_rp.de=this.value;_rpPrev()"/></div><div class="form-group"><label class="form-label">Até</label><input class="form-control" type="date" value="${_rp.ate}" onchange="_rp.ate=this.value;_rpPrev()"/></div></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:4px 0;cursor:pointer"><input type="checkbox" onchange="_rp.pend=this.checked;_rpPrev()"/> Mostrar também os <b>pendentes</b> (à parte — não entram no total)</label>
+      <label style="display:flex;gap:8px;align-items:center;margin:4px 0;cursor:pointer"><input type="checkbox" onchange="_rp.fotos=this.checked"/> Incluir <b>relatório fotográfico</b> (até 24 fotos)</label>
+      <div id="rp-prev" style="margin-top:10px;border-radius:10px;background:var(--bg);padding:10px 12px;font-size:13px"></div></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="rpExcel()">⬇ Excel</button><button class="btn btn-primary" onclick="rpDocumento()">📄 Gerar relatório (PDF)</button></div></div></div>`);
+  _rpPrev();
+}
+function _rpDados() { const R = _rp, l = (dados.prodTerceiros || []).filter(p => p.obra === R.obra && p.empresa === R.emp && p.data >= R.de && p.data <= R.ate).sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.horaIni || '').localeCompare(String(b.horaIni || '')));
+  const ap = l.filter(p => p.status === 'aprovado'), pe = l.filter(p => (p.status || 'pendente') === 'pendente'), re = l.filter(p => p.status === 'recusado');
+  const sv = {}; ap.forEach(p => { const k = p.servico; const y = sv[k] = sv[k] || { servico: k, unid: p.unid || '', qtd: 0, valor: 0, dias: new Set(), pes: 0, n: 0, preco: p.preco, uas: new Set() }; y.qtd += +p.qtd || 0; y.valor += +p.valor || 0; y.dias.add(p.data); y.pes += +p.pessoas || 0; y.n++; if (p.ua) y.uas.add(p.ua); if (p.preco != null) y.preco = p.preco; });
+  return { l, ap, pe, re, sv: Object.values(sv).sort((a, b) => b.valor - a.valor), total: ap.reduce((t, p) => t + (+p.valor || 0), 0), dias: new Set(ap.map(p => p.data)).size }; }
+function _rpPrev() { const el = document.getElementById('rp-prev'); if (!el || !_rp) return; if (!_rp.emp) { el.innerHTML = 'Escolha a empreiteira.'; return; } const D = _rpDados();
+  el.innerHTML = `<b>${D.ap.length}</b> lançamento(s) aprovado(s) em <b>${D.dias}</b> dia(s) · <b>${_ptBRL(D.total)}</b>${D.pe.length ? `<div style="color:#B45309;margin-top:4px">⚠ ${D.pe.length} pendente(s) no período — aprove antes de fechar a medição.</div>` : ''}${D.re.length ? `<div style="color:var(--text-3);margin-top:2px">${D.re.length} recusado(s) (não entram).</div>` : ''}`; }
+async function rpDocumento() {
+  const R = _rp; if (!R || !R.emp) return; const D = _rpDados(); if (!D.l.length) { toast('Nada no período para essa empreiteira.', 'error'); return; }
+  const w = window.open('', '_blank'); if (!w) return toast('Libere as janelas (pop-up) para gerar o relatório.', 'error');
+  w.document.write('<p style="font-family:Arial;padding:20px">Montando o relatório…</p>');
+  const E = (dados.empresas || []).find(x => x.id === R.emp) || {}, n = v => (Math.round((+v || 0) * 100) / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }), d = s => _abFmtD ? _abFmtD(s) : fmtData(s);
+  const fam = c => (typeof _nomeFamilia === 'function' && _nomeFamilia(c)) || c, maq = p => (p.maquinas || []).filter(m => +m.qtd).map(m => m.qtd + ' ' + fam(m.familia)).join(', ');
+  const num = 'RP-' + String(E.cod || R.emp).replace(/\W/g, '') + '-' + R.de.replace(/-/g, '').slice(0, 6) + (R.de.slice(0, 7) !== R.ate.slice(0, 7) ? '-' + R.ate.replace(/-/g, '').slice(0, 6) : '');
+  let fotos = []; if (R.fotos) { const ids = D.ap.concat(R.pend ? D.pe : []).flatMap(p => (p.fotos || []).map(f => ({ f, p }))).slice(0, 24);
+    fotos = (await Promise.all(ids.map(async x => { try { const s = await db.collection('fotos').doc(x.f).get(); return s.exists ? { img: s.data().img, p: x.p } : null; } catch (e) { return null; } }))).filter(Boolean); }
+  const pesMed = D.ap.length ? D.ap.reduce((t, p) => t + (+p.pessoas || 0), 0) / D.ap.length : 0, horas = D.ap.reduce((t, p) => t + (+p.horas || 0), 0);
+  const linhaDia = (p, st) => `<tr><td class="nw">${d(p.data)}</td><td class="nw">${_e(p.horaIni || '')}${p.horaFim ? '–' + _e(p.horaFim) : ''}</td><td class="nw"><b>${_e(p.frente)}</b></td><td class="sv">${_e(p.servico)}</td><td class="n"><b>${n(p.qtd)}</b> ${_e(p.unid || '')}</td><td class="n">${+p.pessoas || '—'}</td><td>${_e(maq(p)) || '—'}</td><td>${_e(p.ua || '')}</td>${st ? `<td>${st}</td>` : `<td class="n">${p.valor != null ? _ptBRL(p.valor) : '—'}</td>`}<td style="text-align:center">${p.gps && p.gps.lat != null ? '✓' : '—'}</td></tr>`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(num)} - ${_e(_ptEmpNome(E) || '')}</title><style>
+    @page{size:A4;margin:10mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11px;background:#e9e9ec}
+    .pg{background:#fff;width:190mm;min-height:277mm;margin:12px auto;padding:10mm;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+    .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:7px}.hd img{height:42px;max-width:190px;object-fit:contain}.hd b{font-size:16px;display:block;text-align:right}.hd>div:last-child{text-align:right;color:#444}
+    h3{font-size:10px;text-transform:uppercase;letter-spacing:.07em;background:#111;color:#fff;padding:4px 8px;margin:12px 0 0;border-radius:3px 3px 0 0}
+    .g{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #bbb;border-top:0}.c{padding:5px 8px;border-right:1px solid #ddd;border-bottom:1px solid #ddd;min-height:32px}.c span{display:block;font-size:8.5px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}.s2{grid-column:span 2}
+    .k{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}.k div{border:1px solid #ccc;border-radius:6px;padding:7px 9px}.k span{display:block;font-size:8.5px;color:#666;text-transform:uppercase}.k b{font-size:15px}.k .t{border-color:#E30613;background:#FFF5F5}.k .t b{color:#B91C1C}
+    table{width:100%;border-collapse:collapse;border:1px solid #bbb;border-top:0}th{font-size:8.5px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #999;padding:4px 5px;background:#f2f2f2}td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top}.n{text-align:right;white-space:nowrap}.nw{white-space:nowrap}.sv{min-width:120px}table.dt td,table.dt th{font-size:9.5px;padding:4px 4px}tr.tot td{font-weight:700;background:#f7f7f7;border-top:1.5px solid #111}
+    .ft{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}.ft div{font-size:9px;color:#444}.ft img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #ccc;display:block;margin-bottom:2px}
+    .obs{border:1px solid #bbb;border-top:0;padding:7px 8px;font-size:10px;color:#444;line-height:1.5}
+    .ass{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px;font-size:10px}
+    .rd{margin-top:10px;font-size:8.5px;color:#888;text-align:right}.av{color:#B45309}
+    .np{position:sticky;top:0;z-index:2;background:#111;color:#fff;padding:8px;text-align:center}.np button{background:#E30613;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+    @media print{.np{display:none}body{background:#fff}.pg{margin:0;box-shadow:none;width:auto;min-height:auto;padding:0}thead{display:table-header-group}tr{page-break-inside:avoid}h3{page-break-after:avoid}}</style></head><body>
+    <div class="np"><button onclick="window.print()">Imprimir / salvar PDF</button></div>
+    <section class="pg">
+      <div class="hd">${_pddLogo(R.obra)}<div><b>RELATÓRIO DE PRODUÇÃO — TERCEIRO</b><div>${_e(num)} · ${_e(getNomeObra(R.obra) || '')}</div></div></div>
+      <h3>Identificação</h3><div class="g"><div class="c s2"><span>Empreiteira</span><b>${_e(E.nome || E.razao || _ptEmpNome(E) || '')}</b></div><div class="c"><span>CNPJ</span>${_e(E.cnpj || '—')}</div><div class="c"><span>Código</span>${_e(E.cod || '—')}</div>
+        <div class="c s2"><span>Obra</span>${_e(getNomeObra(R.obra) || '')}</div><div class="c"><span>Período</span><b>${d(R.de)} a ${d(R.ate)}</b></div><div class="c"><span>Emitido em</span>${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div></div>
+      <div class="k"><div class="t"><span>Valor aprovado</span><b>${_ptBRL(D.total)}</b></div><div><span>Dias trabalhados</span><b>${D.dias}</b></div><div><span>Lançamentos aprovados</span><b>${D.ap.length}</b></div><div><span>Média de pessoas</span><b>${n(Math.round(pesMed * 10) / 10)}</b></div><div><span>Horas trabalhadas</span><b>${n(horas)} h</b></div></div>
+      <h3>Resumo por serviço — base para a medição</h3><table><thead><tr><th>Serviço</th><th>UA (EAP)</th><th class="n">Quantidade</th><th class="n">Preço unit.</th><th class="n">Valor</th><th class="n">Dias</th><th class="n">Produtividade</th></tr></thead><tbody>
+        ${D.sv.map(y => `<tr><td><b>${_e(y.servico)}</b></td><td>${_e([...y.uas].join(', ')) || '—'}</td><td class="n"><b>${n(y.qtd)}</b> ${_e(y.unid)}</td><td class="n">${y.preco != null ? _ptBRL(y.preco) + '/' + _e(y.unid) : '<span class="av">sem preço</span>'}</td><td class="n"><b>${_ptBRL(y.valor)}</b></td><td class="n">${y.dias.size}</td><td class="n">${y.pes ? n(Math.round(y.qtd / y.pes * 10) / 10) + ' ' + _e(y.unid) + '/pessoa·dia' : '—'}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:#777">Nenhum lançamento aprovado no período.</td></tr>'}
+        ${D.sv.length ? `<tr class="tot"><td colspan="4">Total aprovado no período</td><td class="n">${_ptBRL(D.total)}</td><td class="n">${D.dias}</td><td></td></tr>` : ''}</tbody></table>
+      <h3>Produção diária aprovada</h3><table class="dt"><thead><tr><th>Data</th><th>Horário</th><th>Frente</th><th>Serviço</th><th class="n">Qtd</th><th class="n">Pessoas</th><th>Máquinas</th><th>UA</th><th class="n">Valor</th><th>GPS</th></tr></thead><tbody>
+        ${D.ap.map(p => linhaDia(p)).join('') || '<tr><td colspan="10" style="text-align:center;color:#777">—</td></tr>'}</tbody></table>
+      ${R.pend && D.pe.length ? `<h3>Pendentes de aprovação (não entram no total)</h3><table class="dt"><thead><tr><th>Data</th><th>Horário</th><th>Frente</th><th>Serviço</th><th class="n">Qtd</th><th class="n">Pessoas</th><th>Máquinas</th><th>UA</th><th>Situação</th><th>GPS</th></tr></thead><tbody>${D.pe.map(p => linhaDia(p, '<span class="av">Pendente</span>')).join('')}</tbody></table>` : ''}
+      ${D.re.length ? `<h3>Recusados (não entram)</h3><table><thead><tr><th>Data</th><th>Frente</th><th>Serviço</th><th class="n">Qtd</th><th>Motivo</th></tr></thead><tbody>${D.re.map(p => `<tr><td>${d(p.data)}</td><td>${_e(p.frente)}</td><td>${_e(p.servico)}</td><td class="n">${n(p.qtd)} ${_e(p.unid || '')}</td><td>${_e(p.motivo || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${fotos.length ? `<h3>Relatório fotográfico</h3><div class="ft">${fotos.map(f => `<div><img src="${f.img}">${d(f.p.data)} · ${_e(f.p.frente)} · ${_e(f.p.servico)}</div>`).join('')}</div>` : ''}
+      <h3>Observações</h3><div class="obs">Quantidades apontadas no campo (app ObraKontrol) com data, horário e localização, conferidas e aprovadas pela fiscalização da obra. Os valores usam o preço unitário do contrato vigente na data da aprovação. ${D.pe.length && !R.pend ? `<span class="av">Há ${D.pe.length} lançamento(s) pendente(s) no período que não estão neste relatório.</span>` : ''}</div>
+      <div class="ass"><div>Fiscal da obra</div><div>Setor de custos / medição</div><div>${_e(E.nome || E.razao || 'Empreiteira')}<br>Responsável da empreiteira</div></div>
+      <div class="rd">${_e(num)} · gerado no ObraKontrol por ${_e(usuarioLogado?.nome || '')}</div></section></body></html>`;
+  w.document.open(); w.document.write(html); w.document.close();
+}
+function rpExcel() {
+  const R = _rp; if (!R || !R.emp) return; const D = _rpDados(), E = (dados.empresas || []).find(x => x.id === R.emp) || {}, fam = c => (typeof _nomeFamilia === 'function' && _nomeFamilia(c)) || c;
+  const wb = XLSX.utils.book_new();
+  const res = [['Relatório de produção — ' + (E.nome || E.razao || ''), '', '', '', '', ''], ['Obra', getNomeObra(R.obra) || '', '', 'Período', fmtData(R.de) + ' a ' + fmtData(R.ate), ''], [], ['Serviço', 'UA', 'Unidade', 'Quantidade', 'Preço unitário', 'Valor', 'Dias']]
+    .concat(D.sv.map(y => [y.servico, [...y.uas].join(', '), y.unid, Math.round(y.qtd * 100) / 100, y.preco ?? '', Math.round(y.valor * 100) / 100, y.dias.size])).concat([['Total aprovado', '', '', '', '', Math.round(D.total * 100) / 100, D.dias]]);
+  const s1 = XLSX.utils.aoa_to_sheet(res); s1['!cols'] = [{ wch: 40 }, { wch: 22 }, { wch: 9 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 7 }]; XLSX.utils.book_append_sheet(wb, s1, 'Resumo');
+  const dia = [['Data', 'Início', 'Fim', 'Horas', 'Frente', 'Serviço', 'Quantidade', 'Unidade', 'Pessoas', 'Máquinas', 'UA', 'Preço', 'Valor', 'Situação', 'Motivo', 'Lançado por', 'Lançado em', 'Latitude', 'Longitude']]
+    .concat(D.l.filter(p => p.status === 'aprovado' || R.pend || p.status === 'recusado').map(p => [fmtData(p.data), p.horaIni || '', p.horaFim || '', p.horas || '', p.frente, p.servico, +p.qtd || 0, p.unid || '', +p.pessoas || 0, (p.maquinas || []).map(m => m.qtd + ' ' + fam(m.familia)).join(', '), p.ua || '', p.preco ?? '', p.valor ?? '', p.status || 'pendente', p.motivo || '', p.lancadoPor || '', p.lancadoEm ? new Date(p.lancadoEm).toLocaleString('pt-BR') : '', p.gps?.lat ?? '', p.gps?.lng ?? '']));
+  const s2 = XLSX.utils.aoa_to_sheet(dia); s2['!cols'] = [{ wch: 11 }, { wch: 7 }, { wch: 7 }, { wch: 6 }, { wch: 9 }, { wch: 36 }, { wch: 10 }, { wch: 7 }, { wch: 8 }, { wch: 26 }, { wch: 18 }, { wch: 9 }, { wch: 11 }, { wch: 10 }, { wch: 28 }, { wch: 18 }, { wch: 17 }, { wch: 10 }, { wch: 10 }]; XLSX.utils.book_append_sheet(wb, s2, 'Diário');
+  XLSX.writeFile(wb, 'Producao ' + String(E.fantasia || E.nome || 'terceiro').replace(/[^\w-]+/g, '_').slice(0, 30) + ' ' + R.de + '_a_' + R.ate + '.xlsx');
+}
+(function () { const b = document.querySelector('#page-terceiros .btn-group'); if (b && !b.querySelector('#btn-rp')) b.insertAdjacentHTML('beforeend', '<button class="btn btn-primary btn-sm" id="btn-rp" onclick="rpAbrir()">📄 Relatório de produção</button>');
+  const oR = renderTerceiros; renderTerceiros = window.renderTerceiros = function () { const r = oR.apply(this, arguments);
+    try { const obra = _pgObraSel('pt-obra'); document.querySelectorAll('#pt-corpo > div:first-child > .card').forEach(c => { const nm = c.querySelector('.card-body > div:first-child > b')?.textContent; const e = (dados.prodTerceiros || []).find(p => p.obra === obra && (p.empresaNome || _ptEmpNome(p.empresa)) === nm);
+      if (e && !c.querySelector('.rp-b')) c.querySelector('.card-body').insertAdjacentHTML('beforeend', `<button class="btn btn-outline btn-sm rp-b" style="margin-top:8px" onclick="rpAbrir('${_e(e.empresa)}')">📄 Relatório de produção</button>`); }); } catch (e) {}
+    return r; }; })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
