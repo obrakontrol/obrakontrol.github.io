@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.80 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.81 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18292,7 +18292,7 @@ salvarProduto = window.salvarProduto = async function () {
       <div class="nav-item" onclick="showPage('manut',this)" title="Ordens de serviço (OS)">${ic1}<span>Ordens de serviço</span></div>
       <div class="nav-item" onclick="showPage('planos-prev',this)" title="Planos de preventiva">${ic2}<span>Planos de preventiva</span></div></div></div>`);
     const src = sb.querySelector(`.nav-item[onclick*="showPage('produtos'"]`), box = $('grp-manut').querySelector('.nav-group-items');
-    if (src) { const c = src.cloneNode(true); c.dataset.atalho = 'prod'; c.classList.remove('active'); c.title = 'Peças, filtros, pneus e materiais (com estoque)'; const sp = c.querySelector('span'); if (sp) sp.textContent = 'Peças e produtos'; box.appendChild(c); }
+    if (src) { const c = src.cloneNode(true); c.dataset.atalho = 'prod'; c.classList.remove('active'); c.title = 'Peças, filtros, pneus e materiais (com estoque)'; const sp = c.querySelector('span'); if (sp) sp.textContent = 'Peças e produtos'; box.appendChild(c); src.classList.add('nav-dup'); /* v4.81: um item só no menu — o cadastro já era único */ }
   }
   try { _COLS_AO_VIVO.push('ordensServico'); } catch (e) {}
   dados.ordensServico = dados.ordensServico || []; dados.planosPrev = dados.planosPrev || [];
@@ -20371,17 +20371,19 @@ const _FAR_TIPO = { g: ['Automático', 'vem dos lançamentos no celular — ning
 const _FAR_SETOR = { APP: 'App de campo', ENG: 'Engenharia / encarregado', PLN: 'Planejamento', MTZ: 'Matriz (custos e engenharia)', SUP: 'Suprimentos', DP: 'Departamento pessoal', PRD: 'Produção', EQP: 'Equipamentos', MAN: 'Manutenção', ALM: 'Almoxarifado', ADM: 'Administrativo' };
 const _FAROL = {
   'dashboard': 'g APP', 'dash-mo': 'g APP', 'dash-eq': 'g APP', 'dash-abs': 'g APP', 'diario': 'g APP', 'relatorios': 'g APP',
-  'aprovacao': 'a ENG', 'terceiros': 'a ENG', 'mm-aprov': 'a ENG',
+  'aprovacao': 'a ENG', 'terceiros': 'a ENG', 'mm-aprov': 'c MTZ Cadastro master: a Matriz aprova as famílias e modelos novos que as obras criam (padroniza o banco)',
   'apon-mo': 'g APP', 'apon-eq': 'g APP', 'perdas': 'g APP', 'apon-diesel': 'g APP', 'rdos': 'g APP', 'avanco': 'g APP', 'partes-diarias': 'g APP', 'manut': 'g APP', 'tanques': 'g APP', 'frota-abast': 'g APP', 'frota-acerto': 'g APP',
   'frentes': 'y PLN', 'programacao': 'y PLN',
-  'obras': 'c MTZ', 'orcamento': 'c MTZ', 'ua': 'c MTZ', 'tipos-perdas': 'c MTZ', 'tipos-servico': 'c PLN', 'qrcodes': 'c PLN',
-  'empresas': 'c SUP', 'forn-banco': 'c SUP', 'funcionarios': 'c DP', 'cargos': 'c DP', 'turnos': 'c DP', 'equipes': 'c PRD',
+  'obras': 'c MTZ', 'orcamento': 'c MTZ', 'ua': 'c MTZ', 'tipos-perdas': 'c MTZ Cadastro master: só a Matriz cadastra os tipos de parada', 'tipos-servico': 'c PLN', 'qrcodes': 'c PLN',
+  'empresas': 'c SUP', 'forn-banco': 'c MTZ Cadastro master: banco único de fornecedores, mantido pela Matriz', 'funcionarios': 'c DP', 'cargos': 'c DP', 'turnos': 'c DP', 'equipes': 'c PRD',
   'equipamentos': 'g APP Carga inicial pela Matriz; depois toda mobilização e desmobilização vem pelo app de campo', 'familias': 'c EQP', 'modelos': 'c EQP', 'planos-prev': 'c MAN', 'produtos': 'c MAN', 'notas-diesel': 'c ALM',
   'frota': 'c ADM', 'frota-resp': 'c ADM', 'frota-multas': 'c ADM', 'republicas': 'c ADM', 'alojados': 'c ADM', 'usuarios': 'c ADM', 'config': 'c ADM' };
 function _farOn() { try { return localStorage.getItem('ok_farol') !== '0'; } catch (e) { return true; } }
 function farolToggle() { try { localStorage.setItem('ok_farol', _farOn() ? '0' : '1'); } catch (e) {} _farAplicar(); }
 function _farAplicar() {
   const on = _farOn(); document.body.classList.toggle('far-off', !on);
+  try { const gm = document.getElementById('grp-manut'), cl = gm && gm.querySelector('[data-atalho="prod"]'), vis = cl && getComputedStyle(gm).display !== 'none' && getComputedStyle(cl).display !== 'none';
+    document.querySelectorAll('.sidebar .nav-item[onclick*="showPage(\'produtos\'"]:not([data-atalho])').forEach(x => x.classList.toggle('nav-dup', !!vis)); } catch (e) {}
   const vis = {};
   document.querySelectorAll('.sidebar .nav-item').forEach(it => { const pid = ((it.getAttribute('onclick') || '').match(/showPage\('([^']+)/) || [])[1], f = _FAROL[pid]; if (!f) return;
     const [c, s, ...nt] = f.split(' '); if (it.offsetParent !== null || it.closest('.nav-group')) vis[pid] = c;
@@ -20404,6 +20406,7 @@ function _farAplicar() {
   .far-y{background:rgba(239,159,39,.22);color:#FAC775}.far-y i{background:#EF9F27;box-shadow:0 0 5px #EF9F27}
   .far-c{background:rgba(180,178,169,.16);color:#C9C7BE}.far-c i{background:#9a9890}
   body.far-off .nav-item .far-b{display:none}
+  .sidebar .nav-item.nav-dup{display:none!important}
   #far-legenda{margin:14px 12px 18px;padding:10px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;color:#AEB9CC}
   .far-tg{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#D0DCF0;border-radius:8px;padding:6px;font-size:11.5px;cursor:pointer;font-family:inherit}
   .far-lg{margin-top:8px;display:flex;flex-direction:column;gap:5px}.far-lg>div{display:flex;align-items:center;gap:6px}.far-lg .far-b{margin-left:0;min-width:42px;justify-content:center}.far-lg b{margin-left:auto;color:#fff}
@@ -20431,6 +20434,27 @@ function _ceAplicar() {
   document.head.insertAdjacentHTML('beforeend', `<style>body.sem-carga-eq #page-equipamentos .btn-group button[onclick*="abrirImportacao('equipamentos')"],body.sem-carga-eq #page-equipamentos .btn-group button[onclick*="baixarTemplate('equipamentos')"],body.sem-carga-eq #page-equipamentos .btn-group button[onclick*="modal-novo-equip"]{display:none!important}</style>`);
   setTimeout(_ceAplicar, 800); setTimeout(_ceAplicar, 3000);
   const oS = window.showPage; if (oS) showPage = window.showPage = function (id) { const r = oS.apply(this, arguments); if (id === 'equipamentos') try { _ceAplicar(); } catch (e) {} return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.81: IMPORTAR VÁRIAS NOTAS DE UMA VEZ — sobe XML/PDF/foto, o painel preenche cada nota e você só confere e registra (uma por vez)
+// ═══════════════════════════════════════════════════════════════
+let _nfFila = [], _nfFilaTot = 0;
+function nfImportarVarias(files) {
+  _nfFila = [...(files || [])]; _nfFilaTot = _nfFila.length; if (!_nfFilaTot) return; _nfProxima();
+}
+function _nfProxima() {
+  const f = _nfFila.shift(); if (!f) { if (_nfFilaTot > 1) toast('Fim da importação: ' + _nfFilaTot + ' nota(s) conferidas.'); _nfFilaTot = 0; return; }
+  _nfEditando = false; openModal('modal-nova-nf');
+  const n = _nfFilaTot - _nfFila.length, t = document.getElementById('modal-nf-titulo'); if (t && _nfFilaTot > 1) t.textContent = 'Conferir nota ' + n + ' de ' + _nfFilaTot;
+  Promise.resolve(nfImportar(f)).then(() => { const m = document.getElementById('nf-import-msg'); if (m && _nfFila.length) m.insertAdjacentHTML('beforeend', `<div style="margin-top:6px"><button class="btn btn-outline btn-sm" onclick="closeModal('modal-nova-nf');_nfProxima()">Pular esta nota →</button> <span style="font-size:12px;color:var(--text-2)">faltam ${_nfFila.length}</span></div>`); });
+}
+(function () {
+  const bg = document.querySelector('#page-notas-diesel .page-header .btn-group');
+  if (bg && !document.getElementById('nf-imp-varias')) bg.insertAdjacentHTML('afterbegin', `<label class="btn btn-outline btn-sm" id="nf-imp-varias" style="cursor:pointer" title="XML da NF-e, PDF da DANFE ou foto — pode escolher várias">↑ Importar notas<input type="file" multiple accept=".xml,.pdf,image/*,text/xml,application/xml,application/pdf" style="display:none" onchange="nfImportarVarias(this.files);this.value=''"/></label>`);
+  const inp = document.querySelector('#nf-import input[type=file]'); if (inp) { inp.multiple = true; inp.setAttribute('onchange', 'nfImportarVarias(this.files);this.value=\'\''); }
+  const oS = window.salvarNotaFiscal; window.salvarNotaFiscal = function () { const n0 = (dados.notasFiscais || []).length, r = oS.apply(this, arguments);
+    const m = document.getElementById('modal-nova-nf'); if (_nfFila.length && (!m || !m.classList.contains('open') || (dados.notasFiscais || []).length > n0)) setTimeout(_nfProxima, 300); else if (!_nfFila.length && _nfFilaTot && (!m || !m.classList.contains('open'))) { _nfFilaTot = 0; } return r; };
+  const oC = window.closeModal; window.closeModal = function (id) { const r = oC.apply(this, arguments); return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
