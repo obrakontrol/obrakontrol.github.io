@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.85 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.86 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -2038,7 +2038,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
 <div class="page" id="page-tipos-perdas">
   <div class="page-header">
     <div>
-      <div class="page-title">Tipos de Perda / Parada</div>
+      <div class="page-title">Tipos de interferência</div>
       <div class="page-sub">Categorias usadas pelos apontadores no registro de horas improdutivas</div>
     </div>
     <div class="btn-group">
@@ -11200,7 +11200,7 @@ async function agSalvar() {
     const ps = t.paradas || []; if (!ps.length) return h;
     const min = x => { const [a, b] = String(x || '').split(':').map(Number); return a * 60 + (b || 0); };
     const abertas = ps.filter(p => !p.fim), fech = ps.filter(p => p.fim), horas = fech.reduce((s, p) => s + Math.max(0, min(p.fim) - min(p.ini)) / 60, 0);
-    const linha = `<div class="dia-linha" style="align-items:flex-start"><span style="color:var(--text-3)">Paradas</span><span style="text-align:right">`
+    const linha = `<div class="dia-linha" style="align-items:flex-start"><span style="color:var(--text-3)">Interferências</span><span style="text-align:right">`
       + abertas.map(p => `<div style="color:#F59E0B;font-weight:700">⏸ ${_e(p.motivo)} — ${_e(p.quem)} desde ${_e(p.ini)}</div>`).join('')
       + (fech.length ? `<div>${fech.length} encerrada(s) · ${horas.toFixed(1).replace('.', ',')} h</div>` : '') + `</span></div>`;
     const i = h.lastIndexOf('<details'); const j = i >= 0 ? i : h.lastIndexOf('</div></div>');
@@ -12973,7 +12973,7 @@ function _ehMaster() { const u = usuarioLogado; return !!(u && (u.master || u.de
   // nomes
   rot(G('grp-apontamentos'), 'Dia a dia'); rot(G('grp-cadastros'), 'Obra'); rot(G('grp-mo'), 'Pessoas'); rot(G('grp-almoxarifado'), 'Combustível'); rot(G('grp-analise'), 'Relatórios');
   nome('apon-mo', 'Lançamentos de MO', 'Lançamentos de mão de obra vindos do campo'); nome('apon-eq', 'Lançamentos de EQ', 'Lançamentos de equipamentos vindos do campo');
-  nome('apon-diesel', 'Abastecimentos'); nome('perdas', 'Paradas', 'Paradas registradas no campo'); nome('tipos-perdas', 'Tipos de parada');
+  nome('apon-diesel', 'Abastecimentos'); nome('perdas', 'Interferências', 'Interferências registradas no campo (no app: paradas)'); nome('tipos-perdas', 'Tipos de interferência');
   nome('cargos', 'Funções'); nome('empresas', 'Fornecedores', 'Fornecedores, empreiteiras e locadoras'); nome('qrcodes', 'QR Codes e placas', 'Crachás, etiquetas e placas das frentes');
   nome('tanques', 'Tanques e estoque'); nome('frentes', 'Frentes de serviço'); nome('tipos-servico', 'Tipos de serviço');
   // lugares
@@ -12991,7 +12991,7 @@ function _ehMaster() { const u = usuarioLogado; return !!(u && (u.master || u.de
   // títulos das telas
   const tit = (pg, t) => { const e = document.querySelector('#page-' + pg + ' .page-title'); if (e) e.textContent = t; };
   tit('apon-mo', 'Lançamentos de MO'); tit('apon-eq', 'Lançamentos de EQ'); tit('apon-diesel', 'Abastecimentos — controle de diesel');
-  tit('perdas', 'Paradas'); tit('tipos-perdas', 'Tipos de parada'); tit('cargos', 'Funções'); tit('empresas', 'Fornecedores'); tit('qrcodes', 'QR Codes e placas');
+  tit('perdas', 'Interferências'); tit('tipos-perdas', 'Tipos de interferência'); tit('cargos', 'Funções'); tit('empresas', 'Fornecedores'); tit('qrcodes', 'QR Codes e placas');
   const sub = (pg, t) => { const e = document.querySelector('#page-' + pg + ' .page-sub'); if (e) e.textContent = t; };
   sub('perdas', 'Horas paradas de pessoas e equipamentos registradas no campo');
   sub('tipos-perdas', 'Lista padrão da empresa — vale para todas as obras. Só o Master altera.');
@@ -13238,7 +13238,7 @@ async function diaDetalhe(id) {
       ${t.geoIni && typeof _geoTxt === 'function' ? L('Local de abertura', _geoTxt(t.geoIni, t.frente, t.obra)) : ''}</div>
     ${sec('Equipe (' + mo.length + ')', tb(['Nome', 'Matrícula', 'Função'], mo.map(x => [_e(x.nome), '<span class="td-mono">' + _e(x.mat || '—') + '</span>', _e(nomeF(x.funcao))])))}
     ${sec('Equipamentos (' + eq.length + ')', tb(['TAG', 'Família', 'Operador'], eq.map(x => ['<b>' + _e(x.tag) + '</b>', _e(nomeFam(x.familia)), _e(x.operador || '—')])))}
-    ${sec('Paradas (' + par.length + ')', tb(['Motivo', 'Quem', 'Início', 'Fim', 'Horas'], par.map(p => [_e(p.motivo), _e(p.quem || '—'), _e(p.ini || ''), p.fim ? _e(p.fim) : '<span style="color:#B45309;font-weight:700">em andamento</span>', parH(p)])))}
+    ${sec('Interferências (' + par.length + ')', tb(['Motivo', 'Quem', 'Início', 'Fim', 'Horas'], par.map(p => [_e(p.motivo), _e(p.quem || '—'), _e(p.ini || ''), p.fim ? _e(p.fim) : '<span style="color:#B45309;font-weight:700">em andamento</span>', parH(p)])))}
     ${sec('Fotos da frente (' + fotos.length + ')', fotos.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">${fotos.map(f => `<figure style="margin:0" data-dd="${_e(f)}"><div style="aspect-ratio:4/3;border-radius:8px;background:#eee center/cover;display:flex;align-items:center;justify-content:center;font-size:11px;color:#888">carregando…</div><figcaption style="font-size:11px;color:#555;margin-top:3px"></figcaption></figure>`).join('')}</div>` : '<div style="font-size:13px;color:#6B7280">Nenhuma foto ainda.</div>')}
   </div>`;
   document.body.appendChild(ov);
@@ -14201,7 +14201,7 @@ async function _diaFotos(el) {
     const corpoFt = `<div class="dia-fts">${fts.slice(0, 40).map(x => `<div><div class="dia-ft" data-f="${E(x.f)}"></div><div class="dia-fc">${E(x.frente || '')}${x.serv ? ' · ' + E(x.serv) : ''}</div></div>`).join('')}</div>${fts.length > 40 ? `<div class="dx-sub">Mostrando 40 de ${fts.length}. Veja todas na Aprovação.</div>` : ''}`;
     main.querySelectorAll('.dia-blk').forEach(x => x.remove());
     main.insertAdjacentHTML('beforeend',
-      _diaBloco('par', _ic.timer, 'Paradas do dia', todasPar.length ? _n1(hPar) + ' h paradas' + (par.some(p => p.aberta) ? ' · ' + par.filter(p => p.aberta).length + ' agora' : '') : '', corpoPar, todasPar.length)
+      _diaBloco('par', _ic.timer, 'Interferências do dia', todasPar.length ? _n1(hPar) + ' h de interferência' + (par.some(p => p.aberta) ? ' · ' + par.filter(p => p.aberta).length + ' agora' : '') : '', corpoPar, todasPar.length)
       + _diaBloco('abs', _ic.fuel, 'Abastecimentos', abs.length ? _fmtN(litros) + ' L' + (nAl ? ' · <span style="color:#FF5A60">' + nAl + ' com alerta</span>' : '') : '', corpoAbs, abs.length)
       + _diaBloco('mob', _ic.truck, 'Mobilizações', mobs.length ? nEnt + ' chegada(s) · ' + nSai + ' devolução(ões)' : '', corpoMob, mobs.length)
       + _diaBloco('ft', _ic.grid, 'Fotos das frentes', fts.length ? fts.length + ' foto(s) em ' + new Set(fts.map(x => x.frente)).size + ' frente(s)' : '', corpoFt, fts.length));
@@ -17627,7 +17627,7 @@ function _rdoPagina(x, FT) {
     <div class="two"><div><h3>Efetivo por função · ${(x.mo || []).length}</h3>${tb(['Função', 'Qtd.'], Object.entries(porF).sort((a, b) => b[1] - a[1]).map(([f, n]) => `<tr><td>${E(f)}</td><td class="n">${n}</td></tr>`))}</div>
     <div><h3>Material aplicado</h3>${tb(['Descrição', 'Unid.', 'Qtd.'], (x.mat || []).map(m => `<tr><td>${E(m.desc)}</td><td>${E(m.unid)}</td><td class="n">${_rdoN(m.qtd)}</td></tr>`))}</div></div>
     <h3>Equipamentos</h3>${tb(['Equipamento', 'Operador', 'Trab. (h)', 'Parado (h)', 'Motivo'], (x.eq || []).map(e => `<tr><td><b>${E(e.tag)}</b>${e.desc ? ' · ' + E(e.desc) : ''}</td><td>${E(e.operador || '')}</td><td class="n">${_rdoN(e.hp)}</td><td class="n">${_rdoN(e.hpar)}</td><td>${E(e.motivo || '')}</td></tr>`))}
-    <h3>Paradas</h3>${tb(['Início', 'Fim', 'Motivo', 'Quem', 'Horas'], (x.par || []).map(p => `<tr><td>${E(p.ini)}</td><td>${E(p.fim || '…')}</td><td>${E(p.motivo)}</td><td>${E(p.quem)}</td><td class="n">${_rdoN(p.horas)}</td></tr>`))}
+    <h3>Interferências</h3>${tb(['Início', 'Fim', 'Motivo', 'Quem', 'Horas'], (x.par || []).map(p => `<tr><td>${E(p.ini)}</td><td>${E(p.fim || '…')}</td><td>${E(p.motivo)}</td><td>${E(p.quem)}</td><td class="n">${_rdoN(p.horas)}</td></tr>`))}
     ${FT.length ? `<h3>Relatório fotográfico · ${FT.length}</h3><div class="fts">${FT.map(f => `<figure><img src="${f.img}" alt=""><figcaption>${E(x.frente || '')} · ${E(x.servico || '')} · ${_rdoHr(f.em)}</figcaption></figure>`).join('')}</div>` : ''}
     <h3>Ocorrências e observações</h3><div class="oc">${E(x.ocorr || '—')}</div>
     <div class="ass"><div>${E(x.apontador || '')}<br>Apontador / encarregado</div><div>Engenharia / fiscalização</div></div>
@@ -20385,7 +20385,7 @@ const _FAROL = {
   'aprovacao': 'a ENG', 'terceiros': 'a ENG', 'mm-aprov': 'c MTZ Cadastro master: a Matriz aprova as famílias e modelos novos que as obras criam (padroniza o banco)',
   'apon-mo': 'g APP', 'apon-eq': 'g APP', 'perdas': 'g APP', 'apon-diesel': 'g APP', 'rdos': 'g APP', 'avanco': 'g APP', 'partes-diarias': 'g APP', 'manut': 'g APP', 'tanques': 'g APP', 'frota-abast': 'g APP', 'frota-acerto': 'g APP',
   'frentes': 'y PLN', 'programacao': 'y PLN',
-  'obras': 'c MTZ', 'orcamento': 'c MTZ', 'ua': 'c MTZ', 'tipos-perdas': 'c MTZ Cadastro master: só a Matriz cadastra os tipos de parada', 'tipos-servico': 'c PLN', 'qrcodes': 'c PLN',
+  'obras': 'c MTZ', 'orcamento': 'c MTZ', 'ua': 'c MTZ', 'tipos-perdas': 'c MTZ Cadastro master: só a Matriz cadastra os tipos de interferência', 'tipos-servico': 'c PLN', 'qrcodes': 'c PLN',
   'empresas': 'c SUP', 'forn-banco': 'c MTZ Cadastro master: banco único de fornecedores, mantido pela Matriz', 'funcionarios': 'c DP', 'cargos': 'c DP', 'turnos': 'c DP', 'equipes': 'c PRD',
   'equipamentos': 'g APP Carga inicial pela Matriz; depois toda mobilização e desmobilização vem pelo app de campo', 'familias': 'c EQP', 'modelos': 'c EQP', 'planos-prev': 'c MAN', 'produtos': 'c MAN', 'notas-diesel': 'c ALM',
   'frota': 'c ADM', 'frota-resp': 'c ADM', 'frota-multas': 'c ADM', 'republicas': 'c ADM', 'alojados': 'c ADM', 'usuarios': 'c ADM', 'config': 'c ADM' };
