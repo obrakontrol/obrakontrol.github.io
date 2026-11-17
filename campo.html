@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.25</div>
+  <div class="login-versao">ObraKontrol Campo · v3.26</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7537,6 +7537,77 @@ function _ptGeoTxt() { if (!pt) return ''; const g = pt.gps;
   return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1.5px solid #DC2626;border-radius:10px;padding:8px 10px;font-size:12.5px;color:#DC2626;font-weight:700">⚠ Sem localização — ative o GPS<button type="button" class="btn btn-outline" style="width:auto;padding:6px 10px;font-size:12px" onclick="ptGeo()">Tentar de novo</button></div>`; }
 function ptGeo() { if (!pt) return; pt.geoSt = 'buscando'; const el = document.getElementById('pt-geo'); if (el) el.innerHTML = _ptGeoTxt();
   _geoPegar(15000).then(g => { if (!pt) return; pt.gps = g; pt.geoSt = 'ok'; }).catch(() => { if (pt) pt.geoSt = 'erro'; }).finally(() => { const e2 = document.getElementById('pt-geo'); if (e2) e2.innerHTML = _ptGeoTxt(); }); }
+// ═══════════════════════════════════════════════════════════════
+// v3.26: CHOQUE DE HORÁRIO — a mesma pessoa ou equipamento não entra em dois turnos de encarregados diferentes no mesmo horário
+// Confere os turnos do dia (abertos e encerrados) dos outros encarregados da obra. Sem internet, o painel acusa na aprovação.
+// ═══════════════════════════════════════════════════════════════
+let _chTurnos = null, _chEm = 0, _chAvisouOff = false;
+function _chMinC(h) { const m = String(h || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; }
+function _chHoraC(m) { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+async function _chCarregar(forcar) {
+  const data = document.getElementById('ap-data')?.value, obra = _apObra(); if (!data || !obra) return null;
+  if (!forcar && _chTurnos && _chTurnos.data === data && Date.now() - _chEm < 45000) return _chTurnos;
+  if (!isOnline || !db || !_fbReady) return _chTurnos && _chTurnos.data === data ? _chTurnos : null;
+  try { const s = await db.collection('turnosAbertos').where('data', '==', data).get();
+    _chTurnos = { data, lista: s.docs.map(d => d.data()).filter(t => (!t.obra || t.obra === obra) && t.status !== 'descartado') }; _chEm = Date.now(); } catch (e) { console.warn('choque:', e.message); }
+  return _chTurnos;
+}
+function _chMeu() { const a = _chMinC(document.getElementById('ap-hora-ini')?.value); if (a == null) return null; let b = _chMinC(document.getElementById('ap-hora-fim')?.value); if (b == null) b = 1440; if (b <= a) b += 1440; return [a, b]; }
+function _chDoTurno(t) { const a = _chMinC(t.horaIni); if (a == null) return null; let b = t.status === 'aberto' ? 1440 : _chMinC(t.horaFim); if (b == null) b = 1440; if (b <= a) b += 1440; return [a, b]; }
+/* conflitos de um recurso: tipo 'mo' (id do funcionário) ou 'eq' (id do equipamento) */
+function _chConflitos(tipo, id) {
+  if (!_chTurnos) return []; const eu = usuarioCampo?.id || '', meu = _chMeu(); if (!meu) return [];
+  const f = tipo === 'mo' ? (dadosCampo.funcionarios || []).find(x => x.id === id) : null, mat = f ? String(f.mat || '') : '';
+  return _chTurnos.lista.filter(t => t.uid !== ap.uid && (t.apontadorId || '') !== eu && (tipo === 'mo' ? (t.mo || []).some(p => p.id === id || (mat && String(p.mat || '') === mat)) : (t.eq || []).some(e => e.id === id)))
+    .filter(t => { const o = _chDoTurno(t); return o && meu[0] < o[1] && o[0] < meu[1]; });
+}
+function _chMsg(nome, L) {
+  const t = L[0], fim = t.status === 'aberto' ? 'turno ainda aberto' : 'até ' + (t.horaFim || '');
+  let el = document.getElementById('ch-sheet'); if (!el) { document.body.insertAdjacentHTML('beforeend', '<div class="sheet-bg" id="ch-sheet" onclick="if(event.target===this)this.classList.remove(\'show\')"><div class="sheet"><div class="sheet-h"><b>Já está em outra frente</b><button class="sheet-x" onclick="document.getElementById(\'ch-sheet\').classList.remove(\'show\')">×</button></div><div id="ch-corpo" style="padding:4px 2px 10px"></div></div></div>'); el = document.getElementById('ch-sheet'); }
+  document.getElementById('ch-corpo').innerHTML = `<div style="display:flex;gap:12px;align-items:flex-start"><div style="font-size:28px">⛔</div><div style="font-size:14px;line-height:1.5">
+    <b>${_esc(nome)}</b> está no turno de <b>${_esc(t.apontador || 'outro encarregado')}</b> na frente <b>${_esc(t.frente || '—')}</b>, desde <b>${_esc(t.horaIni || '')}</b> (${_esc(fim)}).
+    <div style="margin-top:8px;color:var(--text2)">Não dá para apontar a mesma ${nome && /^[A-Z]{2,}-/.test(nome) ? 'máquina' : 'pessoa'} em duas frentes no mesmo horário. Se mudou de frente, peça para <b>${_esc((t.apontador || 'o encarregado').split(' ')[0])}</b> tirar do turno dele ou encerrar o turno — depois inclua aqui.</div>
+    ${L.length > 1 ? `<div style="margin-top:6px;font-size:12px;color:var(--text3)">Também em: ${L.slice(1).map(x => _esc(x.frente + ' · ' + (x.apontador || ''))).join('; ')}</div>` : ''}</div></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="document.getElementById('ch-sheet').classList.remove('show')">Entendi</button>`;
+  el.classList.add('show');
+}
+function _chOff() { if (!_chAvisouOff && !isOnline) { _chAvisouOff = true; toast('Sem internet: não deu para conferir se alguém já apontou — o escritório confere na aprovação.', 'err'); } }
+(function () {
+  const oM = apToggleMO; apToggleMO = window.apToggleMO = async function (id) {
+    if (ap.mo.has(id)) return oM.apply(this, arguments);
+    const T = await _chCarregar(); if (!T) { _chOff(); return oM.apply(this, arguments); }
+    const L = _chConflitos('mo', id); if (L.length) { const f = (dadosCampo.funcionarios || []).find(x => x.id === id); _chMsg(f ? f.nome : 'Essa pessoa', L); return; }
+    return oM.apply(this, arguments); };
+  const oE = apToggleEQ; apToggleEQ = window.apToggleEQ = async function (id) {
+    if (ap.eq.has(id)) return oE.apply(this, arguments);
+    const T = await _chCarregar(); if (!T) { _chOff(); return oE.apply(this, arguments); }
+    const L = _chConflitos('eq', id); if (L.length) { const e = (dadosCampo.equipamentos || []).find(x => x.id === id); _chMsg(e ? (e.tag || e.placa) : 'Esse equipamento', L); return; }
+    return oE.apply(this, arguments); };
+  const oT = apSelecionarTodosMO; apSelecionarTodosMO = window.apSelecionarTodosMO = async function () {
+    const antes = new Set(ap.mo); const r = oT.apply(this, arguments); const T = await _chCarregar(); if (!T) return r;
+    const fora = [...ap.mo].filter(id => !antes.has(id) && _chConflitos('mo', id).length);
+    if (fora.length) { fora.forEach(id => ap.mo.delete(id)); apRenderMO(); apGuardar(); toast(fora.length + ' pessoa(s) ficaram de fora: já estão no turno de outro encarregado neste horário.', 'err'); }
+    return r; };
+  // marca na lista quem está com outro encarregado agora
+  const oRM = apRenderMO; apRenderMO = window.apRenderMO = function () { const r = oRM.apply(this, arguments);
+    try { if (_chTurnos) document.querySelectorAll('#ap-mo-lista .list-item').forEach(li => { const id = ((li.getAttribute('onclick') || '').match(/apToggleMO\('([^']+)/) || [])[1]; if (!id || ap.mo.has(id)) return;
+      const L = _chConflitos('mo', id); if (L.length) { li.style.opacity = '.55'; const s = li.querySelector('.list-sub'); if (s && !s.querySelector('.ch-com')) s.insertAdjacentHTML('beforeend', `<span class="ap-tambem ch-com" style="background:#FEE2E2;color:#B91C1C">com ${_esc((L[0].apontador || '').split(' ')[0])} em ${_esc(L[0].frente)}</span>`); } }); } catch (e) {}
+    return r; };
+  const oRE = apRenderEQ; apRenderEQ = window.apRenderEQ = function () { const r = oRE.apply(this, arguments);
+    try { if (_chTurnos) document.querySelectorAll('#ap-eq-lista .list-item').forEach(li => { const id = ((li.getAttribute('onclick') || '').match(/apToggleEQ\('([^']+)/) || [])[1]; if (!id || ap.eq.has(id)) return;
+      const L = _chConflitos('eq', id); if (L.length) { li.style.opacity = '.55'; const s = li.querySelector('.list-sub'); if (s && !s.querySelector('.ch-com')) s.insertAdjacentHTML('beforeend', `<span class="ap-tambem ch-com" style="background:#FEE2E2;color:#B91C1C">com ${_esc((L[0].apontador || '').split(' ')[0])} em ${_esc(L[0].frente)}</span>`); } }); } catch (e) {}
+    return r; };
+  const oTab = apTab; apTab = window.apTab = function (aba) { const r = oTab.apply(this, arguments); if (aba === 'mo' || aba === 'eq') _chCarregar(true).then(T => { if (T) { aba === 'mo' ? apRenderMO() : apRenderEQ(); } }); return r; };
+  // no encerramento confere de novo (as horas podem ter mudado)
+  const oS = salvarApropriacao; salvarApropriacao = window.salvarApropriacao = async function () {
+    try { if (!document.getElementById('ap-hora-fim').value) apAgora('ap-hora-fim');
+      const T = await _chCarregar(true);
+      if (T) { const ruins = [...[...ap.mo].map(id => ['mo', id]), ...[...ap.eq.keys()].map(id => ['eq', id])].map(([t, id]) => [t, id, _chConflitos(t, id)]).filter(x => x[2].length);
+        if (ruins.length) { const [t, id, L] = ruins[0], nome = t === 'mo' ? ((dadosCampo.funcionarios || []).find(x => x.id === id) || {}).nome : (((dadosCampo.equipamentos || []).find(x => x.id === id) || {}).tag);
+          _chMsg((nome || '') + (ruins.length > 1 ? ' (e mais ' + (ruins.length - 1) + ')' : ''), L); apTab(t === 'mo' ? 'mo' : 'eq'); return; } }
+    } catch (e) { console.warn('choque encerrar', e); }
+    return oS.apply(this, arguments); };
+})();
 </script>
 </body>
 </html>

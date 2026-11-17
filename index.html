@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.83 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.84 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -20503,6 +20503,103 @@ function _apropSincTodos() { let n = 0; (dados.funcionarios || []).forEach(f => 
   const oGrav = window._gravarImportados; window._gravarImportados = async function (tipo) { const r = await oGrav.apply(this, arguments); if (tipo === 'funcionarios') try { _apropSincTodos(); } catch (e) {} return r; };
   // na abertura: quem gere a ferramenta sincroniza (pega quem teve a demissão vencida)
   setTimeout(() => { try { if (_podeVincApont() && (dados.funcionarios || []).length && USUARIOS.length) _apropSincTodos(); } catch (e) {} }, 6000);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v4.84: CHOQUE DE HORÁRIO — a mesma pessoa ou o mesmo equipamento em dois apontamentos que se sobrepõem
+// • Aprovação: card marcado em vermelho (outro encarregado) ou amarelo (mesmo encarregado), "Tirar daqui" por item,
+//   e aprovar com choque vermelho exige justificativa.
+// • Acompanhamento do dia: alerta com quem está em dois lugares (turnos abertos + apontamentos do dia).
+// ═══════════════════════════════════════════════════════════════
+function _chMin(h) { const m = String(h || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; }
+function _chIntervalo(x, aberto) { const a = _chMin(x.horaIni || x.hora); if (a == null) return null; let b = _chMin(x.horaFim);
+  if (b == null) { if (aberto) { const n = new Date(); b = n.getHours() * 60 + n.getMinutes(); if (x.data && x.data < _hojeLocal()) b = 1440; } else { const h = (+x.hn || 0) + (+x.he || 0) + (+x.hp || 0) + (+x.hpar || 0); b = a + (h ? h * 60 : 60); } }
+  if (b <= a) b += 1440; return [a, b]; }
+function _chHora(m) { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+/* lista de "ocupações": {tipo:'mo'|'eq', chaveRec, nome, chave(grupo), frente, apontador, data, ini, fim, itemId, col, aberto} */
+function _chOcupacoes(filtroData) {
+  const L = [], ok = s => s !== 'rejeitado';
+  (dados.aponMO || []).forEach(x => { if (!ok(x.status) || (filtroData && x.data !== filtroData)) return; const iv = _chIntervalo(x); if (!iv) return;
+    const rec = String(x.mat || x.func || '').trim(); if (!rec) return;
+    L.push({ tipo: 'mo', rec: x.data + '|' + rec, nome: x.func || rec, chave: _aprChave(x), frente: x.frente, apontador: x.lancadoPor || '', data: x.data, ini: iv[0], fim: iv[1], itemId: x.id, col: 'aponMO', status: x.status, obra: x.obra }); });
+  (dados.aponEQ || []).forEach(x => { if (!ok(x.status) || (filtroData && x.data !== filtroData)) return; const iv = _chIntervalo(x); if (!iv) return;
+    const rec = String(x.equipId || x.equip || '').trim(); if (!rec) return;
+    L.push({ tipo: 'eq', rec: x.data + '|' + rec, nome: x.equip || rec, chave: _aprChave(x), frente: x.frente, apontador: x.lancadoPor || '', data: x.data, ini: iv[0], fim: iv[1], itemId: x.id, col: 'aponEQ', status: x.status, obra: x.obra }); });
+  return L;
+}
+function _chAchar(L) {
+  const por = {}; L.forEach(o => (por[o.rec] = por[o.rec] || []).push(o));
+  const res = new Map();   /* itemId/ocupação -> [conflitos] */
+  Object.values(por).forEach(g => { if (g.length < 2) return;
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) { const a = g[i], b = g[j]; if (a.chave === b.chave) continue;
+      if (a.ini < b.fim && b.ini < a.fim) { const mesmo = !!a.apontador && a.apontador === b.apontador;
+        [[a, b], [b, a]].forEach(([p, q]) => { const k = p.itemId || p.id; (res.get(k) || res.set(k, []).get(k)).push({ outro: q, mesmo }); }); } } });
+  return res;
+}
+let _chCache = null, _chSig = '';
+function _chMapa() { const sig = (dados.aponMO || []).length + '/' + (dados.aponEQ || []).length + '/' + Object.keys(_apr.edits || {}).length + '/' + ((dados.aponMO || []).filter(x => x.status === 'rejeitado').length);
+  if (_chCache && sig === _chSig) return _chCache; _chSig = sig; _chCache = _chAchar(_chOcupacoes()); return _chCache; }
+function _chDoGrupo(g) { const M = _chMapa(), out = [];
+  [...g.mo.map(x => ['mo', x]), ...g.eq.map(x => ['eq', x])].forEach(([t, x]) => { const c = M.get(x.id); if (c && c.length) out.push({ tipo: t, item: x, conf: c }); });
+  return out; }
+function _chTxt(c) { const o = c.outro; return `${_e(o.frente || '—')} · ${_e(o.apontador || '—')} · ${_chHora(o.ini)}–${_chHora(o.fim)}${o.status === 'aprovado' ? ' (aprovado)' : ''}`; }
+async function chTirar(col, id) {
+  const x = (dados[col] || []).find(y => y.id === id); if (!x) return;
+  const nome = col === 'aponMO' ? (x.func || x.mat) : x.equip;
+  if (!confirm('Tirar ' + nome + ' deste apontamento (' + (x.frente || '') + ' ' + (x.horaIni || '') + '–' + (x.horaFim || '') + ')?\n\nEle fica rejeitado só aqui, com o motivo "choque de horário". O restante do apontamento continua.')) return;
+  Object.assign(x, { status: 'rejeitado', rejeitadoPor: usuarioLogado?.nome || 'Painel', rejeitadoEm: new Date().toISOString(), motivoRejeicao: 'Choque de horário — estava em outro apontamento no mesmo horário' });
+  _chCache = null; try { await fbSave(col, x.id, x); } catch (e) { toast('Não gravou no servidor: ' + (e.message || e), 'error'); }
+  toast(nome + ' retirado deste apontamento.'); renderAprovacao();
+  try { if (_apr.aberto && document.getElementById('modal-apr-detalhe')?.classList.contains('open')) { const i = (_apr.vis || []).findIndex(g => g.chave === _apr.aberto); if (i >= 0) aprAbrir(i); else closeModal('modal-apr-detalhe'); } } catch (e) {}
+}
+function _chBlocoHTML(g, pend) {
+  const L = _chDoGrupo(g); if (!L.length) return '';
+  const verm = L.some(z => z.conf.some(c => !c.mesmo));
+  return `<div class="ch-box ${verm ? 'ch-r' : 'ch-a'}"><div class="ch-t">⚠ Choque de horário · ${L.length} ${L.length > 1 ? 'itens' : 'item'}</div>` + L.map(z => `<div class="ch-l"><div><b>${_e(z.tipo === 'mo' ? (z.item.func || z.item.mat) : z.item.equip)}</b> também em ${z.conf.map(_chTxt).join('; ')}</div>${pend ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();chTirar('${z.tipo === 'mo' ? 'aponMO' : 'aponEQ'}','${_e(z.item.id)}')">Tirar daqui</button>` : ''}</div>`).join('')
+    + `<div class="ch-d">${verm ? 'Outro encarregado apontou no mesmo horário. Tire de um dos lados ou justifique ao aprovar.' : 'O mesmo encarregado lançou em dois turnos no mesmo horário — confira se as horas não dobraram.'}</div></div>`;
+}
+(function () {
+  document.head.insertAdjacentHTML('beforeend', `<style>
+  .ch-box{margin:8px 12px 10px;border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.4}
+  .ch-r{background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.45);color:var(--text)}.ch-r .ch-t{color:#DC2626}
+  .ch-a{background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.45);color:var(--text)}.ch-a .ch-t{color:#B45309}
+  .ch-t{font-weight:700;margin-bottom:4px}.ch-l{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:3px 0;border-top:1px dashed rgba(127,127,127,.25)}.ch-l .btn{flex-shrink:0;padding:2px 8px;font-size:11px}
+  .ch-d{margin-top:4px;color:var(--text-3);font-size:11px}
+  .ch-borda-r{box-shadow:0 0 0 2px rgba(220,38,38,.7)!important}.ch-borda-a{box-shadow:0 0 0 2px rgba(217,119,6,.6)!important}
+  </style>`);
+  const oR = renderAprovacao; renderAprovacao = window.renderAprovacao = function () { const r = oR.apply(this, arguments);
+    try { _chCache = null; const cards = document.querySelectorAll('#apr-lista .mo-cards-grid > *'); (_apr.vis || []).slice(0, cards.length).forEach((g, i) => { const h = _chBlocoHTML(g, _apr.status === 'campo'); if (!h) return;
+      const c = cards[i]; c.insertAdjacentHTML('beforeend', h); c.classList.add(h.includes('ch-r') ? 'ch-borda-r' : 'ch-borda-a'); }); } catch (e) { console.warn('choque', e); }
+    return r; };
+  const oA = window.aprAbrir; window.aprAbrir = aprAbrir = function (i) { const r = oA.apply(this, arguments);
+    try { const g = (_apr.vis || [])[i], h = g && _chBlocoHTML(g, _apr.status === 'campo'); if (h) document.getElementById('apr-det-corpo').insertAdjacentHTML('afterbegin', h); } catch (e) {} return r; };
+  const oAp = window.aprAprovar; window.aprAprovar = aprAprovar = async function (chaves) {
+    try { _chCache = null; const G = _aprGrupos('campo').filter(g => (chaves || []).includes(g.chave)), ruins = G.map(g => [g, _chDoGrupo(g).filter(z => z.conf.some(c => !c.mesmo))]).filter(([, l]) => l.length);
+      if (ruins.length) {
+        const txt = ruins.slice(0, 6).map(([g, l]) => '• ' + (g.frente || '') + ' ' + g.horaIni + ' (' + g.apontador + '): ' + l.map(z => z.tipo === 'mo' ? (z.item.func || z.item.mat) : z.item.equip).join(', ')).join('\n');
+        const j = prompt('Choque de horário em ' + ruins.length + ' apontamento(s):\n' + txt + '\n\nO ideal é usar "Tirar daqui" de um dos lados. Para aprovar mesmo assim, escreva a justificativa (ex.: horas divididas entre as frentes):');
+        if (!j || !j.trim()) { toast('Aprovação cancelada: resolva o choque de horário.', 'error'); return; }
+        ruins.forEach(([g, l]) => l.forEach(z => { (_apr.edits[z.item.id] = _apr.edits[z.item.id] || {}).choqueJustif = j.trim(); }));
+      } } catch (e) { console.warn('choque aprov', e); }
+    return oAp.apply(this, arguments); };
+  // Acompanhamento do dia: alerta de quem está em dois lugares
+  const oD = renderDiario; renderDiario = window.renderDiario = function () { const r = oD.apply(this, arguments);
+    try { const pg = document.getElementById('page-diario'); pg.querySelector('#ch-dia')?.remove(); const data = _dia.dataSel || _hojeLocal(), obra = _dx.obra;
+      const L = _chOcupacoes(data).filter(o => !obra || !o.obra || o.obra === obra);
+      (_dia.lista || []).filter(t => t.data === data && t.status === 'aberto' && (!obra || t.obra === obra)).forEach(t => { const iv = _chIntervalo(t, true); if (!iv) return; const ch = 'ta|' + t.id;
+        (t.mo || []).forEach(p => { const rec = String(p.mat || p.nome || '').trim(); if (rec) L.push({ tipo: 'mo', rec: data + '|' + rec, nome: p.nome || rec, chave: ch, frente: t.frente, apontador: t.apontador, data, ini: iv[0], fim: iv[1], id: ch + '|m|' + rec, status: 'aberto' }); });
+        (t.eq || []).forEach(e => { const rec = String(e.id || e.tag || '').trim(); if (rec) L.push({ tipo: 'eq', rec: data + '|' + rec, nome: e.tag || rec, chave: ch, frente: t.frente, apontador: t.apontador, data, ini: iv[0], fim: iv[1], id: ch + '|e|' + rec, status: 'aberto' }); }); });
+      /* o turno aberto e o apontamento do mesmo turno já encerrado não são choque */
+      const M = _chAchar(L), vistos = new Set(), linhas = [];
+      L.forEach(o => { const c = (M.get(o.itemId || o.id) || []).filter(z => !z.mesmo); if (!c.length || vistos.has(o.rec)) return; vistos.add(o.rec);
+        linhas.push({ o, c }); });
+      if (!linhas.length) return r;
+      const nP = linhas.filter(x => x.o.tipo === 'mo').length, nE = linhas.length - nP;
+      const html = `<div id="ch-dia" class="card" style="margin:0 0 14px;border:1px solid rgba(220,38,38,.5);background:rgba(220,38,38,.07)"><div class="card-body" style="padding:12px 16px">
+        <div style="font-weight:700;color:#DC2626;margin-bottom:6px">⚠ ${nP ? nP + ' pessoa(s)' : ''}${nP && nE ? ' e ' : ''}${nE ? nE + ' equipamento(s)' : ''} em dois lugares ao mesmo tempo</div>
+        ${linhas.slice(0, 8).map(({ o, c }) => `<div style="font-size:13px;padding:3px 0"><b>${_e(o.nome)}</b> — ${_e(o.frente || '—')} · ${_e(o.apontador || '—')} ${_chHora(o.ini)}–${o.status === 'aberto' ? 'agora' : _chHora(o.fim)} <span style="color:var(--text-3)">e</span> ${c.map(z => `${_e(z.outro.frente || '—')} · ${_e(z.outro.apontador || '—')} ${_chHora(z.outro.ini)}–${z.outro.status === 'aberto' ? 'agora' : _chHora(z.outro.fim)}`).join('; ')}</div>`).join('')}
+        ${linhas.length > 8 ? `<div style="font-size:12px;color:var(--text-3)">+ ${linhas.length - 8}</div>` : ''}<div style="font-size:12px;color:var(--text-3);margin-top:4px">Ligue para os encarregados: a mesma pessoa ou máquina não pode estar em duas frentes no mesmo horário. Na aprovação, o card aparece marcado.</div></div></div>`;
+      const k = pg.querySelector('#dd-equipes') || pg.querySelector('.dx-kpis'); if (k) k.insertAdjacentHTML('afterend', html); } catch (e) { console.warn('choque dia', e); }
+    return r; };
 })();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
