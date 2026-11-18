@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.34</div>
+  <div class="login-versao">ObraKontrol Campo · v3.35</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8122,6 +8122,133 @@ function _mrqRender() {
   const oVR = rqValidar; rqValidar = window.rqValidar = async function () { const r = await oVR.apply(this, arguments);
     if (rq && rq.val) { rq.val.forEach(v => v.r.itens.forEach((it, i) => { if (it._jaApl && v.itens[i]) v.itens[i].apl = Math.max(0, Math.round(((+it.qtd || 0) - it._jaApl) * 100) / 100); })); if (rq.modo === 'validar') rqRender(); }
     return r; };
+})();
+
+
+// ══════════════════════════════════════════════════════════════
+// v3.35: ALMOXARIFADO NO APP (aba Suprimentos, só para quem tem permissão "almoxarifado")
+// Fila de pedidos "aguardando almox" → atender (quantidade, entrega parcial, vincular item digitado ao código)
+// → assinatura de quem retirou → ENTREGUE (aparece na hora no card de material do encarregado). Ou recusar com motivo.
+// A baixa no TOTVS e os relatórios continuam no painel.
+// ══════════════════════════════════════════════════════════════
+let axa = null;
+function _axaPode() { try { return typeof podeModulo === 'function' && podeModulo('almoxarifado'); } catch (e) { return false; } }
+function _axaE(s) { return _esc(String(s ?? '')); }
+function _axaN(v) { return String(Math.round((+v || 0) * 100) / 100).replace('.', ','); }
+function _axaTela() {
+  if (document.getElementById('screen-axa')) return;
+  const back = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
+  document.getElementById('screen-home').insertAdjacentHTML('afterend', `<div class="screen" id="screen-axa"><div class="topbar"><div class="topbar-row"><div class="tb-left"><button class="tb-back" onclick="axaVoltar()" aria-label="Voltar">${back}</button><div><div class="topbar-title" id="axa-tit">Almoxarifado</div><div class="topbar-sub" id="axa-sub">Pedidos do app</div></div></div></div></div>
+    <div class="content" id="axa-content"></div><div class="mob-bar" id="axa-bar"></div></div>`);
+  const css = document.createElement('style');
+  css.textContent = `.axa-busca{display:flex;gap:8px;margin-bottom:10px}.axa-busca .form-control{flex:1;font-family:ui-monospace,monospace;font-weight:800;text-transform:uppercase}
+    .axa-p{border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--card,#fff)}.axa-h{display:flex;justify-content:space-between;align-items:center;gap:8px}.axa-h b{font-family:ui-monospace,monospace;font-size:17px}
+    .axa-s{font-size:12px;color:var(--text2)}.axa-tg{font-size:11px;font-weight:800;border-radius:999px;padding:3px 9px;background:#FEF3C7;color:#92400E}.axa-it{border-top:1px solid rgba(127,127,127,.15);margin-top:8px;padding-top:8px}
+    .axa-it b{font-size:13.5px}.axa-q{display:flex;align-items:center;gap:8px;margin-top:6px}.axa-q .form-control{width:100px;text-align:center;font-weight:800}.axa-man{background:#FEF3C7;color:#92400E;border-radius:6px;font-size:10.5px;font-weight:800;padding:2px 6px;margin-left:4px}
+    .axa-low{color:var(--red);font-weight:700}`;
+  if (!document.getElementById('css-hbadge')) document.head.insertAdjacentHTML('beforeend', '<style id="css-hbadge">.hbadge{position:absolute;top:12px;right:12px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:#E30613;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}</style>');
+  document.head.appendChild(css);
+}
+async function _axaEstoque() {
+  let l = null; try { l = await Promise.race([fbCarregar('almoxEstoque'), new Promise(r => setTimeout(() => r(null), 6000))]); } catch (e) {}
+  if (!l) { try { l = JSON.parse(localStorage.getItem('campo_cache_almox') || '[]'); } catch (e) { l = []; } }
+  const o = usuarioCampo?.obra || ''; return (l || []).filter(e => !o || !e.obra || e.obra === o);
+}
+async function _axaBuscar() {
+  if (!(db && _fbReady && isOnline)) return null;
+  try { const sn = await Promise.race([db.collection('requisicoes').where('status', '==', 'solicitada').get(), new Promise(r => setTimeout(() => r(null), 7000))]); if (!sn) return null;
+    const o = usuarioCampo?.obra || ''; return sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => !o || !r.obra || r.obra === o).sort((a, b) => String(a.data + a.hora).localeCompare(String(b.data + b.hora))); } catch (e) { return null; }
+}
+async function axaAbrir() {
+  if (!_axaPode()) { toast('Seu perfil não tem acesso ao almoxarifado.', 'err'); return; }
+  _axaTela(); axa = { modo: 'lista', L: null, est: [], busca: '', r: null }; showScreen('axa'); axaRender();
+  const [L, est] = await Promise.all([_axaBuscar(), _axaEstoque()]); axa.L = L; axa.est = est; axa.erro = !L; axaRender(); _axaBadge();
+}
+function axaVoltar() { if (axa && axa.modo === 'atender') { if (!confirm('Sair sem entregar?')) return; axa.modo = 'lista'; axa.r = null; axaRender(); return; } axa = null; showScreen('home'); }
+function _axaSaldo(cod) { return (axa.est || []).filter(e => e.cod === cod).reduce((s, e) => s + (+e.fisico || 0), 0); }
+function _axaLocais(cod) { const l = [...new Set((axa.est || []).filter(e => !cod || e.cod === cod).map(e => e.local).filter(Boolean))]; return l.length ? l : ['ALMOXARIFADO DA OBRA']; }
+function axaBuscarNum(v) { const q = String(v || '').trim().toUpperCase().replace(/[\s-]+/g, ''); if (!q) return; const r = (axa.L || []).find(x => { const n = String(x.num).toUpperCase().replace(/[\s-]+/g, ''); return n === q || n.endsWith(q); });
+  if (r) axaAtender(r.id); else toast('Nenhum pedido aguardando com "' + v + '".', 'err'); }
+function axaRender() {
+  const el = document.getElementById('axa-content'), bar = document.getElementById('axa-bar'); if (!el || !axa) return; const E = _axaE;
+  if (axa.modo === 'atender') return _axaAtRender(el, bar);
+  document.getElementById('axa-tit').textContent = 'Almoxarifado'; document.getElementById('axa-sub').textContent = 'Pedidos aguardando entrega';
+  bar.innerHTML = '<button class="btn btn-outline" onclick="axaVoltar()">Sair</button><button class="btn btn-green" onclick="axaAbrir()">↻ Atualizar</button>';
+  if (!axa.L) { el.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;color:var(--text2)">${axa.erro ? 'Sem internet para buscar os pedidos. Tente de novo com sinal.' : 'Buscando pedidos…'}</div></div>`; return; }
+  const L = axa.L.filter(r => !axa.busca || String(r.num).toUpperCase().includes(axa.busca.toUpperCase()) || _rqN(r.encarregado || '').includes(_rqN(axa.busca)));
+  el.innerHTML = `<div class="axa-busca"><input class="form-control" placeholder="Nº da requisição" value="${E(axa.busca)}" oninput="axa.busca=this.value;axaRender();this.focus();this.setSelectionRange(this.value.length,this.value.length)" onkeydown="if(event.key==='Enter')axaBuscarNum(this.value)"/><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="axaBuscarNum(axa.busca)">Abrir</button></div>
+    <div class="axa-s" style="margin:0 4px 8px">${axa.L.length} pedido(s) aguardando · mais antigo primeiro</div>
+    ${L.map(r => `<div class="axa-p" onclick="axaAtender('${E(r.id)}')"><div class="axa-h"><b>${E(r.num)}</b><span class="axa-tg">aguardando</span></div>
+      <div class="axa-s">${E(String(r.data || '').split('-').reverse().join('/'))} ${E(r.hora || '')} · enc. <b>${E(r.encarregado)}</b>${r.solicitante && r.solicitante !== r.encarregado ? ' · pedido por ' + E(r.solicitante) : ''}${r.frenteInf ? ' · ' + E(r.frenteInf) : ''}</div>
+      <div style="font-size:13px;margin-top:5px">${(r.itens || []).map(it => _axaN(it.qtd) + ' ' + E(it.und) + ' ' + E(it.nome) + (it.manual ? ' ✍' : '')).join(' · ')}</div></div>`).join('') || `<div class="card"><div class="card-body" style="text-align:center"><div style="font-size:40px">📦</div><b>${axa.busca ? 'Nada com esse número' : 'Nenhum pedido aguardando'}</b></div></div>`}<div style="height:70px"></div>`;
+}
+function axaAtender(id) {
+  const r = (axa.L || []).find(x => x.id === id); if (!r) return;
+  axa.r = r; axa.modo = 'atender'; axa.sig = ''; axa.ret = r.encarregado || ''; axa.local = _axaLocais((r.itens.find(it => it.cod) || {}).cod)[0];
+  axa.q = (r.itens || []).map(it => { const s = it.cod ? _axaSaldo(it.cod) : 0; return it.manual ? +it.qtd : Math.min(+it.qtd, s || +it.qtd); });
+  axa.cod = (r.itens || []).map(it => it.manual ? '' : it.cod); axaRender(); window.scrollTo(0, 0);
+}
+function _axaAtRender(el, bar) {
+  const E = _axaE, r = axa.r; document.getElementById('axa-tit').textContent = 'Atender ' + r.num; document.getElementById('axa-sub').textContent = 'Encarregado: ' + (r.encarregado || '—');
+  const locs = _axaLocais(), ests = [...new Map((axa.est || []).map(e => [e.cod, e])).values()];
+  el.innerHTML = `<div class="card"><div class="card-body"><div class="axa-s">${E(String(r.data || '').split('-').reverse().join('/'))} ${E(r.hora || '')} · pedido no app por <b>${E(r.solicitante || r.encarregado)}</b>${r.frenteInf ? ' · destino ' + E(r.frenteInf) + ' ' + E(r.servicoInf || '') : ''}</div>${r.obs ? `<div class="axa-s" style="margin-top:4px">Obs.: ${E(r.obs)}</div>` : ''}
+      <div class="form-group" style="margin-top:10px"><label class="form-label">Local de estoque</label><select class="form-control" onchange="axa.local=this.value">${locs.map(l => `<option ${l === axa.local ? 'selected' : ''}>${E(l)}</option>`).join('')}</select></div></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">Itens</span></div><div class="card-body">
+      <datalist id="axa-dl">${ests.map(e => `<option value="${E(e.cod + ' · ' + e.nome)}">`).join('')}</datalist>
+      ${(r.itens || []).map((it, i) => { const s = it.cod && !it.manual ? _axaSaldo(it.cod) : null;
+        return `<div class="axa-it"><b>${E(it.nome)}</b>${it.manual ? '<span class="axa-man">digitado no app</span>' : ''}<div class="axa-s">${it.cod && !it.manual ? E(it.cod) + ' · ' : ''}pedido <b>${_axaN(it.qtd)} ${E(it.und)}</b>${s != null ? ` · saldo <span class="${s < +it.qtd ? 'axa-low' : ''}">${_axaN(s)} ${E(it.und)}</span>` : ''}</div>
+          ${it.manual ? `<div class="axa-s">Justificativa: ${E(it.justificativa || '—')}</div><input class="form-control" style="margin-top:6px" list="axa-dl" placeholder="Vincular ao código do estoque *" value="${E(axa.cod[i] ? axa.cod[i] + ' · ' + ((ests.find(e => e.cod === axa.cod[i]) || {}).nome || '') : '')}" onchange="axa.cod[${i}]=String(this.value).split(' · ')[0].trim()"/>` : ''}
+          <div class="axa-q">Entregar <input class="form-control" inputmode="decimal" value="${_axaN(axa.q[i])}" onchange="axa.q[${i}]=parseFloat(String(this.value).replace(',','.'))||0"/> ${E(it.und)}</div></div>`; }).join('')}
+      <div class="axa-s" style="margin-top:10px">Faltou material? Entregue o que tem — a diferença fica registrada como não atendida.</div></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">Quem retirou *</span></div><div class="card-body">
+      <div class="form-group"><input class="form-control" value="${E(axa.ret)}" oninput="axa.ret=this.value"/></div>
+      <div class="mob-sig"><canvas id="axasig" width="600" height="180" aria-label="Assinatura de quem retirou"></canvas><button type="button" class="mob-link" onclick="axaSigLimpar()">Limpar</button><span>Quem retirou assina com o dedo</span></div></div></div><div style="height:80px"></div>`;
+  bar.innerHTML = `<button class="btn btn-outline" style="color:var(--red)" onclick="axaRecusar()">Recusar</button><button class="btn btn-green" onclick="axaEntregar()">✓ Confirmar entrega</button>`;
+  const c = document.getElementById('axasig'), g = c.getContext('2d'); g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#111';
+  let des = false; const pos = e => { const b = c.getBoundingClientRect(); return [(e.clientX - b.left) * c.width / b.width, (e.clientY - b.top) * c.height / b.height]; };
+  c.onpointerdown = e => { des = true; c.setPointerCapture(e.pointerId); const [x, y] = pos(e); g.beginPath(); g.moveTo(x, y); e.preventDefault(); };
+  c.onpointermove = e => { if (!des) return; const [x, y] = pos(e); g.lineTo(x, y); g.stroke(); e.preventDefault(); };
+  c.onpointerup = c.onpointercancel = () => { if (!des) return; des = false; axa.sig = c.toDataURL('image/png'); };
+}
+function axaSigLimpar() { axa.sig = ''; const c = document.getElementById('axasig'); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height); }
+async function axaEntregar() {
+  const r = axa.r; if (!r) return;
+  if (!axa.q.some(q => q > 0)) { toast('Nenhuma quantidade entregue. Use "Recusar".', 'err'); return; }
+  const ests = axa.est || [];
+  for (let i = 0; i < r.itens.length; i++) { const it = r.itens[i]; if (it.manual && axa.q[i] > 0) { const e = ests.find(z => z.cod === axa.cod[i]); if (!e) { toast('Vincule "' + it.nome + '" a um código do estoque (ou entregue 0).', 'err'); return; } } }
+  if (!String(axa.ret || '').trim()) { toast('Escreva quem retirou.', 'err'); return; }
+  if (!axa.sig) { toast('Falta a assinatura de quem retirou.', 'err'); return; }
+  const parcial = r.itens.some((it, i) => (axa.q[i] || 0) < +it.qtd);
+  if (!confirm('Confirmar a entrega de ' + r.num + (parcial ? ' (PARCIAL)' : '') + ' para ' + axa.ret + '?')) return;
+  const it2 = r.itens.map((it, i) => { let x = { ...it, qtdPedida: it.qtdPedida ?? +it.qtd, qtd: Math.max(0, +axa.q[i] || 0) };
+    if (it.manual && x.qtd > 0) { const e = ests.find(z => z.cod === axa.cod[i]); Object.assign(x, { nomeDigitado: it.nomeDigitado || it.nome, cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, custo: +e.custoMedio || 0 }); }
+    else if (x.cod && !(+x.custo)) { const e = ests.find(z => z.cod === x.cod); if (e) x.custo = +e.custoMedio || 0; }
+    if (x.qtd > 0 && !x.regra) Object.assign(x, { frente: r.frenteInf || '', servico: r.servicoInf || '', regra: r.frenteInf ? 'inf' : 'cla' });
+    return x; }).filter(x => x.qtd > 0);
+  const doc = { ...r, itens: it2, status: 'entregue', local: axa.local, retirante: axa.ret.trim(), assinatura: axa.sig, entreguePor: usuarioCampo?.nome || '', entregueEm: new Date().toISOString(), parcial, origemEntrega: 'app', aprProc: false };
+  const btn = document.querySelector('#axa-bar .btn-green'); if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
+  try { await fbSalvar('requisicoes', doc); } catch (e) {}
+  axa.L = (axa.L || []).filter(x => x.id !== r.id); axa.modo = 'lista'; axa.r = null; axaRender(); _axaBadge();
+  toast(r.num + ' entregue' + (parcial ? ' (parcial)' : '') + (isOnline ? ' ✓' : ' — offline, sincroniza depois'), 'ok');
+}
+async function axaRecusar() {
+  const r = axa.r; if (!r) return; const m = prompt('Motivo da recusa (o encarregado vê no app):', ''); if (m === null) return;
+  if (!String(m).trim()) { toast('Escreva o motivo.', 'err'); return; }
+  try { await fbSalvar('requisicoes', { ...r, status: 'cancelada', motivo: String(m).trim(), canceladaPor: usuarioCampo?.nome || '', canceladaEm: new Date().toISOString() }); } catch (e) {}
+  axa.L = (axa.L || []).filter(x => x.id !== r.id); axa.modo = 'lista'; axa.r = null; axaRender(); _axaBadge(); toast(r.num + ' recusada.', 'ok');
+}
+let _axaNum = 0;
+function _axaBadge() { if (axa && axa.L) _axaNum = axa.L.length; const s = document.getElementById('sup-s-axa'), b = document.getElementById('sup-b-axa');
+  if (s) s.textContent = _axaNum ? _axaNum + ' aguardando' : 'Atender pedidos'; if (b) { b.textContent = _axaNum; b.style.display = _axaNum ? '' : 'none'; } }
+(function () {
+  document.head.insertAdjacentHTML('beforeend', '<style id="css-hbadge">.hbadge{position:absolute;top:12px;right:12px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:#E30613;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}</style>');
+  const ic = '<svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>';
+  const poe = () => { const gs = document.querySelector('#screen-home .hcard.sup')?.parentElement; if (!gs) return; let c = document.getElementById('sup-axa');
+    if (_axaPode()) { if (!c) gs.insertAdjacentHTML('afterbegin', `<div class="hcard" id="sup-axa" onclick="axaAbrir()">${ic}<div class="hcard-t">Almoxarifado</div><div class="hcard-s" id="sup-s-axa">Atender pedidos</div><span class="hbadge" id="sup-b-axa" style="display:none"></span></div>`); _axaBadge(); }
+    else if (c) c.remove(); };
+  const oG = _supGrid; _supGrid = function () { const r = oG.apply(this, arguments); try { poe(); } catch (e) {} return r; };
+  setInterval(poe, 2000);
+  let ult = 0; setInterval(async () => { if (!usuarioCampo || !_axaPode() || Date.now() - ult < 90000 || !document.getElementById('screen-home')?.classList.contains('active')) return; ult = Date.now(); const L = await _axaBuscar(); if (L) { _axaNum = L.length; _axaBadge(); } }, 15000);
 })();
 
 </script>
