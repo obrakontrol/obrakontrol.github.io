@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.99 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.100 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18993,6 +18993,7 @@ async function _kkGerar(nUsr) {
   try { _kkAloj(O, sv, dia, PROP); } catch (e) { console.warn('kk aloj', e); }   /* v4.94 */
   try { _kkDesmob(O, sv, dia); } catch (e) { console.warn('kk desmob', e); }
   try { _kkMatSemReq(); } catch (e) { console.warn('kk semreq', e); }   /* v4.95 */
+  try { _kkRqNum(O, W); } catch (e) { console.warn('kk rqnum', e); }   /* v4.100 */
   try { _kkProg('Criando login master…'); window._kkMasterOk = await _kkMaster(O, PROP, W); } catch (e) { console.warn('kk master', e); }
   window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
   /* v4.97: registra o acesso (acessos/<e-mail> → cliente) dos logins do kickoff — sem isso o app não acha o cadastro */
@@ -20914,7 +20915,7 @@ function _axSigLimpar() { const c = document.getElementById('ax-sig'); c.getCont
 async function axSalvar() { const N = _axN_; if (!N.enc) { toast('Escolha o encarregado.', 'error'); return; } if (!N.itens.length) { toast('Inclua ao menos um item.', 'error'); return; }
   const c = document.getElementById('ax-sig'); if (!c._u) { toast('Falta a assinatura de quem retirou.', 'error'); return; }
   const n = (dados.requisicoes || []).length + 1, obra = _axObra() === 'todas' ? ((dados.obras || [])[0] || {}).id : _axObra();
-  const r = _axAprop({ id: 'rq_' + Date.now(), num: 'RQ-' + String(n).padStart(4, '0'), obra, data: N.data, hora: N.hora, local: N.local, encarregado: N.enc, retirante: N.ret || N.enc, frenteInf: N.fr, servicoInf: N.sv, itens: N.itens.map(x => ({ ...x })), assinatura: c.toDataURL('image/png'), status: 'aberta', criadoPor: usuarioLogado?.nome || '', criadoEm: new Date().toISOString() });
+  const r = _axAprop({ id: 'rq_' + Date.now(), num: await _rqProxNum(obra, N.data), obra, data: N.data, hora: N.hora, local: N.local, encarregado: N.enc, retirante: N.ret || N.enc, frenteInf: N.fr, servicoInf: N.sv, itens: N.itens.map(x => ({ ...x })), assinatura: c.toDataURL('image/png'), status: 'aberta', criadoPor: usuarioLogado?.nome || '', criadoEm: new Date().toISOString() });
   (dados.requisicoes = dados.requisicoes || []).push(r); await fbSave('requisicoes', r.id, r);
   document.getElementById('modal-axn').remove(); const nc = r.itens.filter(i => i.regra === 'cla').length;
   toast(r.num + ' registrada' + (nc ? ' · ' + nc + ' item(ns) a classificar' : ' · destino definido pela apropriação') + '.'); _AX.aba = 'req'; renderAlmoxReq(); axVer(r.id); }
@@ -21374,6 +21375,33 @@ function pgForaProgramar(frente, servico) {
         sv('programacao', { id: 'kk_pgx' + (i++), obra: O, semana: atual, frente, servico, unid, qtd: Math.round(q * 1.05), obs: '', criadoEm: atual + 'T08:00:00', criadoPor: 'Planejamento', kick: true }); }); } catch (e) { console.warn('kk prog+', e); }
     return r; };
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// v4.100: NÚMERO DA REQUISIÇÃO = CÓDIGO DA OBRA + AAMM + SEQUÊNCIA DO MÊS (mesmo contador do app: contadores/rq-<OBRA>-<AAMM>)
+// ═══════════════════════════════════════════════════════════════
+function _rqSiglaP(obraId) { const o = (dados.obras || []).find(x => x.id === obraId) || {};
+  const s = String(o.sigla || o.cod || '').toUpperCase().normalize('NFD').replace(/[^A-Z0-9]/g, ''); if (s) return s;
+  return String(o.nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^A-Za-z0-9]+/).filter(w => w.length > 2).map(w => w[0]).join('').toUpperCase().slice(0, 4) || 'OB'; }
+const _rqAMP = d => { d = String(d || _hojeLocal()); return d.slice(2, 4) + d.slice(5, 7); };
+async function _rqProxNum(obraId, data) {
+  const sig = _rqSiglaP(obraId), am = _rqAMP(data), pre = sig + '-' + am + '-';
+  if (db && _firebaseReady && db.runTransaction) { try { const ref = db.collection('contadores').doc('rq-' + sig + '-' + am);
+      const n = await db.runTransaction(async tx => { const s = await tx.get(ref); const n = ((s.exists && +s.data().n) || 0) + 1; tx.set(ref, { n, obra: obraId, tipo: 'requisicao', em: new Date().toISOString() }, { merge: true }); return n; });
+      return pre + String(n).padStart(3, '0'); } catch (e) { console.warn('contador rq', e); } }
+  const max = (dados.requisicoes || []).filter(r => String(r.num || '').startsWith(pre)).map(r => parseInt(String(r.num).slice(pre.length), 10)).filter(n => !isNaN(n)).reduce((a, b) => Math.max(a, b), 0);
+  return pre + String(max + 1).padStart(3, '0');
+}
+(function () { /* busca no painel também pelo número provisório */
+  const o = axBuscarNum; axBuscarNum = window.axBuscarNum = function (v) { const q = String(v || '').trim().toUpperCase().replace(/[\s-]+/g, ''); if (!q) return;
+    const r = (dados.requisicoes || []).find(x => { const n = String(x.numProv || '').toUpperCase().replace(/[\s-]+/g, ''); return n && (n === q || n.endsWith(q)); });
+    if (r) { if (r.status === 'solicitada') axAtender(r.id); else axVer(r.id); return; } return o.apply(this, arguments); }; })();
+/* kickoff: renumera as requisições geradas no padrão novo e acerta os contadores */
+function _kkRqNum(O, W) {
+  const L = W.filter(([c, o]) => c === 'requisicoes' && o.kick !== false && String(o.id).startsWith('kk_')).map(x => x[1]).sort((a, b) => String(a.data + (a.hora || '')).localeCompare(String(b.data + (b.hora || ''))));
+  const sig = _rqSiglaP(O), cnt = {};
+  L.forEach(r => { const am = _rqAMP(r.data); cnt[am] = (cnt[am] || 0) + 1; r.num = sig + '-' + am + '-' + String(cnt[am]).padStart(3, '0'); r.kick = true; });
+  Object.entries(cnt).forEach(([am, n]) => W.push(['contadores', { id: 'rq-' + sig + '-' + am, n, obra: O, tipo: 'requisicao', em: new Date().toISOString(), kick: true }]));
+}
 
 // Apply configs on load
 setTimeout(applyConfigs, 200);

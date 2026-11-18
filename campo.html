@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.38</div>
+  <div class="login-versao">ObraKontrol Campo · v3.39</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8314,6 +8314,64 @@ function _axaBadge() { if (axa && axa.L) _axaNum = axa.L.length; const s = docum
     } catch (e) { return base; }
   };
 })();
+
+// ══════════════════════════════════════════════════════════════
+// v3.39: NÚMERO DA REQUISIÇÃO = CÓDIGO DA OBRA + AAMM + SEQUÊNCIA DO MÊS (ex.: VN-2611-027)
+// Sequência por obra que zera todo mês, num contador no servidor (transação: dois celulares nunca pegam o mesmo).
+// Sem internet: número PROVISÓRIO (VN-2611-P4K); ao voltar o sinal o app troca pelo definitivo e guarda o provisório.
+// ══════════════════════════════════════════════════════════════
+function _rqSigla(obraId) {
+  const o = (dadosCampo.obras || []).concat(window._mobObras || []).find(x => x.id === obraId) || {};
+  const s = String(o.sigla || o.cod || '').toUpperCase().normalize('NFD').replace(/[^A-Z0-9]/g, ''); if (s) return s;
+  return String(o.nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^A-Za-z0-9]+/).filter(w => w.length > 2).map(w => w[0]).join('').toUpperCase().slice(0, 4) || 'OB';
+}
+function _rqAM(d) { d = String(d || _hojeISO()); return d.slice(2, 4) + d.slice(5, 7); }
+async function _rqSeq(obraId, data) {
+  if (!(db && _fbReady && isOnline && db.runTransaction)) return null;
+  const sig = _rqSigla(obraId), am = _rqAM(data), ref = db.collection('contadores').doc('rq-' + sig + '-' + am);
+  try { const n = await Promise.race([db.runTransaction(async tx => { const s = await tx.get(ref); const n = ((s.exists && +s.data().n) || 0) + 1; tx.set(ref, { n, obra: obraId, tipo: 'requisicao', em: new Date().toISOString() }, { merge: true }); return n; }), new Promise(r => setTimeout(() => r(null), 8000))]);
+    return n ? sig + '-' + am + '-' + String(n).padStart(3, '0') : null; } catch (e) { console.warn('contador rq', e); return null; }
+}
+function _rqProvNum(obraId, data) { const c = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let r = ''; for (let i = 0; i < 2; i++) r += c[Math.floor(Math.random() * c.length)]; return _rqSigla(obraId) + '-' + _rqAM(data) + '-P' + r; }
+function _rqProvLista() { try { return JSON.parse(localStorage.getItem('campo_rq_prov') || '[]'); } catch (e) { return []; } }
+function _rqProvGravar(l) { try { localStorage.setItem('campo_rq_prov', JSON.stringify(l)); } catch (e) {} }
+/* troca o número provisório pelo definitivo quando a requisição já chegou ao servidor */
+let _rqRenBusy = false;
+async function _rqRenumerar() {
+  if (_rqRenBusy || !(db && _fbReady && isOnline)) return; const L = _rqProvLista(); if (!L.length) return; _rqRenBusy = true;
+  try { const resto = [];
+    for (const p of L) { try { const ref = db.collection('requisicoes').doc(p.id), s = await ref.get(); if (!s.exists) { resto.push(p); continue; }
+        const x = s.data(); if (!x.provisorio) continue;
+        const num = await _rqSeq(x.obra || p.obra, x.data || p.data); if (!num) { resto.push(p); continue; }
+        await ref.set({ num, numProv: x.num, provisorio: false, renumeradoEm: new Date().toISOString() }, { merge: true });
+        try { const m = JSON.parse(localStorage.getItem('campo_rq_meus') || '[]'); m.forEach(r => { if (r.id === p.id) { r.numProv = r.num; r.num = num; r.provisorio = false; } }); localStorage.setItem('campo_rq_meus', JSON.stringify(m)); } catch (e) {}
+        toast('Requisição ' + x.num + ' agora é ' + num + ' (número definitivo)', 'ok');
+      } catch (e) { resto.push(p); } }
+    _rqProvGravar(resto);
+  } finally { _rqRenBusy = false; }
+}
+setInterval(_rqRenumerar, 20000); window.addEventListener('online', () => setTimeout(_rqRenumerar, 4000));
+/* rqSalvar: mesmo fluxo, só o número muda */
+rqSalvar = async function () {
+  const f = []; if (!rq.enc) f.push('o encarregado responsável'); if (!rq.itens.some(it => it.qtd > 0)) f.push('ao menos um material');
+  if (f.length) { toast('Falta: ' + f.join(', ') + '.', 'err'); return; }
+  const btn = document.querySelector('#screen-rq .mob-bar .btn-green, #screen-rq .btn-green'); if (btn) { btn.disabled = true; btn.textContent = 'Gerando número…'; }
+  try {
+    const ag = new Date(), d = _hojeISO(), obra = usuarioCampo?.obra || '';
+    let num = await _rqSeq(obra, d), prov = false; if (!num) { num = _rqProvNum(obra, d); prov = true; }
+    const doc = { id: 'rq' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num, ...(prov ? { provisorio: true } : {}), obra, data: d, hora: ag.toTimeString().slice(0, 5), encarregado: rq.enc, encMat: ((dadosCampo.funcionarios || []).find(x => x.nome === rq.enc) || {}).mat || '', solicitante: usuarioCampo.nome, frenteInf: rq.frente || '', servicoInf: rq.frente ? (rq.servico || '') : '',
+      itens: rq.itens.filter(it => it.qtd > 0).map(({ saldo, ...x }) => x), obs: String(rq.obs || '').trim(), status: 'solicitada', origem: 'app', criadoEm: ag.toISOString() };
+    await fbSalvar('requisicoes', doc);
+    if (prov) { const l = _rqProvLista(); l.push({ id: doc.id, obra, data: d }); _rqProvGravar(l); }
+    try { const l = JSON.parse(localStorage.getItem('campo_rq_meus') || '[]'); l.unshift(doc); localStorage.setItem('campo_rq_meus', JSON.stringify(l.slice(0, 40))); } catch (e) {}
+    rq.feito = doc; rq.modo = 'feito'; rqRender(); window.scrollTo(0, 0);
+    if (prov) setTimeout(() => { const b = document.querySelector('#rq-content') || document.getElementById('screen-rq'); const el = b && [...b.querySelectorAll('*')].find(x => x.children.length === 0 && /Fale este número/.test(x.textContent));
+      if (el) el.insertAdjacentHTML('afterend', '<div style="margin:6px auto 0;max-width:320px;font-size:12px;font-weight:700;color:#B45309;background:#FEF3C7;border-radius:8px;padding:6px 10px">Sem internet: número PROVISÓRIO. Vale no balcão; quando o celular voltar a ter sinal ele vira o definitivo.</div>'); }, 50);
+  } finally { if (btn) { btn.disabled = false; btn.textContent = '✓ Enviar pedido'; } }
+};
+/* o almox no app acha a requisição pelo número definitivo ou pelo provisório */
+(function () { const o = axaBuscarNum; axaBuscarNum = function (v) { const q = String(v || '').trim().toUpperCase().replace(/[\s-]+/g, ''); if (!q) return;
+  const r = (axa && axa.L || []).find(x => { const n = String(x.numProv || '').toUpperCase().replace(/[\s-]+/g, ''); return n && (n === q || n.endsWith(q)); }); if (r) return axaAtender(r.id); return o.apply(this, arguments); }; })();
 
 </script>
 </body>
