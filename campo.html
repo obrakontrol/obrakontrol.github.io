@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.35</div>
+  <div class="login-versao">ObraKontrol Campo · v3.36</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8249,6 +8249,39 @@ function _axaBadge() { if (axa && axa.L) _axaNum = axa.L.length; const s = docum
   const oG = _supGrid; _supGrid = function () { const r = oG.apply(this, arguments); try { poe(); } catch (e) {} return r; };
   setInterval(poe, 2000);
   let ult = 0; setInterval(async () => { if (!usuarioCampo || !_axaPode() || Date.now() - ult < 90000 || !document.getElementById('screen-home')?.classList.contains('active')) return; ult = Date.now(); const L = await _axaBuscar(); if (L) { _axaNum = L.length; _axaBadge(); } }, 15000);
+})();
+
+// ══════════════════════════════════════════════════════════════
+// v3.36: REQUISIÇÕES EM TEMPO REAL — escuta as requisições no nome do encarregado.
+// Quando o almox entrega (painel ou app), o card "Material aplicado" atualiza na hora e aparece um aviso.
+// ══════════════════════════════════════════════════════════════
+(function () {
+  let quem = '', off = null, prim = true, est = {};
+  function liga() {
+    const nome = usuarioCampo && usuarioCampo.nome;
+    if (!nome || !(db && _fbReady)) return;
+    if (nome === quem && off) return;
+    if (off) { try { off(); } catch (e) {} off = null; }
+    quem = nome; prim = true; est = {};
+    try {
+      off = db.collection('requisicoes').where('encarregado', '==', nome).onSnapshot(sn => {
+        const todos = sn.docs.map(d => ({ id: d.id, ...d.data() }));
+        const novas = [], canc = [];
+        todos.forEach(r => { if (!prim && est[r.id] === 'solicitada' && r.status === 'entregue') novas.push(r); if (!prim && est[r.id] === 'solicitada' && r.status === 'cancelada') canc.push(r); est[r.id] = r.status; });
+        prim = false;
+        _mrq.L = todos.filter(r => !r.validadoEm && ['solicitada', 'entregue', 'aberta', 'exportada'].includes(r.status)).sort((a, b) => String(a.data + a.hora).localeCompare(String(b.data + b.hora)));
+        _mrq.em = Date.now();
+        try { localStorage.setItem(_mrqKey(), JSON.stringify(_mrq.L)); } catch (e) {}
+        try { _mrqRender(); } catch (e) {}
+        try { _rqValN = _mrq.L.filter(r => r.status !== 'solicitada').length; _rqCardSub(); } catch (e) {}
+        try { if (rq && rq.modo === 'lista' && document.getElementById('screen-rq')?.classList.contains('active') && (novas.length || canc.length)) rqLista(); } catch (e) {}
+        novas.forEach((r, i) => setTimeout(() => { toast('📦 ' + r.num + ' entregue pelo almoxarifado' + (r.parcial ? ' (parcial)' : '') + ' — já pode lançar o material', 'ok'); if (navigator.vibrate) { try { navigator.vibrate([80, 60, 80]); } catch (e) {} } }, i * 2500));
+        canc.forEach(r => toast('✕ ' + r.num + ' recusada pelo almox' + (r.motivo ? ': ' + r.motivo : ''), 'err'));
+      }, e => { console.warn('rq tempo real', e); off = null; });
+    } catch (e) { off = null; }
+  }
+  setInterval(liga, 3000);
+  window.addEventListener('online', () => { quem = ''; liga(); });
 })();
 
 </script>
