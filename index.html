@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.89 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.90 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -21074,6 +21074,39 @@ const _oKkAlmox = _kkAlmox; _kkAlmox = function (O, sv, dia) { _oKkAlmox.apply(t
   [[0, 'FR-001', 'VCA - Vala a céu aberto (esgoto)', [['DN150', 24], ['AREIA', 3]], '06:52', 'R1118-K7Q'], [1, 'FR-003', 'Ligação domiciliar de esgoto', [['KIT LIGA', 6], ['DN100 ESGOTO', 18], ['CURVA', 6]], '07:05', 'R1118-M2A'], [3, 'FR-004', 'Poço de visita', [['ANEL', 3], ['TAMPÃO', 1]], '07:31', 'R1118-T4C']]
     .forEach(([ei, fr, svc, its, h, num], k) => { const f = FR.find(x => x.cod === fr), s2 = ((dados.aponMO || []).find(a => a.frente === fr) || {}).servico || svc; sv('requisicoes', { id: 'kk_rqa' + k, num: num.replace('1118', dia(0).slice(5).replace('-', '')), obra: O, data: dia(0), hora: h, encarregado: encs[ei % encs.length], encMat: '', frenteInf: f ? fr : '', servicoInf: s2, itens: its.map(([a, b]) => it(a, b)).filter(Boolean), status: 'solicitada', origem: 'app', criadoEm: dia(0) + 'T' + h + ':00', kick: true }); });
   (dados.requisicoes || []).filter(r => String(r.id).startsWith('kk_rq') && r.status !== 'solicitada').forEach((r, i) => { if (i % 3 === 0) { r.origem = 'app'; r.entreguePor = 'Almoxarifado'; } });
+};
+// ═══════════════════════════════════════════════════════════════
+// v4.90: VALIDAÇÃO DO ENCARREGADO — no fim do turno ele confirma, no app, frente/serviço e quanto aplicou de cada item
+// Regra "Validado pelo encarregado" vale acima de todas · sobra fica "em poder do encarregado" · status "aguardando validação"
+// ═══════════════════════════════════════════════════════════════
+_AX_REGRA.val = ['Validado pelo encarregado', '#16A34A'];
+(function () {
+  const oA = _axAprop; _axAprop = function (rq) { const keep = (rq.itens || []).map(it => it.regra === 'val' ? { ...it } : null); oA.apply(this, arguments); (rq.itens || []).forEach((it, i) => { if (keep[i]) Object.assign(it, keep[i]); }); return rq; };
+  // lista: situação mostra se falta validação
+  const oR = renderAlmoxReq; renderAlmoxReq = window.renderAlmoxReq = function () { oR.apply(this, arguments);
+    try { const rows = _AX.aba !== 'req' ? [] : document.querySelectorAll('#page-almox-req .ax-t tbody tr[onclick^="axVer"]');
+      rows.forEach(tr => { const id = (tr.getAttribute('onclick').match(/axVer\('([^']+)/) || [])[1], r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const td = tr.children[6]; if (!td) return;
+        if (r.validadoEm) td.insertAdjacentHTML('beforeend', `<div class="ax-sm" style="color:#16A34A">✓ validada por ${_e(r.validadoPor || r.encarregado)}</div>`);
+        else if (!(r.itens || []).some(it => it.regra === 'cla')) td.insertAdjacentHTML('beforeend', '<div class="ax-sm" style="color:#D97706">aguardando validação do encarregado</div>'); });
+      const k = document.querySelectorAll('#page-almox-req .ax-kpis .ax-k')[2]; const I = _axItens(), nv = _axReqs().filter(r => !r.validadoEm).length, v = I.filter(x => x.it.regra === 'val').length;
+      if (k) k.innerHTML = `<div class="l">Validado pelo encarregado</div><div class="v" style="color:#16A34A">${I.length ? Math.round(v / I.length * 100) : 0}%</div><div class="s">${nv} requisição(ões) aguardando validação</div>`;
+    } catch (e) { console.warn(e); }
+    if (_AX.aba === 'enc') try { const g = {}; _axItens().forEach(({ rq, it }) => { const y = g[rq.encarregado] = g[rq.encarregado] || { ret: 0, apl: 0, sob: 0, pend: 0 }; const c = +it.custo || 0; y.ret += (+it.qtd || 0) * c; if (it.regra === 'val') { y.apl += (+it.aplicado || 0) * c; y.sob += (+it.sobra || 0) * c; } else y.pend += (+it.qtd || 0) * c; });
+      document.querySelectorAll('#page-almox-req .ax-card').forEach(card => { const n = card.querySelector('.ax-ch b')?.textContent, y = g[n]; if (!y) return;
+        card.insertAdjacentHTML('beforeend', `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:12.5px"><span>Aplicado (validado): <b style="color:#16A34A">${_axR$(y.apl)}</b></span><span>Em poder do encarregado: <b style="color:${y.sob ? '#D97706' : 'inherit'}">${_axR$(y.sob)}</b></span><span>Aguardando validação: <b>${_axR$(y.pend)}</b></span></div>`); }); } catch (e) {}
+  };
+  const oV = axVer; axVer = window.axVer = function (id) { oV.apply(this, arguments); const r = (dados.requisicoes || []).find(x => x.id === id); const b = document.querySelector('#modal-axv .modal-body'); if (!r || !b) return;
+    b.insertAdjacentHTML('afterbegin', r.validadoEm ? `<div class="ax-info" style="margin:0 0 12px;border-color:#16A34A">✓ Validada por <b>${_e(r.validadoPor || r.encarregado)}</b> em ${new Date(r.validadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}${(r.itens || []).some(it => +it.sobra) ? ' · sobra com o encarregado: ' + r.itens.filter(it => +it.sobra).map(it => _axN(it.sobra) + ' ' + _e(it.und) + ' ' + _e(it.nome)).join(', ') : ''}</div>`
+      : `<div class="ax-info" style="margin:0 0 12px;border-color:#D97706">Aguardando o encarregado <b>${_e(r.encarregado)}</b> validar no app (frente e quantidade aplicada). Até lá vale a sugestão da apropriação.</div>`);
+    if (r.solicitante && r.solicitante !== r.encarregado) b.querySelector('.ax-cols .ax-sm')?.insertAdjacentHTML('beforeend', ' · pedido no app por ' + _e(r.solicitante)); };
+})();
+// kickoff: requisições mais antigas já validadas pelo encarregado (com pequena sobra em algumas)
+const _oKkAlmox2 = _kkAlmox; _kkAlmox = function (O, sv, dia) { _oKkAlmox2.apply(this, arguments);
+  (dados.requisicoes || []).filter(r => String(r.id).startsWith('kk_rq') && r.status !== 'solicitada' && r.data <= dia(2)).forEach((r, k) => {
+    if (r.itens.some(it => it.regra === 'cla') && k % 2) return;
+    r.itens.forEach((it, i) => { const ap = (k + i) % 4 === 0 ? Math.round(+it.qtd * .85 * 100) / 100 : +it.qtd; if (!it.frente) { const t = _axTurnos(r.encarregado, r.data)[0]; if (!t) return; it.frente = t.frente; it.servico = t.servico; }
+      Object.assign(it, { aplicado: ap, sobra: Math.round((+it.qtd - ap) * 100) / 100, regra: 'val' }); });
+    if (r.itens.every(it => it.regra === 'val')) Object.assign(r, { validadoEm: r.data + 'T17:3' + (k % 10) + ':00', validadoPor: r.encarregado }); });
 };
 // Apply configs on load
 setTimeout(applyConfigs, 200);
