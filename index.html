@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.97 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.98 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -10663,10 +10663,17 @@ function _diaMapaMontar(turnos, frentes) {
     // mantém o zoom de quem está olhando; se mudaram as equipes/frentes, enquadra de novo
     const chave = turnos.map(t => t.id + ':' + t.geoIni.lat + ',' + t.geoIni.lng).sort().join('|') + '#' + frentes.map(f => f.cod).sort().join('|');
     if (chave !== _mapaChave) { _mapaVista = null; _mapaChave = chave; }
-    if (_mapaVista) m.setView(_mapaVista.c, _mapaVista.z);
-    else if (pts.length) m.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
-    else m.setView([-15.78, -47.93], 4);
-    m.on('moveend', () => { _mapaVista = { c: m.getCenter(), z: m.getZoom() }; });
+    /* v4.98: enquadra pelas EQUIPES (e só as frentes perto delas, até 30 km) — apontamento aberto longe da frente não some do mapa */
+    const ptsEq = turnos.map(t => [t.geoIni.lat, t.geoIni.lng]);
+    const perto = frentes.filter(f => ptsEq.some(p => _geoDist({ lat: p[0], lng: p[1] }, f) <= 30000)).map(f => [f.lat, f.lng]);
+    const alvo = ptsEq.length ? ptsEq.concat(perto) : pts;
+    const enquadra = (lista) => { try { m.invalidateSize(); if (lista.length === 1) m.setView(lista[0], 15); else if (lista.length) m.fitBounds(lista, { padding: [40, 40], maxZoom: 16 }); else m.setView([-15.78, -47.93], 4); } catch (e) {} };
+    let auto = !_mapaVista;
+    if (_mapaVista) m.setView(_mapaVista.c, _mapaVista.z); else { enquadra(alvo); setTimeout(() => { if (auto) enquadra(alvo); setTimeout(() => { auto = false; }, 500); }, 350); }
+    if (pts.length > alvo.length || ptsEq.length) { const Bt = L.Control.extend({ onAdd: () => { const d = L.DomUtil.create('div', 'leaflet-bar');
+        d.innerHTML = '<a href="#" title="Mostrar equipes e frentes" style="width:auto;padding:0 8px;font:700 12px Inter,Arial,sans-serif;line-height:30px;white-space:nowrap">⤢ Ver tudo</a>';
+        L.DomEvent.on(d, 'click', e => { L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e); enquadra(pts); }); return d; } }); new Bt({ position: 'topright' }).addTo(m); }
+    m.on('moveend', () => { if (auto) return; _mapaVista = { c: m.getCenter(), z: m.getZoom() }; });
     _mapaDia = m;
   }).catch(() => { el.innerHTML = '<div class="dx-vazio">Não consegui carregar o mapa (sem internet?).</div>'; });
 }
