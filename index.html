@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.88 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.89 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -20820,7 +20820,7 @@ function renderAlmoxReq() {
   if (_AX.aba === 'req') {
     const rs = R.filter(r => (!_AX.de || r.data >= _AX.de) && (!_AX.ate || r.data <= _AX.ate) && (!_AX.enc || r.encarregado === _AX.enc)).sort((a, b) => (b.data + b.hora).localeCompare(a.data + a.hora));
     corpo = `<div class="table-wrap"><table class="ax-t"><thead><tr><th>Requisição</th><th>Data</th><th>Encarregado</th><th>Itens</th><th style="text-align:right">Valor</th><th>Destino</th><th>Situação</th><th></th></tr></thead><tbody>${rs.map(r => { const v = (r.itens || []).reduce((s, it) => s + (+it.qtd || 0) * (+it.custo || 0), 0), nc = (r.itens || []).filter(it => it.regra === 'cla').length, fr = [...new Set((r.itens || []).map(it => it.frente).filter(Boolean))];
-      return `<tr onclick="axVer('${r.id}')" style="cursor:pointer"><td><b>${_e(r.num)}</b><div class="ax-sm">${_e(r.local || '')}</div></td><td style="white-space:nowrap">${fmtData(r.data)}<div class="ax-sm">${_e(r.hora || '')}</div></td><td>${_e(r.encarregado)}<div class="ax-sm">retirado por ${_e(r.retirante || r.encarregado)}</div></td>
+      return `<tr onclick="axVer('${r.id}')" style="cursor:pointer"><td><b>${_e(r.num)}</b><div class="ax-sm">${r.origem === 'app' ? '📱 pedido no app · ' : ''}${_e(r.local || '')}${r.parcial ? ' · <b style="color:#D97706">parcial</b>' : ''}</div></td><td style="white-space:nowrap">${fmtData(r.data)}<div class="ax-sm">${_e(r.hora || '')}</div></td><td>${_e(r.encarregado)}<div class="ax-sm">retirado por ${_e(r.retirante || r.encarregado)}</div></td>
         <td>${(r.itens || []).slice(0, 2).map(it => `${_axN(it.qtd)} ${_e(it.und)} ${_e(it.nome)}`).join('<br>')}${(r.itens || []).length > 2 ? `<div class="ax-sm">+ ${(r.itens || []).length - 2} item(ns)</div>` : ''}</td>
         <td style="text-align:right;white-space:nowrap"><b>${_axR$(v)}</b></td><td>${fr.map(f => `<span class="ax-fr">${_e(f)}</span>`).join(' ') || '—'}</td>
         <td>${nc ? `<span class="ax-st" style="background:#FEE2E2;color:#B91C1C">${nc} a classificar</span>` : r.exportadoEm ? '<span class="ax-st" style="background:#E0E7FF;color:#3730A3">Exportada p/ baixa</span>' : '<span class="ax-st" style="background:#DCFCE7;color:#166534">Apropriada</span>'}</td>
@@ -21019,6 +21019,62 @@ function _kkAlmox(O, sv, dia) {
     const r = _axAprop({ id: 'kk_rqx' + j, num: 'RQ-' + String(++n).padStart(4, '0'), obra: O, data: dia(d), hora: '11:40', local: 'ESTOQUE CANTEIRO', encarregado: 'Fernando Lopes (substituto)', retirante: enc, itens: [{ ...e1, qtd: 2 }, { ...e2, qtd: 6 }], assinatura: '', status: 'aberta', criadoPor: 'Almoxarifado', criadoEm: dia(d) + 'T11:40:00', ...K });
     sv('requisicoes', r); });
 }
+// ═══════════════════════════════════════════════════════════════
+// v4.89: REQUISIÇÃO PELO APP — o encarregado pede no celular (já com frente e serviço); o almox atende pelo número e dá a saída
+// solicitada (app) → entregue (almox confere quantidades e colhe a assinatura) · só o entregue entra em saldo, relatórios e baixa
+// ═══════════════════════════════════════════════════════════════
+function _axSol() { return (dados.requisicoes || []).filter(_axDaObra).filter(r => r.status === 'solicitada').sort((a, b) => (b.data + b.hora).localeCompare(a.data + a.hora)); }
+_axReqs = function () { return (dados.requisicoes || []).filter(_axDaObra).filter(r => r.status !== 'cancelada' && r.status !== 'solicitada'); };
+function axBuscarNum(v) { v = String(v || '').trim().toUpperCase().replace(/\s+/g, ''); if (!v) return; const r = (dados.requisicoes || []).find(x => String(x.num).toUpperCase().replace(/\s+/g, '') === v || String(x.num).toUpperCase().endsWith(v));
+  if (!r) { toast('Requisição ' + v + ' não encontrada. Confira o número no celular do encarregado.', 'error'); return; }
+  if (r.status === 'solicitada') axAtender(r.id); else { toast(r.num + ' já foi atendida em ' + fmtData(String(r.entregueEm || r.criadoEm || '').slice(0, 10)) + '.'); axVer(r.id); } }
+function axAtender(id) { const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const E = _axEst();
+  document.getElementById('modal-axa')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay open" id="modal-axa"><div class="modal" style="max-width:820px"><div class="modal-header"><span class="modal-title">Atender ${_e(r.num)}</span><button class="modal-close" onclick="document.getElementById('modal-axa').remove()">×</button></div>
+    <div class="modal-body"><div class="ax-cols" style="margin-bottom:10px"><div><div class="ax-lb">Pedido no app por</div><b>${_e(r.encarregado)}</b><div class="ax-sm">${fmtData(r.data)} ${_e(r.hora || '')}</div></div>
+      <div><div class="ax-lb">Destino informado</div>${r.frenteInf ? `<span class="ax-fr">${_e(r.frenteInf)}</span> ${_e(r.servicoInf || '')}` : '<span class="ax-sm">Não informado — o painel decide pela apropriação</span>'}${r.obs ? `<div class="ax-sm">Obs.: ${_e(r.obs)}</div>` : ''}</div></div>
+      <div class="form-group" style="max-width:360px"><label class="form-label">Local de estoque</label><select class="form-control" id="axa-local">${[...new Set(E.map(e => e.local))].map(l => `<option>${_e(l)}</option>`).join('')}</select></div>
+      <table class="ax-t"><thead><tr><th>Material</th><th style="text-align:right">Pedido</th><th style="text-align:right">Saldo</th><th style="width:140px">Entregue</th></tr></thead><tbody>${(r.itens || []).map((it, i) => { const e = E.find(z => z.cod === it.cod) || {};
+        return `<tr><td><b>${_e(it.nome)}</b><div class="ax-sm">${_e(it.cod)}</div></td><td style="text-align:right">${_axN(it.qtd)} ${_e(it.und)}</td><td style="text-align:right;color:${(+e.fisico || 0) < +it.qtd ? '#DC2626' : 'inherit'}">${_axN(e.fisico)} ${_e(it.und)}</td>
+          <td><input class="form-control axa-q" data-i="${i}" type="number" step="any" min="0" value="${Math.min(+it.qtd, (+e.fisico || 0) || +it.qtd)}"/></td></tr>`; }).join('')}</tbody></table>
+      <div class="ax-sm" style="margin:6px 0 12px">Se faltar material, entregue o que tem: a diferença fica registrada como não atendida.</div>
+      <div class="form-group"><label class="form-label">Quem retirou</label><input class="form-control" id="axa-ret" value="${_e(r.encarregado)}"/></div>
+      <div class="ax-lb">Assinatura de quem retirou</div><canvas id="ax-sig" width="600" height="120" style="width:100%;max-width:600px;height:120px;border:1px dashed var(--border);border-radius:10px;background:#fff;touch-action:none"></canvas><div><button class="btn btn-outline btn-sm" onclick="_axSigLimpar()">Limpar assinatura</button></div></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="axRecusar('${r.id}')">Recusar pedido</button><button class="btn btn-primary" onclick="axEntregar('${r.id}')">✓ Confirmar entrega</button></div></div></div>`);
+  _axSigIni(); }
+async function axEntregar(id) { const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const c = document.getElementById('ax-sig'); if (!c._u) { toast('Falta a assinatura de quem retirou.', 'error'); return; }
+  const qs = [...document.querySelectorAll('#modal-axa .axa-q')].map(x => +x.value || 0); if (!qs.some(q => q > 0)) { toast('Nenhuma quantidade entregue. Use "Recusar pedido".', 'error'); return; }
+  r.itens = r.itens.map((it, i) => ({ ...it, qtdPedida: it.qtdPedida ?? +it.qtd, qtd: qs[i] })).filter(it => it.qtd > 0 || it.qtdPedida > 0);
+  Object.assign(r, { status: 'entregue', local: document.getElementById('axa-local').value, retirante: document.getElementById('axa-ret').value || r.encarregado, assinatura: c.toDataURL('image/png'), entreguePor: usuarioLogado?.nome || '', entregueEm: new Date().toISOString(), parcial: r.itens.some(it => it.qtd < it.qtdPedida) });
+  r.itens = r.itens.filter(it => it.qtd > 0); _axAprop(r); await fbSave('requisicoes', r.id, r);
+  document.getElementById('modal-axa').remove(); toast(r.num + ' entregue' + (r.parcial ? ' (parcial)' : '') + ' — saída registrada.'); renderAlmoxReq(); axVer(r.id); }
+async function axRecusar(id) { const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const m = prompt('Motivo da recusa (o encarregado vê no app):'); if (m == null) return;
+  Object.assign(r, { status: 'cancelada', motivo: m || 'Recusada no almoxarifado', canceladaPor: usuarioLogado?.nome || '', canceladaEm: new Date().toISOString() }); await fbSave('requisicoes', r.id, r);
+  document.getElementById('modal-axa')?.remove(); toast(r.num + ' recusada.'); renderAlmoxReq(); }
+(function () {
+  const pg = document.getElementById('page-almox-req'); if (!pg) return;
+  const bg = pg.querySelector('.page-header .btn-group'); if (bg && !document.getElementById('axa-num')) bg.insertAdjacentHTML('afterbegin', `<div style="display:flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:4px 4px 4px 10px"><span style="font-size:12px;font-weight:700;color:var(--text-3)">ATENDER</span><input id="axa-num" class="form-control" placeholder="Nº da requisição" style="width:170px;height:34px" onkeydown="if(event.key==='Enter')axBuscarNum(this.value)"/><button class="btn btn-primary btn-sm" onclick="axBuscarNum(document.getElementById('axa-num').value)">Abrir</button></div>`);
+  const oR = renderAlmoxReq; renderAlmoxReq = window.renderAlmoxReq = function () {
+    if (_AX.aba === 'sol') { const S = _axSol(); oR.apply(this, arguments);
+      const html = S.length ? `<div class="table-wrap"><table class="ax-t"><thead><tr><th>Número</th><th>Pedido em</th><th>Encarregado</th><th>Destino</th><th>Itens</th><th></th></tr></thead><tbody>${S.map(r => `<tr><td><b style="font-size:15px">${_e(r.num)}</b><div class="ax-sm">pelo app</div></td><td>${fmtData(r.data)} ${_e(r.hora || '')}</td><td>${_e(r.encarregado)}</td><td>${r.frenteInf ? `<span class="ax-fr">${_e(r.frenteInf)}</span> ${_e(r.servicoInf || '')}` : '—'}</td>
+        <td>${(r.itens || []).map(it => `${_axN(it.qtd)} ${_e(it.und)} ${_e(it.nome)}`).join('<br>')}</td><td><button class="btn btn-primary btn-sm" onclick="axAtender('${r.id}')">Atender</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="ax-vazio">Nenhum pedido aguardando — os pedidos feitos no app aparecem aqui.</div>';
+      const card = pg.querySelector('#ax-corpo > .card .card-body'); if (card) card.innerHTML = html; }
+    else oR.apply(this, arguments);
+    try { const S = _axSol(), tabs = pg.querySelector('.ax-tabs'); if (tabs && !tabs.querySelector('[data-sol]')) tabs.insertAdjacentHTML('afterbegin', `<button data-sol class="ax-tab ${_AX.aba === 'sol' ? 'on' : ''}" onclick="_AX.aba='sol';renderAlmoxReq()">Pedidos do app <span style="${S.length ? 'background:var(--red);color:#fff' : ''}">${S.length}</span></button>`);
+      const k = pg.querySelector('.ax-kpis .ax-k'); if (k) { k.outerHTML = `<div class="ax-k ${_AX.aba === 'sol' ? 'on' : ''}" onclick="_AX.aba='sol';renderAlmoxReq()"><div class="l">Pedidos do app</div><div class="v" style="color:${S.length ? '#D97706' : 'inherit'}">${S.length}</div><div class="s">aguardando atendimento no almox</div></div>`; } } catch (e) {}
+  };
+  // na lista de requisições, mostra a origem
+  try { Object.assign(_AX_REGRA, {}); } catch (e) {}
+})();
+// kickoff: alguns pedidos feitos pelo app (hoje), aguardando atendimento, e marca parte das entregues como vindas do app
+const _oKkAlmox = _kkAlmox; _kkAlmox = function (O, sv, dia) { _oKkAlmox.apply(this, arguments);
+  const encs = [...new Set((dados.aponMO || []).filter(a => String(a.id).startsWith('kk_am')).map(a => a.lancadoPor))], E = (dados.almoxEstoque || []).filter(e => String(e.id).startsWith('kk_ax'));
+  const it = (nm, q) => { const e = E.find(x => x.nome.includes(nm)); return e ? { cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, qtd: q, custo: e.custoMedio } : null; };
+  const FR = (dados.frentes || []).filter(f => String(f.id).startsWith('kk_') || f.obra === O);
+  [[0, 'FR-001', 'VCA - Vala a céu aberto (esgoto)', [['DN150', 24], ['AREIA', 3]], '06:52', 'R1118-K7Q'], [1, 'FR-003', 'Ligação domiciliar de esgoto', [['KIT LIGA', 6], ['DN100 ESGOTO', 18], ['CURVA', 6]], '07:05', 'R1118-M2A'], [3, 'FR-004', 'Poço de visita', [['ANEL', 3], ['TAMPÃO', 1]], '07:31', 'R1118-T4C']]
+    .forEach(([ei, fr, svc, its, h, num], k) => { const f = FR.find(x => x.cod === fr), s2 = ((dados.aponMO || []).find(a => a.frente === fr) || {}).servico || svc; sv('requisicoes', { id: 'kk_rqa' + k, num: num.replace('1118', dia(0).slice(5).replace('-', '')), obra: O, data: dia(0), hora: h, encarregado: encs[ei % encs.length], encMat: '', frenteInf: f ? fr : '', servicoInf: s2, itens: its.map(([a, b]) => it(a, b)).filter(Boolean), status: 'solicitada', origem: 'app', criadoEm: dia(0) + 'T' + h + ':00', kick: true }); });
+  (dados.requisicoes || []).filter(r => String(r.id).startsWith('kk_rq') && r.status !== 'solicitada').forEach((r, i) => { if (i % 3 === 0) { r.origem = 'app'; r.entreguePor = 'Almoxarifado'; } });
+};
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {

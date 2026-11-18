@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.26</div>
+  <div class="login-versao">ObraKontrol Campo · v3.27</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7607,6 +7607,96 @@ function _chOff() { if (!_chAvisouOff && !isOnline) { _chAvisouOff = true; toast
           _chMsg((nome || '') + (ruins.length > 1 ? ' (e mais ' + (ruins.length - 1) + ')' : ''), L); apTab(t === 'mo' ? 'mo' : 'eq'); return; } }
     } catch (e) { console.warn('choque encerrar', e); }
     return oS.apply(this, arguments); };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v3.27: REQUISIÇÃO DE MATERIAL PELO APP — o encarregado escolhe frente/serviço e os itens do estoque;
+// recebe um número curto e o almoxarifado atende por ele no painel (confere quantidade e colhe a assinatura).
+// ═══════════════════════════════════════════════════════════════
+let rq = null;
+const _rqE = s => _esc(String(s ?? ''));
+const _rqN = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+async function _rqEstoque() {
+  let l = null; try { l = await Promise.race([fbCarregar('almoxEstoque'), new Promise(r => setTimeout(() => r(null), 6000))]); } catch (e) {}
+  if (l) { try { localStorage.setItem('campo_cache_almox', JSON.stringify(l.map(e => ({ cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, fisico: e.fisico, custoMedio: e.custoMedio, obra: e.obra })))); } catch (e) {} }
+  else { try { l = JSON.parse(localStorage.getItem('campo_cache_almox') || '[]'); } catch (e) { l = []; } }
+  const o = usuarioCampo?.obra || '', m = new Map(); (l || []).filter(e => !o || !e.obra || e.obra === o).forEach(e => { const x = m.get(e.cod); if (x) x.fisico = (+x.fisico || 0) + (+e.fisico || 0); else m.set(e.cod, { ...e }); });
+  return [...m.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+function _rqTela() {
+  if (document.getElementById('screen-rq')) return;
+  const back = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
+  document.getElementById('screen-home').insertAdjacentHTML('afterend', `<div class="screen" id="screen-rq"><div class="topbar"><div class="topbar-row"><div class="tb-left"><button class="tb-back" onclick="rqSair()" aria-label="Voltar">${back}</button><div><div class="topbar-title">Requisição de material</div><div class="topbar-sub" id="rq-sub">Almoxarifado</div></div></div></div></div>
+    <div class="content" id="rq-content"></div><div class="mob-bar" id="rq-bar"></div></div>`);
+  const css = document.createElement('style');
+  css.textContent = `.rq-it{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(127,127,127,.15)}.rq-it:last-child{border-bottom:0}
+    .rq-st{display:flex;align-items:center;gap:8px}.rq-st button{width:36px;height:36px;border-radius:50%;border:1px solid rgba(127,127,127,.35);background:transparent;color:var(--text);font-size:19px;line-height:1}
+    .rq-st input{width:64px;text-align:center;font-weight:800;font-size:16px;padding:6px;border-radius:10px;border:1px solid rgba(127,127,127,.35);background:transparent;color:var(--text)}
+    .rq-res{border:1px solid rgba(127,127,127,.25);border-radius:12px;margin-top:6px;overflow:hidden}.rq-res div{padding:10px 12px;border-bottom:1px solid rgba(127,127,127,.15);font-size:14px}.rq-res div:last-child{border-bottom:0}
+    .rq-num{font-size:40px;font-weight:900;letter-spacing:.04em;text-align:center;margin:8px 0;font-family:ui-monospace,monospace}.rq-tag{display:inline-block;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700}`;
+  document.head.appendChild(css);
+}
+function _rqServicos() { return _daObraCampo(dadosCampo.tiposServico || []).filter(s => s.ativo !== false).map(s => s.nome || s.desc || s.cod); }
+async function rqAbrir() {
+  _rqTela(); rq = { modo: 'novo', frente: localStorage.getItem('campo_rq_fr') || '', servico: localStorage.getItem('campo_rq_sv') || '', itens: [], busca: '', obs: '', est: [] };
+  try { const R = typeof _rascunhos === 'function' ? _rascunhos() : []; const a = (R || []).find(x => x && x.frente) ; if (a) { rq.frente = a.frente; rq.servico = a.servico || rq.servico; } } catch (e) {}
+  showScreen('rq'); rqRender(); rq.est = await _rqEstoque(); rqRender();
+}
+function rqSair() { rq = null; showScreen('home'); }
+function rqCampo(k, v, rr) { rq[k] = v; if (k === 'frente') try { localStorage.setItem('campo_rq_fr', v); } catch (e) {} if (k === 'servico') try { localStorage.setItem('campo_rq_sv', v); } catch (e) {} if (rr) rqRender(); }
+function rqBusca(v) { rq.busca = v; const el = document.getElementById('rq-res'); if (el) el.innerHTML = _rqResHTML(); }
+function _rqResHTML() { const b = _rqN(rq.busca); if (b.length < 2) return ''; const L = rq.est.filter(e => _rqN(e.cod + ' ' + e.nome + ' ' + e.grupo).includes(b)).slice(0, 8);
+  return L.length ? `<div class="rq-res">${L.map(e => `<div onclick="rqAdd('${_rqE(e.cod)}')"><b>${_rqE(e.nome)}</b><div style="font-size:12px;color:var(--text2)">${_rqE(e.cod)} · saldo ${String(Math.round((+e.fisico || 0) * 100) / 100).replace('.', ',')} ${_rqE(e.und)}</div></div>`).join('')}</div>` : '<div style="font-size:13px;color:var(--text3);padding:8px 2px">Nada encontrado no estoque.</div>'; }
+function rqAdd(cod) { const e = rq.est.find(x => x.cod === cod); if (!e) return; const it = rq.itens.find(x => x.cod === cod); if (it) it.qtd++; else rq.itens.push({ cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, qtd: 1, custo: +e.custoMedio || 0, saldo: +e.fisico || 0 }); rq.busca = ''; rqRender(); }
+function rqQ(i, d) { const it = rq.itens[i]; it.qtd = Math.max(0, Math.round(((+it.qtd || 0) + d) * 100) / 100); if (!it.qtd) rq.itens.splice(i, 1); rqRender(); }
+function rqQv(i, v) { const q = parseFloat(String(v).replace(',', '.')); rq.itens[i].qtd = q > 0 ? q : 0; }
+function rqRender() {
+  const el = document.getElementById('rq-content'), bar = document.getElementById('rq-bar'); if (!el || !rq) return; const E = _rqE;
+  if (rq.modo === 'feito') { const d = rq.feito; el.innerHTML = `<div class="card"><div class="card-body" style="text-align:center"><div style="font-size:44px">✅</div><div style="font-weight:800;font-size:17px">Pedido enviado ao almoxarifado</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px">Fale este número no balcão:</div><div class="rq-num">${E(d.num)}</div>
+      <div style="font-size:13px;color:var(--text2)">${E(d.frenteInf)} · ${E(d.servicoInf)}</div><div style="margin-top:10px;text-align:left">${d.itens.map(it => `<div class="rq-it"><span>${E(it.nome)}</span><b>${String(it.qtd).replace('.', ',')} ${E(it.und)}</b></div>`).join('')}</div></div></div>`;
+    bar.innerHTML = '<button class="btn btn-outline" onclick="rqSair()">Fechar</button><button class="btn btn-green" onclick="rqLista()">Minhas requisições</button>'; return; }
+  if (rq.modo === 'lista') { _rqLista(el, bar); return; }
+  const frs = _daObraCampo(dadosCampo.frentes || []).filter(f => f.cod && f.ativo !== false), svs = _rqServicos();
+  el.innerHTML = `<div class="card"><div class="card-body">
+      <div class="form-group"><label class="form-label">Para qual frente? *</label><div style="display:flex;gap:8px"><select class="form-control" style="flex:1" onchange="rqCampo('frente',this.value,true)"><option value="">Escolha a frente…</option>${frs.map(f => `<option value="${E(f.cod)}" ${f.cod === rq.frente ? 'selected' : ''}>${E(f.cod + ' — ' + (f.desc || f.nome || ''))}</option>`).join('')}</select>
+        <button type="button" onclick="abrirQR('rqfrente')" aria-label="Ler QR Code da frente" style="flex:0 0 auto;width:52px;border-radius:12px;border:0;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(227,6,19,.3)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="4" height="4" rx=".5"/><rect x="13" y="7" width="4" height="4" rx=".5"/><rect x="7" y="13" width="4" height="4" rx=".5"/><path d="M13 13h1.5v1.5H13zM16 16h1M13 17h.01M17 13v.01"/></svg></button></div></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">Para qual serviço? *</label><select class="form-control" onchange="rqCampo('servico',this.value)"><option value="">Escolha o serviço…</option>${svs.map(s => `<option ${s === rq.servico ? 'selected' : ''}>${E(s)}</option>`).join('')}</select></div></div></div>
+    <div class="card"><div class="card-body"><div class="form-label">Materiais</div>
+      ${rq.itens.map((it, i) => `<div class="rq-it"><div style="min-width:0"><b style="font-size:14px">${E(it.nome)}</b><div style="font-size:11.5px;color:${it.qtd > it.saldo ? '#DC2626' : 'var(--text3)'}">${E(it.cod)} · saldo ${String(it.saldo).replace('.', ',')} ${E(it.und)}${it.qtd > it.saldo ? ' — acima do saldo' : ''}</div></div>
+        <div class="rq-st"><button type="button" onclick="rqQ(${i},-1)">−</button><input inputmode="decimal" value="${String(it.qtd).replace('.', ',')}" onchange="rqQv(${i},this.value)"/><button type="button" onclick="rqQ(${i},1)">+</button><span style="font-size:12px;width:28px">${E(it.und)}</span></div></div>`).join('') || '<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">Busque o material abaixo.</div>'}
+      <input class="form-control" style="margin-top:8px" placeholder="🔎 Buscar material (nome ou código)" value="${E(rq.busca)}" oninput="rqBusca(this.value)"/><div id="rq-res">${_rqResHTML()}</div>
+      ${!rq.est.length ? '<div style="font-size:12px;color:#F59E0B;margin-top:6px">Carregando o estoque… (precisa de internet na primeira vez)</div>' : ''}</div></div>
+    <div class="card"><div class="card-body"><div class="form-group" style="margin:0"><label class="form-label">Observação</label><input class="form-control" value="${E(rq.obs)}" oninput="rqCampo('obs',this.value)" placeholder="Ex.: trecho PV-12 a PV-14"/></div></div></div>
+    <div style="text-align:center;margin:6px 0 80px"><button type="button" class="btn btn-outline" style="width:auto;padding:8px 16px" onclick="rqLista()">Minhas requisições</button></div>`;
+  bar.innerHTML = '<button class="btn btn-outline" onclick="rqSair()">Sair</button><button class="btn btn-green" onclick="rqSalvar()">✓ Enviar pedido</button>';
+}
+async function rqSalvar() { const f = []; if (!rq.frente) f.push('a frente'); if (!rq.servico) f.push('o serviço'); if (!rq.itens.some(it => it.qtd > 0)) f.push('ao menos um material');
+  if (f.length) { toast('Falta: ' + f.join(', ') + '.', 'err'); return; }
+  const ag = new Date(), d = _hojeISO(), num = 'R' + d.slice(5, 7) + d.slice(8, 10) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase().replace(/[0O1IL]/g, 'K');
+  const doc = { id: 'rq' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num, obra: usuarioCampo?.obra || '', data: d, hora: ag.toTimeString().slice(0, 5), encarregado: usuarioCampo.nome, encMat: usuarioCampo.mat || '', frenteInf: rq.frente, servicoInf: rq.servico,
+    itens: rq.itens.filter(it => it.qtd > 0).map(({ saldo, ...x }) => x), obs: String(rq.obs || '').trim(), status: 'solicitada', origem: 'app', criadoEm: ag.toISOString() };
+  await fbSalvar('requisicoes', doc);
+  try { const l = JSON.parse(localStorage.getItem('campo_rq_meus') || '[]'); l.unshift(doc); localStorage.setItem('campo_rq_meus', JSON.stringify(l.slice(0, 40))); } catch (e) {}
+  rq.feito = doc; rq.modo = 'feito'; rqRender(); window.scrollTo(0, 0); }
+async function rqLista() { rq.modo = 'lista'; rqRender();
+  if (db && _fbReady && isOnline) { try { const sn = await db.collection('requisicoes').where('encarregado', '==', usuarioCampo.nome).get(); rq._lista = sn.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 30); } catch (e) {} }
+  if (rq && rq.modo === 'lista') rqRender(); }
+function _rqLista(el, bar) { const E = _rqE, l = rq._lista || JSON.parse(localStorage.getItem('campo_rq_meus') || '[]');
+  const st = s => s === 'solicitada' ? ['Aguardando almox', '#D97706'] : s === 'cancelada' ? ['Recusada', '#DC2626'] : ['Entregue', '#16A34A'];
+  el.innerHTML = `<div class="card"><div class="card-body"><div style="font-weight:800;font-size:16px;margin-bottom:6px">Minhas requisições</div>${l.map(x => { const [t, c] = st(x.status);
+    return `<div style="border-top:1px solid rgba(127,127,127,.15);padding:10px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-family:ui-monospace,monospace;font-size:16px">${E(x.num)}</b><span class="rq-tag" style="background:${c}22;color:${c}">${t}${x.parcial ? ' (parcial)' : ''}</span></div>
+      <div style="font-size:12px;color:var(--text2)">${E(String(x.data).split('-').reverse().join('/'))} ${E(x.hora || '')} · ${E(x.frenteInf || x.itens?.[0]?.frente || '')} ${E(x.servicoInf || '')}</div>
+      <div style="font-size:12.5px;margin-top:3px">${(x.itens || []).map(it => String(it.qtd).replace('.', ',') + ' ' + E(it.und) + ' ' + E(it.nome)).join(' · ')}</div>${x.status === 'cancelada' && x.motivo ? `<div style="font-size:12px;color:#DC2626">Motivo: ${E(x.motivo)}</div>` : ''}</div>`; }).join('') || '<div style="font-size:13px;color:var(--text3)">Nenhuma requisição ainda.</div>'}</div></div>`;
+  bar.innerHTML = '<button class="btn btn-outline" onclick="rqSair()">Sair</button><button class="btn btn-green" onclick="rq.modo=\'novo\';rq.itens=[];rq.obs=\'\';rqRender()">+ Nova requisição</button>'; }
+(function () {
+  const res = document.querySelector('.hcard[onclick="abrirMeuResumo()"]');
+  if (res && !document.getElementById('card-rq')) res.parentElement.insertAdjacentHTML('beforeend', `<div class="hcard" onclick="rqAbrir()" id="card-rq" style="display:none"><svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg><div class="hcard-t">Requisição de material</div><div class="hcard-s">Pedir ao almoxarifado</div></div>`);
+  const mostra = () => { const c = document.getElementById('card-rq'); if (!c) return; let pode = true; try { pode = typeof podeModulo === 'function' ? podeModulo('apontamentos') : true; } catch (e) {} c.style.display = pode && usuarioCampo ? '' : 'none'; };
+  setInterval(mostra, 1500);
+  const oP = processarQR; processarQR = function (texto, contexto) {
+    if (contexto === 'rqfrente') { const c = typeof _fhCodDe === 'function' ? _fhCodDe(texto) : String(texto).replace(/^frente:/i, '').trim(); const fr = _daObraCampo(dadosCampo.frentes || []).find(f => f.cod === c);
+      if (fr && rq) { rq.frente = fr.cod; rqRender(); } else toast('Frente não encontrada: ' + (c || texto), 'err'); return { ok: !!fr }; }
+    return oP.apply(this, arguments); };
 })();
 </script>
 </body>
