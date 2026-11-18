@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.87 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.88 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18985,6 +18985,7 @@ async function _kkGerar(nUsr) {
       USUARIOS = (USUARIOS || []).filter(z => z.id !== id); USUARIOS.push(u); W.push(['usuarios', u]);
     }
   }
+  try { _kkAlmox(O, sv, dia); } catch (e) { console.warn('kk almox', e); }   // v4.88
   window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
   try { _roHash && delete _roHash[O]; _publicarResumoObras(); } catch (e) {}   // v4.46: "Frente hoje" do app já mostra meta e avanço
   try { window._absCache = { k: '', m: {} }; } catch (e) {}
@@ -19007,7 +19008,7 @@ async function kkApagar(silencioso) {
   const ps = [];
   _KK_COLS.forEach(col => { (dados[col] || []).filter(x => x && (x.kick || String(x.id).startsWith('kk_'))).forEach(x => ps.push(fbDelete(col, x.id).catch(() => {}))); dados[col] = (dados[col] || []).filter(x => !(x && (x.kick || String(x.id).startsWith('kk_')))); });
   // ordens/planos/produtos que ainda não estão em memória (carregados à parte)
-  for (const col of ['ordensServico', 'planosPrev', 'produtos', 'partesDiarias', 'rdos', 'fotos', 'equipes', 'notasFiscais', 'movTanques', 'tiposPerdas']) { try { const s = await db.collection(col).where('kick', '==', true).get(); s.docs.forEach(d => ps.push(fbDelete(col, d.id).catch(() => {}))); } catch (e) {} }
+  for (const col of ['ordensServico', 'planosPrev', 'produtos', 'partesDiarias', 'rdos', 'fotos', 'equipes', 'notasFiscais', 'movTanques', 'tiposPerdas', 'requisicoes', 'almoxEstoque']) { try { const s = await db.collection(col).where('kick', '==', true).get(); s.docs.forEach(d => ps.push(fbDelete(col, d.id).catch(() => {}))); } catch (e) {} }
   for (let i = 0; i < ps.length; i += 80) { if (!silencioso) _kkProg('Apagando ' + Math.min(i + 80, ps.length) + ' de ' + ps.length + '…'); await Promise.all(ps.slice(i, i + 80)); }
   _kkProg('');
   if (!silencioso) { toast('Dados do kickoff apagados.'); try { renderObras(); } catch (e) {} }
@@ -19015,7 +19016,7 @@ async function kkApagar(silencioso) {
 // v4.55: zera a base DEMO inteira (não só o que o kickoff gerou) e gera o kickoff limpo.
 // Mantém: logins/usuários, perfis, famílias, turnos, tipos de perda e configurações.
 const _KK_ZERAR = ['ua', 'empresas', 'cargos', 'funcionarios', 'modelos', 'equipamentos', 'frentes', 'tiposServico', 'servicos', 'orcamentos', 'tanques', 'movTanques', 'aponMO', 'aponEQ', 'perdas', 'diesel',
-  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'vistoriasRep', 'partesDiarias', 'mobilizacoes', 'programacao', 'resumoObra', 'turnosAbertos', 'rdos', 'notasFiscais', 'equipes', 'fotos', 'precosContrato', 'prodTerceiros', 'obras'];
+  'produtos', 'planosPrev', 'ordensServico', 'frota', 'abastVeic', 'multas', 'republicas', 'vistoriasRep', 'partesDiarias', 'mobilizacoes', 'programacao', 'resumoObra', 'turnosAbertos', 'rdos', 'notasFiscais', 'equipes', 'fotos', 'precosContrato', 'prodTerceiros', 'requisicoes', 'almoxEstoque', 'obras'];
 async function kkZerarTudo() {
   if (!_exDemo() || !_okCli()) { toast('Disponível só no ambiente DEMO.', 'error'); return; }
   if (!(await _kkVersaoOk())) return;
@@ -20769,6 +20770,255 @@ function itfF(k, v) { window._itf[k] = window._itf[k] === v && (k === 'tipo' || 
   };
   window.renderPerdas = nv; try { renderPerdas = nv; } catch (e) {}
 })();
+// ═══════════════════════════════════════════════════════════════
+// v4.88: ALMOXARIFADO DE MATERIAIS (protótipo para validar na DEMO)
+// Estoque importado do TOTVS (Posição de estoque) · requisição no almox com assinatura · apropriação automática
+// pela apropriação do encarregado (frente/serviço/UA) · fila "a classificar" · relatórios por encarregado e por frente/UA · arquivo de baixa
+// ═══════════════════════════════════════════════════════════════
+const _AX = { aba: 'req', de: '', ate: '', enc: '', local: '', busca: '', estLocal: '', estBusca: '', estGrupo: '' };
+const _AX_REGRA = { inf: ['Informado na requisição', '#16A34A'], uni: ['Única frente do encarregado no dia', '#16A34A'], apl: ['Material aplicado no turno (RDO)', '#2563EB'], comp: ['Compatível com o serviço do dia', '#D97706'], seg: ['Frente do dia seguinte', '#D97706'], cla: ['A classificar', '#DC2626'], man: ['Classificado manualmente', '#7C3AED'] };
+function _axObra() { return typeof _okObraAtual === 'function' ? _okObraAtual() : 'todas'; }
+function _axDaObra(x) { const o = _axObra(); return o === 'todas' || !x.obra || x.obra === o; }
+function _axR$(v) { return 'R$ ' + (+v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _axN(v) { return (Math.round((+v || 0) * 100) / 100).toLocaleString('pt-BR'); }
+function _axNorm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+/* turnos do encarregado num dia: [{frente, servico, horaIni, horaFim, ap}] pela apropriação (MO) */
+function _axTurnos(enc, data) { const m = {}; (dados.aponMO || []).filter(a => a.data === data && a.lancadoPor === enc && a.status !== 'rejeitado').forEach(a => { const k = a.apropriacao || (a.frente + '|' + a.servico + '|' + a.horaIni); m[k] = m[k] || { frente: a.frente, servico: a.servico, horaIni: a.horaIni, horaFim: a.horaFim, ap: k }; }); return Object.values(m); }
+const _AX_COMP = [[/pvc.*(esgoto|dn ?150|dn ?200)|areia|brita|anel|tampao|pv\b/, /vca|esgoto|vala|poco|pv/], [/pead|bentonita|polimero/, /mnd|furo|direcional|perfura/], [/ligacao|kit|hidrometro|colar|dn ?(100|20|25|32)\b/, /liga/], [/cbuq|emulsao|asfalt|concreto|cimento/, /recomp|paviment|calcada/], [/anel|tampao|degrau/, /poco|pv/]];
+function _axCompat(nome, servico) { const n = _axNorm(nome), s = _axNorm(servico); return _AX_COMP.some(([m, sv]) => m.test(n) && sv.test(s)); }
+/* decide o destino de um item */
+function _axDestino(rq, it) {
+  if (it.regra === 'man' && it.frente) return it;
+  if (rq.frenteInf) return { frente: rq.frenteInf, servico: rq.servicoInf || '', regra: 'inf' };
+  const T = _axTurnos(rq.encarregado, rq.data);
+  if (T.length === 1) return { frente: T[0].frente, servico: T[0].servico, regra: 'uni' };
+  if (T.length > 1) {
+    const rd = (dados.rdos || []).filter(r => r.data === rq.data && r.apontador === rq.encarregado && (r.mat || []).some(m => _axNorm(m.desc).includes(_axNorm(it.nome).slice(0, 14)) || _axNorm(it.nome).includes(_axNorm(m.desc).slice(0, 14))));
+    if (rd.length === 1) return { frente: rd[0].frente, servico: rd[0].servico, regra: 'apl' };
+    const c = T.filter(t => _axCompat(it.nome, t.servico)); if (c.length === 1) return { frente: c[0].frente, servico: c[0].servico, regra: 'comp' };
+    return { frente: '', servico: '', regra: 'cla', opc: T };
+  }
+  if ((rq.hora || '') >= '15:00') { const d2 = new Date(rq.data + 'T12:00'); for (let i = 1; i <= 3; i++) { d2.setDate(d2.getDate() + 1); const ds = d2.toISOString().slice(0, 10), T2 = _axTurnos(rq.encarregado, ds); if (T2.length === 1) return { frente: T2[0].frente, servico: T2[0].servico, regra: 'seg' }; if (T2.length) break; } }
+  return { frente: '', servico: '', regra: 'cla' };
+}
+function _axAprop(rq) { (rq.itens || []).forEach(it => { if (it.regra === 'man') return; const d = _axDestino(rq, it); it.frente = d.frente; it.servico = d.servico; it.regra = d.regra;
+  let ua = ''; try { if (d.frente && typeof uaResolver === 'function') { const r = uaResolver(rq.obra, d.frente, d.servico); ua = r && r.ua ? (r.ua.cod || r.ua) : ''; } } catch (e) {} it.ua = ua; }); return rq; }
+function _axReqs() { return (dados.requisicoes || []).filter(_axDaObra).filter(r => r.status !== 'cancelada'); }
+function _axItens(lista) { const L = []; (lista || _axReqs()).forEach(r => (r.itens || []).forEach((it, i) => L.push({ rq: r, it, i }))); return L; }
+function _axEnc() { const s = new Set((dados.aponMO || []).filter(_axDaObra).map(a => a.lancadoPor).filter(Boolean)); (dados.funcionarios || []).filter(f => f.apropriador === 'Sim').forEach(f => s.add(f.nome)); return [...s].sort((a, b) => a.localeCompare(b, 'pt-BR')); }
+function _axEst() { return (dados.almoxEstoque || []).filter(_axDaObra); }
+async function _axCarregar() { if (!(db && _firebaseReady)) return; const [a, b] = await Promise.all([fbLoadAll('requisicoes').catch(() => null), fbLoadAll('almoxEstoque').catch(() => null)]); if (a) dados.requisicoes = a; if (b) dados.almoxEstoque = b; }
+
+// ── PÁGINAS
+function renderAlmoxReq() {
+  const pg = document.getElementById('page-almox-req'); if (!pg) return;
+  const R = _axReqs(), I = _axItens(R).filter(x => (!_AX.de || x.rq.data >= _AX.de) && (!_AX.ate || x.rq.data <= _AX.ate) && (!_AX.enc || x.rq.encarregado === _AX.enc));
+  const cla = I.filter(x => x.it.regra === 'cla'), tot = I.reduce((s, x) => s + (+x.it.qtd || 0) * (+x.it.custo || 0), 0), hj = hoje(), RQh = R.filter(r => r.data === hj);
+  const pend = I.filter(x => x.it.regra !== 'cla' && !x.rq.exportadoEm), auto = I.filter(x => ['uni', 'apl', 'comp', 'seg', 'inf'].includes(x.it.regra)).length;
+  const tab = (k, t, n) => `<button class="ax-tab ${_AX.aba === k ? 'on' : ''}" onclick="_AX.aba='${k}';renderAlmoxReq()">${t}${n != null ? ` <span>${n}</span>` : ''}</button>`;
+  let corpo = '';
+  if (_AX.aba === 'req') {
+    const rs = R.filter(r => (!_AX.de || r.data >= _AX.de) && (!_AX.ate || r.data <= _AX.ate) && (!_AX.enc || r.encarregado === _AX.enc)).sort((a, b) => (b.data + b.hora).localeCompare(a.data + a.hora));
+    corpo = `<div class="table-wrap"><table class="ax-t"><thead><tr><th>Requisição</th><th>Data</th><th>Encarregado</th><th>Itens</th><th style="text-align:right">Valor</th><th>Destino</th><th>Situação</th><th></th></tr></thead><tbody>${rs.map(r => { const v = (r.itens || []).reduce((s, it) => s + (+it.qtd || 0) * (+it.custo || 0), 0), nc = (r.itens || []).filter(it => it.regra === 'cla').length, fr = [...new Set((r.itens || []).map(it => it.frente).filter(Boolean))];
+      return `<tr onclick="axVer('${r.id}')" style="cursor:pointer"><td><b>${_e(r.num)}</b><div class="ax-sm">${_e(r.local || '')}</div></td><td style="white-space:nowrap">${fmtData(r.data)}<div class="ax-sm">${_e(r.hora || '')}</div></td><td>${_e(r.encarregado)}<div class="ax-sm">retirado por ${_e(r.retirante || r.encarregado)}</div></td>
+        <td>${(r.itens || []).slice(0, 2).map(it => `${_axN(it.qtd)} ${_e(it.und)} ${_e(it.nome)}`).join('<br>')}${(r.itens || []).length > 2 ? `<div class="ax-sm">+ ${(r.itens || []).length - 2} item(ns)</div>` : ''}</td>
+        <td style="text-align:right;white-space:nowrap"><b>${_axR$(v)}</b></td><td>${fr.map(f => `<span class="ax-fr">${_e(f)}</span>`).join(' ') || '—'}</td>
+        <td>${nc ? `<span class="ax-st" style="background:#FEE2E2;color:#B91C1C">${nc} a classificar</span>` : r.exportadoEm ? '<span class="ax-st" style="background:#E0E7FF;color:#3730A3">Exportada p/ baixa</span>' : '<span class="ax-st" style="background:#DCFCE7;color:#166534">Apropriada</span>'}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();axDoc('${r.id}')" title="Imprimir requisição">🖨</button></td></tr>`; }).join('') || '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-3)">Nenhuma requisição no período</td></tr>'}</tbody></table></div>`;
+  } else if (_AX.aba === 'cla') {
+    corpo = cla.length ? `<div class="ax-info">Estes itens não tiveram destino certo: o encarregado não apontou turno no dia ou trabalhou em mais de uma frente e o material não aparece no RDO. Escolha onde foi aplicado.</div><div class="table-wrap"><table class="ax-t"><thead><tr><th>Requisição</th><th>Data</th><th>Encarregado</th><th>Material</th><th style="text-align:right">Qtd</th><th>Onde foi aplicado</th></tr></thead><tbody>${cla.map(({ rq, it, i }) => { const T = _axTurnos(rq.encarregado, rq.data), fr = (dados.frentes || []).filter(f => !f.obra || f.obra === rq.obra);
+      const opts = (T.length ? T.map(t => [t.frente + '|' + t.servico, t.frente + ' · ' + t.servico + ' (turno ' + (t.horaIni || '') + ')']) : []).concat(fr.map(f => [f.cod + '|', f.cod + ' — ' + (f.desc || f.nome || '')]));
+      return `<tr><td><b>${_e(rq.num)}</b></td><td>${fmtData(rq.data)} ${_e(rq.hora || '')}</td><td>${_e(rq.encarregado)}<div class="ax-sm">${T.length ? T.length + ' turno(s) no dia' : 'sem turno apontado no dia'}</div></td><td>${_e(it.nome)}<div class="ax-sm">${_e(it.cod)}</div></td><td style="text-align:right">${_axN(it.qtd)} ${_e(it.und)}</td>
+        <td><select class="form-control" style="min-width:260px" onchange="axClassificar('${rq.id}',${i},this.value)"><option value="">Escolher frente / serviço…</option>${opts.map(([v, t]) => `<option value="${_e(v)}">${_e(t)}</option>`).join('')}</select></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="ax-vazio">✅ Nada a classificar — todo material retirado já tem frente e serviço.</div>';
+  } else if (_AX.aba === 'enc') {
+    const g = {}; I.forEach(({ rq, it }) => { const k = rq.encarregado, y = g[k] = g[k] || { n: new Set(), v: 0, it: 0, cla: 0, fr: {}, mat: {} }; y.n.add(rq.id); y.it++; const v = (+it.qtd || 0) * (+it.custo || 0); y.v += v; if (it.regra === 'cla') y.cla++; if (it.frente) y.fr[it.frente] = (y.fr[it.frente] || 0) + v; const mk = it.nome; y.mat[mk] = y.mat[mk] || { q: 0, u: it.und, v: 0 }; y.mat[mk].q += +it.qtd || 0; y.mat[mk].v += v; });
+    corpo = Object.entries(g).sort((a, b) => b[1].v - a[1].v).map(([k, y]) => `<div class="ax-card"><div class="ax-ch"><div><b style="font-size:15px">${_e(k)}</b><div class="ax-sm">${y.n.size} requisição(ões) · ${y.it} item(ns)${y.cla ? ` · <span style="color:#DC2626;font-weight:700">${y.cla} a classificar</span>` : ''}</div></div><div style="font-size:20px;font-weight:900">${_axR$(y.v)}</div></div>
+      <div class="ax-cols"><div><div class="ax-lb">Materiais retirados</div>${Object.entries(y.mat).sort((a, b) => b[1].v - a[1].v).slice(0, 6).map(([m, z]) => `<div class="ax-ln"><span>${_e(m)}</span><b>${_axN(z.q)} ${_e(z.u)}</b></div>`).join('')}</div>
+      <div><div class="ax-lb">Para onde foi</div>${Object.entries(y.fr).sort((a, b) => b[1] - a[1]).map(([f, v]) => `<div class="ax-ln"><span class="ax-fr">${_e(f)}</span><b>${_axR$(v)}</b></div>`).join('') || '<div class="ax-sm">—</div>'}</div></div></div>`).join('') || '<div class="ax-vazio">Sem requisições no período.</div>';
+  } else if (_AX.aba === 'ua') {
+    const g = {}; I.filter(x => x.it.frente).forEach(({ it }) => { const k = it.frente + '|' + it.servico, y = g[k] = g[k] || { fr: it.frente, sv: it.servico, ua: it.ua, v: 0, mat: {} }; const v = (+it.qtd || 0) * (+it.custo || 0); y.v += v; y.mat[it.nome] = y.mat[it.nome] || { q: 0, u: it.und, v: 0 }; y.mat[it.nome].q += +it.qtd || 0; y.mat[it.nome].v += v; });
+    const tt = Object.values(g).reduce((s, y) => s + y.v, 0) || 1;
+    corpo = `<div class="table-wrap"><table class="ax-t"><thead><tr><th>Frente</th><th>Serviço</th><th>UA</th><th>Materiais</th><th style="text-align:right">Valor</th><th style="width:160px">% do total</th></tr></thead><tbody>${Object.values(g).sort((a, b) => b.v - a.v).map(y => `<tr><td><span class="ax-fr">${_e(y.fr)}</span></td><td>${_e(y.sv || '—')}</td><td>${_e(y.ua || '—')}</td><td>${Object.entries(y.mat).sort((a, b) => b[1].v - a[1].v).map(([m, z]) => `${_axN(z.q)} ${_e(z.u)} ${_e(m)}`).join('<br>')}</td><td style="text-align:right;white-space:nowrap"><b>${_axR$(y.v)}</b></td><td><div class="ax-bar"><i style="width:${y.v / tt * 100}%"></i></div><div class="ax-sm">${Math.round(y.v / tt * 100)}%</div></td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-3)">Sem material apropriado no período</td></tr>'}</tbody></table></div>`;
+  }
+  pg.querySelector('#ax-corpo').innerHTML = `
+    <div class="ax-kpis">
+      <div class="ax-k" onclick="_AX.aba='req';_AX.de=hoje();_AX.ate=hoje();renderAlmoxReq()"><div class="l">Hoje</div><div class="v">${RQh.length}</div><div class="s">requisição(ões) · ${_axR$(RQh.reduce((s, r) => s + (r.itens || []).reduce((t, it) => t + (+it.qtd || 0) * (+it.custo || 0), 0), 0))}</div></div>
+      <div class="ax-k"><div class="l">No período</div><div class="v">${_axR$(tot)}</div><div class="s">${new Set(I.map(x => x.rq.id)).size} requisição(ões) · ${I.length} item(ns)</div></div>
+      <div class="ax-k"><div class="l">Apropriado sozinho</div><div class="v" style="color:#16A34A">${I.length ? Math.round(auto / I.length * 100) : 0}%</div><div class="s">${auto} de ${I.length} itens pela apropriação</div></div>
+      <div class="ax-k ${_AX.aba === 'cla' ? 'on' : ''}" onclick="_AX.aba='cla';renderAlmoxReq()"><div class="l">A classificar</div><div class="v" style="color:${cla.length ? '#DC2626' : 'inherit'}">${cla.length}</div><div class="s">${_axR$(cla.reduce((s, x) => s + (+x.it.qtd || 0) * (+x.it.custo || 0), 0))} sem destino</div></div>
+      <div class="ax-k"><div class="l">Pronto para baixa</div><div class="v" style="color:#2563EB">${pend.length}</div><div class="s">itens apropriados não exportados</div></div></div>
+    <div class="ax-fl"><div class="ax-tabs">${tab('req', 'Requisições', R.length)}${tab('cla', 'A classificar', cla.length)}${tab('enc', 'Por encarregado')}${tab('ua', 'Por frente / UA')}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="date" class="form-control" style="width:150px" value="${_AX.de}" onchange="_AX.de=this.value;renderAlmoxReq()"/><span class="ax-sm">até</span><input type="date" class="form-control" style="width:150px" value="${_AX.ate}" onchange="_AX.ate=this.value;renderAlmoxReq()"/>
+      <select class="form-control" style="width:200px" onchange="_AX.enc=this.value;renderAlmoxReq()"><option value="">Todos os encarregados</option>${_axEnc().map(n => `<option ${n === _AX.enc ? 'selected' : ''}>${_e(n)}</option>`).join('')}</select>
+      <button class="btn btn-outline btn-sm" onclick="Object.assign(_AX,{de:'',ate:'',enc:''});renderAlmoxReq()">✕</button></div></div>
+    <div class="card"><div class="card-body" style="padding:0">${corpo}</div></div>`;
+}
+function axClassificar(id, i, v) { if (!v) return; const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const [fr, sv] = v.split('|'), it = r.itens[i];
+  Object.assign(it, { frente: fr, servico: sv || '', regra: 'man', classificadoPor: usuarioLogado?.nome || '', classificadoEm: new Date().toISOString() });
+  try { const u = uaResolver(r.obra, fr, sv); it.ua = u && u.ua ? (u.ua.cod || u.ua) : ''; } catch (e) {}
+  fbSave('requisicoes', r.id, r); toast('Item classificado em ' + fr + '.'); renderAlmoxReq(); }
+function axVer(id) { const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; document.getElementById('modal-axv')?.remove();
+  const T = _axTurnos(r.encarregado, r.data);
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay open" id="modal-axv"><div class="modal" style="max-width:900px"><div class="modal-header"><span class="modal-title">${_e(r.num)} · ${fmtData(r.data)} ${_e(r.hora || '')}</span><button class="modal-close" onclick="document.getElementById('modal-axv').remove()">×</button></div>
+    <div class="modal-body"><div class="ax-cols" style="margin-bottom:12px"><div><div class="ax-lb">Encarregado</div><b>${_e(r.encarregado)}</b><div class="ax-sm">retirado por ${_e(r.retirante || r.encarregado)} · ${_e(r.local || '')}</div></div>
+      <div><div class="ax-lb">Turnos dele neste dia (apropriação)</div>${T.map(t => `<div class="ax-ln"><span><span class="ax-fr">${_e(t.frente)}</span> ${_e(t.servico)}</span><b>${_e(t.horaIni || '')}–${_e(t.horaFim || '')}</b></div>`).join('') || '<div class="ax-sm">Nenhum turno apontado.</div>'}</div></div>
+      <table class="ax-t"><thead><tr><th>Material</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Destino</th><th>Como foi decidido</th></tr></thead><tbody>${(r.itens || []).map(it => { const g = _AX_REGRA[it.regra] || ['—', '#888'];
+        return `<tr><td><b>${_e(it.nome)}</b><div class="ax-sm">${_e(it.cod)}</div></td><td style="text-align:right">${_axN(it.qtd)} ${_e(it.und)}</td><td style="text-align:right;white-space:nowrap">${_axR$((+it.qtd || 0) * (+it.custo || 0))}</td><td>${it.frente ? `<span class="ax-fr">${_e(it.frente)}</span> ${_e(it.servico || '')}${it.ua ? `<div class="ax-sm">UA ${_e(it.ua)}</div>` : ''}` : '—'}</td><td><span class="ax-rg" style="color:${g[1]};border-color:${g[1]}">${g[0]}</span></td></tr>`; }).join('')}</tbody></table>
+      ${r.assinatura ? `<div style="margin-top:12px"><div class="ax-lb">Assinatura de quem retirou</div><img src="${r.assinatura}" style="height:70px;border-bottom:1px solid var(--border)"></div>` : ''}</div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="axDoc('${r.id}')">🖨 Imprimir</button></div></div></div>`); }
+
+// ── NOVA REQUISIÇÃO
+let _axN_ = null;
+function axNova() {
+  const est = _axEst(), locais = [...new Set(est.map(e => e.local))];
+  _axN_ = { data: hoje(), hora: new Date().toTimeString().slice(0, 5), local: locais[0] || '', enc: '', ret: '', fr: '', sv: '', itens: [] };
+  document.getElementById('modal-axn')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay open" id="modal-axn"><div class="modal" style="max-width:860px"><div class="modal-header"><span class="modal-title">Nova requisição de material</span><button class="modal-close" onclick="document.getElementById('modal-axn').remove()">×</button></div>
+    <div class="modal-body"><datalist id="ax-dl">${est.map(e => `<option value="${_e(e.cod + ' · ' + e.nome)}">`).join('')}</datalist>
+      <div class="ax-g4"><div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" value="${_axN_.data}" onchange="_axN_.data=this.value;_axSug()"/></div><div class="form-group"><label class="form-label">Hora</label><input type="time" class="form-control" value="${_axN_.hora}" onchange="_axN_.hora=this.value;_axSug()"/></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">Local de estoque</label><select class="form-control" onchange="_axN_.local=this.value">${locais.map(l => `<option>${_e(l)}</option>`).join('')}</select></div></div>
+      <div class="ax-g4"><div class="form-group" style="grid-column:span 2"><label class="form-label">Encarregado (para quem vai o material)</label><select class="form-control" onchange="_axN_.enc=this.value;_axSug()"><option value="">Escolha…</option>${_axEnc().map(n => `<option>${_e(n)}</option>`).join('')}</select></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">Quem retirou (se não for o encarregado)</label><input class="form-control" placeholder="opcional" oninput="_axN_.ret=this.value"/></div></div>
+      <div id="ax-sug" class="ax-info" style="margin:4px 0 10px">Escolha o encarregado: o painel mostra onde ele trabalhou nesse dia.</div>
+      <div class="ax-lb">Itens</div><div id="ax-itens"></div>
+      <div style="display:flex;gap:8px;margin-top:6px"><input class="form-control" list="ax-dl" id="ax-add" placeholder="Código ou nome do material" style="flex:1"/><input class="form-control" id="ax-addq" type="number" step="any" placeholder="Qtd" style="width:110px"/><button class="btn btn-outline" onclick="_axAdd()">+ Item</button></div>
+      <div class="ax-lb" style="margin-top:14px">Assinatura de quem retirou</div><canvas id="ax-sig" width="600" height="120" style="width:100%;max-width:600px;height:120px;border:1px dashed var(--border);border-radius:10px;background:#fff;touch-action:none"></canvas><div><button class="btn btn-outline btn-sm" onclick="_axSigLimpar()">Limpar assinatura</button></div></div>
+    <div class="modal-footer"><button class="btn btn-primary" onclick="axSalvar()">Registrar requisição</button></div></div></div>`);
+  _axSigIni(); _axItensRender();
+}
+function _axSug() { const el = document.getElementById('ax-sug'); if (!el) return; if (!_axN_.enc) { el.innerHTML = 'Escolha o encarregado: o painel mostra onde ele trabalhou nesse dia.'; return; }
+  const T = _axTurnos(_axN_.enc, _axN_.data);
+  el.innerHTML = (T.length ? `<b>${_e(_axN_.enc)}</b> trabalhou em ${T.length === 1 ? 'uma frente' : T.length + ' frentes'} em ${fmtData(_axN_.data)}: ` + T.map(t => `<span class="ax-fr">${_e(t.frente)}</span> ${_e(t.servico)} (${_e(t.horaIni || '')}–${_e(t.horaFim || '')})`).join(' · ') + (T.length === 1 ? ' → o material vai direto para lá.' : ' → o painel decide item a item (RDO e tipo de material).') : `<b>${_e(_axN_.enc)}</b> ainda não tem turno apontado nesse dia${(_axN_.hora || '') >= '15:00' ? ' — retirada à tarde: o painel olha o dia seguinte.' : ' — se continuar assim, o item vai para "a classificar".'}`)
+    + `<div style="margin-top:6px">Destino informado (opcional): <select class="form-control" style="display:inline-block;width:auto;min-width:240px" onchange="const [a,b]=this.value.split('|');_axN_.fr=a||'';_axN_.sv=b||''"><option value="">Deixar o painel decidir</option>${T.map(t => `<option value="${_e(t.frente + '|' + t.servico)}">${_e(t.frente + ' · ' + t.servico)}</option>`).join('')}${(dados.frentes || []).filter(_axDaObra).map(f => `<option value="${_e(f.cod + '|')}">${_e(f.cod + ' — ' + (f.desc || ''))}</option>`).join('')}</select></div>`; }
+function _axAdd() { const v = document.getElementById('ax-add').value.trim(), q = +document.getElementById('ax-addq').value; if (!v || !q) { toast('Material e quantidade.', 'error'); return; }
+  const cod = v.split(' · ')[0].trim(), e = _axEst().find(x => x.cod === cod) || _axEst().find(x => _axNorm(x.nome) === _axNorm(v)); if (!e) { toast('Material não encontrado no estoque importado.', 'error'); return; }
+  if (q > (+e.fisico || 0)) toast('Atenção: quantidade maior que o saldo importado (' + _axN(e.fisico) + ' ' + e.und + ').', 'error');
+  _axN_.itens.push({ cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, qtd: q, custo: +e.custoMedio || 0 }); document.getElementById('ax-add').value = ''; document.getElementById('ax-addq').value = ''; _axItensRender(); }
+function _axItensRender() { const el = document.getElementById('ax-itens'); if (!el) return; el.innerHTML = _axN_.itens.length ? `<table class="ax-t"><tbody>${_axN_.itens.map((it, i) => `<tr><td><b>${_e(it.nome)}</b><div class="ax-sm">${_e(it.cod)} · ${_e(it.grupo || '')}</div></td><td style="text-align:right">${_axN(it.qtd)} ${_e(it.und)}</td><td style="text-align:right">${_axR$(it.qtd * it.custo)}</td><td><button class="btn btn-outline btn-sm" onclick="_axN_.itens.splice(${i},1);_axItensRender()">×</button></td></tr>`).join('')}</tbody></table>` : '<div class="ax-sm" style="padding:6px 0">Nenhum item ainda.</div>'; }
+function _axSigIni() { const c = document.getElementById('ax-sig'); if (!c) return; const x = c.getContext('2d'); x.lineWidth = 2.2; x.lineCap = 'round'; x.strokeStyle = '#111'; let d = false, u = false; c._u = false;
+  const p = ev => { const r = c.getBoundingClientRect(), t = ev.touches ? ev.touches[0] : ev; return [(t.clientX - r.left) * c.width / r.width, (t.clientY - r.top) * c.height / r.height]; };
+  const s = ev => { d = true; const [a, b] = p(ev); x.beginPath(); x.moveTo(a, b); ev.preventDefault(); }, m = ev => { if (!d) return; const [a, b] = p(ev); x.lineTo(a, b); x.stroke(); c._u = true; ev.preventDefault(); }, e = () => { d = false; };
+  c.onmousedown = s; c.onmousemove = m; window.addEventListener('mouseup', e); c.ontouchstart = s; c.ontouchmove = m; c.ontouchend = e; }
+function _axSigLimpar() { const c = document.getElementById('ax-sig'); c.getContext('2d').clearRect(0, 0, c.width, c.height); c._u = false; }
+async function axSalvar() { const N = _axN_; if (!N.enc) { toast('Escolha o encarregado.', 'error'); return; } if (!N.itens.length) { toast('Inclua ao menos um item.', 'error'); return; }
+  const c = document.getElementById('ax-sig'); if (!c._u) { toast('Falta a assinatura de quem retirou.', 'error'); return; }
+  const n = (dados.requisicoes || []).length + 1, obra = _axObra() === 'todas' ? ((dados.obras || [])[0] || {}).id : _axObra();
+  const r = _axAprop({ id: 'rq_' + Date.now(), num: 'RQ-' + String(n).padStart(4, '0'), obra, data: N.data, hora: N.hora, local: N.local, encarregado: N.enc, retirante: N.ret || N.enc, frenteInf: N.fr, servicoInf: N.sv, itens: N.itens.map(x => ({ ...x })), assinatura: c.toDataURL('image/png'), status: 'aberta', criadoPor: usuarioLogado?.nome || '', criadoEm: new Date().toISOString() });
+  (dados.requisicoes = dados.requisicoes || []).push(r); await fbSave('requisicoes', r.id, r);
+  document.getElementById('modal-axn').remove(); const nc = r.itens.filter(i => i.regra === 'cla').length;
+  toast(r.num + ' registrada' + (nc ? ' · ' + nc + ' item(ns) a classificar' : ' · destino definido pela apropriação') + '.'); _AX.aba = 'req'; renderAlmoxReq(); axVer(r.id); }
+
+// ── DOCUMENTO A4
+function axDoc(id) { const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const w = window.open('', '_blank'); if (!w) return toast('Libere as janelas (pop-up).', 'error');
+  const tot = (r.itens || []).reduce((s, it) => s + (+it.qtd || 0) * (+it.custo || 0), 0);
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${_e(r.num)}</title><style>@page{size:A4;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}body{font-family:Arial;font-size:11px;color:#111;margin:0}
+    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:8px}.hd img{height:40px}.hd b{font-size:16px}h3{background:#111;color:#fff;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:4px 8px;margin:14px 0 0}
+    .g{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #bbb;border-top:0}.c{padding:5px 8px;border-right:1px solid #ddd}.c span{display:block;font-size:8.5px;color:#666;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse;border:1px solid #bbb;border-top:0}th{font-size:8.5px;text-transform:uppercase;color:#555;text-align:left;background:#f2f2f2;padding:4px 6px;border-bottom:1px solid #999}td{padding:5px 6px;border-bottom:1px solid #ddd}.n{text-align:right}
+    .ass{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px}.np{background:#111;padding:8px;text-align:center}.np button{background:#E30613;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700}@media print{.np{display:none}}</style></head><body>
+    <div class="np"><button onclick="print()">Imprimir / salvar PDF</button></div><div style="padding:10mm">
+    <div class="hd">${_pddLogo(r.obra)}<div style="text-align:right"><b>REQUISIÇÃO DE MATERIAL ${_e(r.num)}</b><div>${_e(getNomeObra(r.obra) || '')}</div></div></div>
+    <h3>Identificação</h3><div class="g"><div class="c"><span>Data / hora</span>${fmtData(r.data)} ${_e(r.hora || '')}</div><div class="c"><span>Local de estoque</span>${_e(r.local || '')}</div><div class="c"><span>Encarregado</span>${_e(r.encarregado)}</div><div class="c"><span>Retirado por</span>${_e(r.retirante || r.encarregado)}</div></div>
+    <h3>Itens e destino (apropriação)</h3><table><thead><tr><th>Código</th><th>Material</th><th class="n">Qtd</th><th>Und</th><th class="n">Custo médio</th><th class="n">Total</th><th>Frente / serviço</th><th>UA</th></tr></thead><tbody>
+    ${(r.itens || []).map(it => `<tr><td>${_e(it.cod)}</td><td>${_e(it.nome)}</td><td class="n">${_axN(it.qtd)}</td><td>${_e(it.und)}</td><td class="n">${_axR$(it.custo)}</td><td class="n">${_axR$((+it.qtd || 0) * (+it.custo || 0))}</td><td>${it.frente ? _e(it.frente + ' · ' + (it.servico || '')) : '<i>a classificar</i>'}</td><td>${_e(it.ua || '')}</td></tr>`).join('')}
+    <tr><td colspan="5" class="n"><b>Total</b></td><td class="n"><b>${_axR$(tot)}</b></td><td colspan="2"></td></tr></tbody></table>
+    <div class="ass"><div>${r.assinatura ? `<img src="${r.assinatura}" style="height:60px;display:block;margin:-66px auto 2px">` : ''}${_e(r.retirante || r.encarregado)}<br>Retirado por</div><div>${_e(r.criadoPor || '')}<br>Almoxarifado</div></div>
+    <div style="margin-top:14px;color:#888;font-size:9px;text-align:right">Gerado pelo ObraKontrol</div></div></body></html>`); w.document.close(); }
+
+// ── ARQUIVO DE BAIXA (layout provisório)
+function axBaixa() { const I = _axItens().filter(x => x.it.regra !== 'cla' && !x.rq.exportadoEm && (!_AX.de || x.rq.data >= _AX.de) && (!_AX.ate || x.rq.data <= _AX.ate));
+  if (!I.length) { toast('Nada apropriado pendente de exportação.', 'error'); return; }
+  const E = _axEst(), loc = l => (E.find(e => e.local === l) || {}).codLocal || '';
+  const aoa = [['Coligada', 'Filial', 'Cód. local', 'Local', 'Data', 'Requisição', 'Código produto', 'Produto', 'Unidade', 'Quantidade', 'Custo médio', 'Total', 'Frente', 'Serviço', 'UA', 'Encarregado', 'Regra']]
+    .concat(I.map(({ rq, it }) => { const e = E.find(z => z.cod === it.cod && z.local === rq.local) || {}; return [e.coligada || '', e.filial || '', loc(rq.local), rq.local, fmtData(rq.data), rq.num, it.cod, it.nome, it.und, +it.qtd, +it.custo, Math.round((+it.qtd) * (+it.custo) * 100) / 100, it.frente, it.servico, it.ua || '', rq.encarregado, (_AX_REGRA[it.regra] || [''])[0]]; }));
+  const wb = XLSX.utils.book_new(), s = XLSX.utils.aoa_to_sheet(aoa); s['!cols'] = aoa[0].map((h, i) => ({ wch: [8, 6, 10, 18, 11, 10, 13, 42, 7, 10, 11, 11, 9, 34, 16, 22, 30][i] })); XLSX.utils.book_append_sheet(wb, s, 'Baixa');
+  XLSX.writeFile(wb, 'Baixa de material ' + hoje() + '.xlsx');
+  if (confirm('Marcar estas ' + new Set(I.map(x => x.rq.id)).size + ' requisição(ões) como exportadas para baixa?')) { const ag = new Date().toISOString(); new Set(I.map(x => x.rq)).forEach(r => { r.exportadoEm = ag; r.status = 'exportada'; fbSave('requisicoes', r.id, r); }); renderAlmoxReq(); } }
+
+// ── ESTOQUE (importa a "Posição de estoque" do TOTVS)
+function renderAlmoxEst() { const pg = document.getElementById('page-almox-est'); if (!pg) return; const E = _axEst(), locs = [...new Set(E.map(e => e.local))], grupos = [...new Set(E.map(e => e.grupo))].sort();
+  let L = E; if (_AX.estLocal) L = L.filter(e => e.local === _AX.estLocal); if (_AX.estGrupo) L = L.filter(e => e.grupo === _AX.estGrupo); if (_AX.estBusca) { const b = _axNorm(_AX.estBusca); L = L.filter(e => _axNorm(e.cod + ' ' + e.nome).includes(b)); }
+  const saida = {}; _axItens().filter(x => !x.rq.exportadoEm).forEach(({ rq, it }) => { const k = rq.local + '|' + it.cod; saida[k] = (saida[k] || 0) + (+it.qtd || 0); });
+  const imp = E.reduce((m, e) => e.importadoEm > m ? e.importadoEm : m, '');
+  pg.querySelector('#axe-corpo').innerHTML = `<div class="ax-kpis" style="grid-template-columns:repeat(${Math.min(4, locs.length + 1)},1fr)">
+      <div class="ax-k ${!_AX.estLocal ? 'on' : ''}" onclick="_AX.estLocal='';renderAlmoxEst()"><div class="l">Estoque total</div><div class="v">${_axR$(E.reduce((s, e) => s + (+e.financeiro || 0), 0))}</div><div class="s">${E.length} item(ns) · importado ${imp ? fmtData(imp.slice(0, 10)) : '—'}</div></div>
+      ${locs.map(l => { const x = E.filter(e => e.local === l); return `<div class="ax-k ${_AX.estLocal === l ? 'on' : ''}" onclick="_AX.estLocal='${_e(l)}';renderAlmoxEst()"><div class="l">${_e(l)}</div><div class="v">${_axR$(x.reduce((s, e) => s + (+e.financeiro || 0), 0))}</div><div class="s">${x.length} item(ns)</div></div>`; }).join('')}</div>
+    <div class="ax-fl"><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="form-control" style="width:280px" placeholder="Buscar código ou material" value="${_e(_AX.estBusca)}" oninput="_AX.estBusca=this.value;clearTimeout(window._axT);window._axT=setTimeout(renderAlmoxEst,250)"/>
+      <select class="form-control" style="width:260px" onchange="_AX.estGrupo=this.value;renderAlmoxEst()"><option value="">Todos os grupos</option>${grupos.map(g => `<option ${g === _AX.estGrupo ? 'selected' : ''}>${_e(g)}</option>`).join('')}</select></div></div>
+    <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap"><table class="ax-t"><thead><tr><th>Código</th><th>Material</th><th>Grupo</th><th>Local</th><th style="text-align:right">Saldo TOTVS</th><th style="text-align:right">Saídas a baixar</th><th style="text-align:right">Saldo projetado</th><th style="text-align:right">Custo médio</th><th style="text-align:right">Valor</th></tr></thead><tbody>
+    ${L.slice(0, 400).map(e => { const s = saida[e.local + '|' + e.cod] || 0, pj = (+e.fisico || 0) - s; return `<tr><td class="td-mono">${_e(e.cod)}</td><td><b>${_e(e.nome)}</b></td><td class="ax-sm">${_e(e.grupo)}</td><td>${_e(e.local)}</td><td style="text-align:right">${_axN(e.fisico)} ${_e(e.und)}</td><td style="text-align:right;color:${s ? '#D97706' : 'var(--text-3)'}">${s ? '−' + _axN(s) : '—'}</td><td style="text-align:right;font-weight:800;color:${pj < 0 ? '#DC2626' : 'inherit'}">${_axN(pj)} ${_e(e.und)}</td><td style="text-align:right">${_axR$(e.custoMedio)}</td><td style="text-align:right">${_axR$(e.financeiro)}</td></tr>`; }).join('') || '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text-3)">Importe a Posição de Estoque do TOTVS</td></tr>'}</tbody></table></div></div></div>`; }
+async function axImportarEst(file) { if (!file) return; const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }); const ws = wb.Sheets[wb.SheetNames.find(n => /estoque/i.test(n) && !/resumo/i.test(n)) || wb.SheetNames[wb.SheetNames.length - 1]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }); if (!rows.length || !('CODIGO_PRODUTO' in rows[0])) { toast('Não reconheci o relatório: precisa das colunas CODIGO_PRODUTO, LOCAL, ESTOQUE_FISICO…', 'error'); return; }
+  const obra = _axObra() === 'todas' ? ((dados.obras || [])[0] || {}).id : _axObra(), ag = new Date().toISOString();
+  const L = rows.filter(r => r.CODIGO_PRODUTO).map(r => ({ id: ('ax_' + obra + '_' + r.CODIGO + '_' + r.CODIGO_PRODUTO).replace(/[^\w.-]/g, '_'), obra, coligada: r.CODCOLIGADA, filial: r.CODFILIAL, codLocal: r.CODIGO, local: String(r.LOCAL).trim(), cod: String(r.CODIGO_PRODUTO).trim(), grupo: String(r.GRUPO_PRODUTO).trim(), nome: String(r.PRODUTO).trim(), und: String(r.UND).trim(), fisico: +r.ESTOQUE_FISICO || 0, financeiro: +r.ESTOQUE_FINANCEIRO || 0, custoMedio: +r.CUSTOMEDIO_ENTRADA || ((+r.ESTOQUE_FISICO) ? (+r.ESTOQUE_FINANCEIRO) / (+r.ESTOQUE_FISICO) : 0), importadoEm: ag }));
+  if (!confirm('Importar ' + L.length + ' itens de estoque (' + [...new Set(L.map(x => x.local))].join(', ') + ')?\nO saldo anterior desta obra é substituído.')) return;
+  dados.almoxEstoque = (dados.almoxEstoque || []).filter(e => e.obra !== obra).concat(L);
+  for (let i = 0; i < L.length; i += 60) await Promise.all(L.slice(i, i + 60).map(x => fbSave('almoxEstoque', x.id, x).catch(() => {})));
+  toast(L.length + ' itens importados.'); renderAlmoxEst(); }
+
+// ── MENU, PÁGINAS E ESTILO
+(function () {
+  document.head.insertAdjacentHTML('beforeend', `<style>
+  .ax-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}.ax-k{background:var(--surface,var(--card));border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;min-width:0}.ax-k.on{border-color:var(--red);box-shadow:0 0 0 2px var(--red)}
+  .ax-k .l{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);font-weight:700}.ax-k .v{font-size:24px;font-weight:900;margin-top:4px;font-family:var(--mono,inherit)}.ax-k .s{font-size:12px;color:var(--text-3);margin-top:3px}
+  .ax-fl{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}.ax-tabs{display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:4px}
+  .ax-tab{border:0;background:transparent;padding:7px 14px;border-radius:9px;font-weight:700;font-size:13px;color:var(--text-2);cursor:pointer;font-family:inherit}.ax-tab.on{background:var(--surface,var(--card));color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.1)}.ax-tab span{font-size:11px;background:var(--border);border-radius:999px;padding:1px 7px;margin-left:4px}
+  .ax-t{width:100%;border-collapse:collapse}.ax-t th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border)}.ax-t td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:13px}
+  .ax-sm{font-size:11.5px;color:var(--text-3);margin-top:2px}.ax-fr{display:inline-block;font-size:11.5px;font-weight:700;border-radius:6px;padding:2px 7px;background:rgba(37,99,235,.1);color:#2563EB}
+  .ax-st{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px;white-space:nowrap}.ax-rg{display:inline-block;font-size:11.5px;font-weight:700;border:1px solid;border-radius:999px;padding:2px 9px}
+  .ax-info{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6;margin:12px}.ax-vazio{padding:2.5rem;text-align:center;color:var(--text-3)}
+  .ax-card{border-bottom:1px solid var(--border);padding:14px 16px}.ax-ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.ax-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}.ax-lb{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:4px}
+  .ax-ln{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed var(--border)}.ax-bar{height:8px;background:var(--border);border-radius:6px;overflow:hidden}.ax-bar i{display:block;height:100%;background:var(--red)}
+  .ax-g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}@media(max-width:1100px){.ax-kpis{grid-template-columns:repeat(2,1fr)}.ax-cols{grid-template-columns:1fr}}
+  </style>`);
+  const cont = document.querySelector('.page')?.parentElement; if (!cont) return;
+  cont.insertAdjacentHTML('beforeend', `<div class="page" id="page-almox-req"><div class="page-header"><div><div class="page-title">Requisições de material</div><div class="page-sub">O almoxarifado registra a retirada; a apropriação do encarregado diz para qual frente, serviço e UA vai cada item</div></div>
+      <div class="btn-group"><button class="btn btn-outline btn-sm" onclick="axBaixa()">⬇ Arquivo de baixa (TOTVS)</button><button class="btn btn-primary" onclick="axNova()">+ Nova requisição</button></div></div><div id="ax-corpo"></div></div>
+    <div class="page" id="page-almox-est"><div class="page-header"><div><div class="page-title">Estoque de materiais</div><div class="page-sub">Posição de estoque do TOTVS, com as saídas registradas aqui que ainda não foram baixadas</div></div>
+      <div class="btn-group"><label class="btn btn-primary" style="cursor:pointer">↑ Importar posição do TOTVS<input type="file" accept=".xlsx,.xls" style="display:none" onchange="axImportarEst(this.files[0]);this.value=''"/></label></div></div><div id="axe-corpo"></div></div>`);
+  const ref = document.getElementById('grp-almoxarifado');
+  const ic = p => `<svg viewBox="0 0 24 24">${p}</svg>`;
+  if (ref && !document.getElementById('grp-almox2')) ref.insertAdjacentHTML('afterend', `<div class="nav-group" id="grp-almox2"><div class="nav-section" onclick="toggleNavGroup('grp-almox2')">Almoxarifado <span class="nav-chevron">▾</span></div><div class="nav-group-items">
+    <div class="nav-item" onclick="showPage('almox-req',this)" title="Requisições de material">${ic('<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>')}<span>Requisições</span></div>
+    <div class="nav-item" onclick="showPage('almox-est',this)" title="Estoque de materiais">${ic('<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>')}<span>Estoque de materiais</span></div></div></div>`);
+  try { MODULOS.push(['almoxMat', 'Almoxarifado de materiais (requisições e estoque)', ['grp-almox2']]); } catch (e) {}
+  try { Object.assign(_FAROL, { 'almox-req': 'a ALM Rotina do almoxarifado: registra a retirada; o destino vem da apropriação', 'almox-est': 'c ALM Importa a posição de estoque do TOTVS quando atualizar' }); } catch (e) {}
+  const oI = window.pageInit; window.pageInit = function (id) { const r = oI.apply(this, arguments);
+    if (id === 'almox-req') { renderAlmoxReq(); _axCarregar().then(renderAlmoxReq); } if (id === 'almox-est') { renderAlmoxEst(); _axCarregar().then(renderAlmoxEst); } return r; };
+  try { pageInit = window.pageInit; } catch (e) {}
+  setTimeout(() => { try { _farAplicar(); } catch (e) {} }, 1200);
+})();
+
+// ── KICKOFF: estoque e requisições de exemplo
+function _kkAlmox(O, sv, dia) {
+  const ag = new Date().toISOString(), K = { kick: true };
+  const M = [['09.01.0101', 'TUBOS E CONEXÕES PVC', 'TUBO PVC OCRE JE DN150 ESGOTO 6M', 'M', 420, 38.9], ['09.01.0102', 'TUBOS E CONEXÕES PVC', 'TUBO PVC OCRE JE DN200 ESGOTO 6M', 'M', 180, 61.4], ['09.01.0210', 'TUBOS E CONEXÕES PVC', 'TUBO PVC DN100 ESGOTO RAMAL 6M', 'M', 300, 21.7],
+    ['09.02.0031', 'TUBOS E CONEXÕES PVC', 'CURVA 45° PVC DN100 ESGOTO', 'UN', 60, 18.2], ['09.02.0044', 'TUBOS E CONEXÕES PVC', 'SELIM PVC DN150 X 100', 'UN', 45, 42.5], ['09.03.0007', 'TUBOS PEAD', 'TUBO PEAD PE100 DN110 PN10 (BOBINA)', 'M', 600, 29.8],
+    ['09.03.0011', 'TUBOS PEAD', 'LUVA ELETROFUSÃO PEAD DN110', 'UN', 40, 96.0], ['12.01.0003', 'AGREGADOS', 'AREIA MÉDIA LAVADA', 'M³', 85, 118.0], ['12.01.0008', 'AGREGADOS', 'BRITA 1', 'M³', 60, 132.0], ['12.02.0015', 'ADITIVOS E FLUIDOS', 'BENTONITA SÓDICA 25KG', 'SC', 140, 54.0],
+    ['14.01.0020', 'PRÉ-MOLDADOS', 'ANEL DE CONCRETO PV DN1000 H=0,50', 'UN', 24, 214.0], ['14.01.0031', 'PRÉ-MOLDADOS', 'TAMPÃO FOFO DN600 CLASSE D400', 'UN', 10, 980.0], ['16.01.0002', 'PAVIMENTAÇÃO', 'CBUQ FAIXA C (MASSA ASFÁLTICA)', 'T', 18, 520.0],
+    ['16.01.0005', 'PAVIMENTAÇÃO', 'EMULSÃO ASFÁLTICA RR-1C', 'L', 400, 6.8], ['18.04.0012', 'LIGAÇÃO DOMICILIAR', 'KIT LIGAÇÃO DOMICILIAR ESGOTO (CAIXA + TAMPA)', 'UN', 70, 168.0], ['23.01.0072', 'ADESIVO/COLA/FITAS', 'ADESIVO PVC 850G', 'UN', 30, 48.5],
+    ['23.02.0152', 'ABRAÇADEIRA', 'ABRAÇADEIRA', 'UN', 90, 3.31], ['30.05.0010', 'SINALIZAÇÃO', 'FITA ZEBRADA 200M', 'UN', 40, 19.9], ['30.05.0021', 'SINALIZAÇÃO', 'CONE PVC 75CM', 'UN', 25, 54.0], ['31.02.0004', 'EPI', 'LUVA DE RASPA', 'PAR', 120, 12.4]];
+  const LOC = [['000.0000', 'ESTOQUE CANTEIRO'], ['000.0001', 'ESTOQUE OBRA (FRENTES)']];
+  M.forEach(([cod, grupo, nome, und, q, cm], i) => { const [cl, l] = LOC[i % 5 === 4 ? 1 : 0];
+    sv('almoxEstoque', { id: 'kk_ax' + i, obra: O, coligada: 9, filial: 1, codLocal: cl, local: l, cod, grupo, nome, und, fisico: q, financeiro: Math.round(q * cm * 100) / 100, custoMedio: cm, importadoEm: dia(0) + 'T06:00:00', ...K }); });
+  const est = n => { const m = M.find(x => x[2].includes(n)); return m ? { cod: m[0], nome: m[2], und: m[3], grupo: m[1], custo: m[5] } : null; };
+  const encs = [...new Set((dados.aponMO || []).filter(a => String(a.id).startsWith('kk_am')).map(a => a.lancadoPor))];
+  const P = { VCA: [['DN150', 18, 36], ['AREIA', 2, 5], ['BRITA', 1, 3]], Furo: [['PEAD', 40, 90], ['BENTONITA', 4, 10]], Liga: [['KIT LIGA', 3, 8], ['DN100 ESGOTO', 12, 30], ['CURVA', 4, 10], ['SELIM', 2, 6]], 'Poço': [['ANEL', 2, 4], ['TAMPÃO', 1, 1]], Recomp: [['CBUQ', 1, 3], ['EMULSÃO', 20, 60]] };
+  let x = 7, n = 0; const R = () => (x = (x * 9301 + 49297) % 233280) / 233280;
+  for (let d = 14; d >= 0; d--) { const ds = dia(d);
+    encs.forEach((enc, ei) => { if (R() < .45) return;
+      const T = _axTurnos(enc, ds); if (!T.length) return; const sch = T[0] || null, k = sch ? Object.keys(P).find(z => (sch.servico || '').includes(z)) : Object.keys(P)[ei % 5];
+      const its = (P[k] || P.VCA).filter((_, j) => j === 0 || R() < .6).map(([nm, a, b]) => { const e = est(nm); return e ? { ...e, qtd: Math.round(a + R() * (b - a)) } : null; }).filter(Boolean);
+      if (R() < .2) { const e = est('FITA ZEBRADA'); if (e) its.push({ ...e, qtd: 1 }); }
+      const hora = R() < .18 ? '16:' + String(10 + Math.floor(R() * 40)) : '0' + (6 + Math.floor(R() * 3)) + ':' + String(10 + Math.floor(R() * 45));
+      const inf = R() < .15 && sch ? sch : null;
+      const r = _axAprop({ id: 'kk_rq' + n, num: 'RQ-' + String(++n).padStart(4, '0'), obra: O, data: ds, hora, local: 'ESTOQUE CANTEIRO', encarregado: enc, retirante: enc, frenteInf: inf ? inf.frente : '', servicoInf: inf ? inf.servico : '', itens: its, assinatura: '', status: d > 9 ? 'exportada' : 'aberta', exportadoEm: d > 9 ? dia(d - 1) + 'T18:00:00' : '', criadoPor: 'Almoxarifado', criadoEm: ds + 'T' + hora + ':00', ...K });
+      sv('requisicoes', r); }); }
+  // garante alguns itens "a classificar" para a demonstração (retirada sem turno apontado)
+  [3, 1].forEach((d, j) => { const enc = encs[(j + 2) % encs.length], e1 = est('ADESIVO PVC'), e2 = est('LUVA DE RASPA');
+    const r = _axAprop({ id: 'kk_rqx' + j, num: 'RQ-' + String(++n).padStart(4, '0'), obra: O, data: dia(d), hora: '11:40', local: 'ESTOQUE CANTEIRO', encarregado: 'Fernando Lopes (substituto)', retirante: enc, itens: [{ ...e1, qtd: 2 }, { ...e2, qtd: 6 }], assinatura: '', status: 'aberta', criadoPor: 'Almoxarifado', criadoEm: dia(d) + 'T11:40:00', ...K });
+    sv('requisicoes', r); });
+}
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
