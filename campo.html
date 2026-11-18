@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.40</div>
+  <div class="login-versao">ObraKontrol Campo · v3.41</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8504,6 +8504,59 @@ async function ocrPreencher(src, input, ult, km, quando, hintEl) {
     if (ex) fbSalvar = async function (c, it) { if (c === 'partesDiarias' && it) Object.assign(it, ex); return oFs.apply(this, arguments); };
     try { return await oS.apply(this, arguments); } finally { if (ex) fbSalvar = oFs; } };
 })();
+
+// ══════════════════════════════════════════════════════════════
+// v3.41: QR CODE DA REQUISIÇÃO — o encarregado mostra o QR no balcão e o almox lê com o celular (ou leitor no painel)
+// Conteúdo do QR: rq:<id>|<número>
+// ══════════════════════════════════════════════════════════════
+let _qrgP = null;
+function _qrgLib() { if (window.QRCode) return Promise.resolve(); if (_qrgP) return _qrgP;
+  _qrgP = new Promise((ok, f) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload = () => ok(); s.onerror = () => { _qrgP = null; f(new Error('qr')); }; document.head.appendChild(s); }); return _qrgP; }
+setTimeout(() => { if (navigator.onLine) _qrgLib().catch(() => {}); }, 8000);   /* pré-carrega para funcionar depois sem sinal */
+function _rqQrTxt(r) { return 'rq:' + r.id + '|' + r.num; }
+async function rqQrMostrar(id) {
+  const r = (rq && (rq.feito && rq.feito.id === id ? rq.feito : (rq._lista || []).find(x => x.id === id))) || JSON.parse(localStorage.getItem('campo_rq_meus') || '[]').find(x => x.id === id); if (!r) return;
+  document.getElementById('rq-qr-ov')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div id="rq-qr-ov" style="position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:18px" onclick="if(event.target===this)this.remove()">
+    <div style="background:#fff;color:#111;border-radius:20px;padding:22px 20px;max-width:360px;width:100%;text-align:center">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#666">Requisição de material</div>
+      <div style="font:800 30px ui-monospace,monospace;margin:6px 0 12px">${_esc(r.num)}</div>
+      <div id="rq-qr-box" style="display:flex;justify-content:center;min-height:240px;align-items:center;color:#888;font-size:13px">Gerando QR…</div>
+      <div style="font-size:12.5px;color:#555;margin-top:12px">Mostre no balcão: o almoxarifado lê o QR e abre o pedido.<br>Enc. <b>${_esc(r.encarregado || '')}</b> · ${(r.itens || []).length} item(ns)</div>
+      ${r.provisorio ? '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#B45309">Número provisório (sem internet) — o QR funciona igual.</div>' : ''}
+      <button class="btn btn-outline" style="margin-top:14px" onclick="document.getElementById('rq-qr-ov').remove()">Fechar</button></div></div>`);
+  try { await _qrgLib(); const b = document.getElementById('rq-qr-box'); if (!b) return; b.innerHTML = '';
+    new QRCode(b, { text: _rqQrTxt(r), width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+    try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (e) {}
+  } catch (e) { const b = document.getElementById('rq-qr-box'); if (b) b.innerHTML = '<div style="font-size:13px;color:#B45309">Sem internet para gerar o QR agora.<br>Fale o número no balcão.</div>'; }
+}
+(function () {
+  /* tela "pedido enviado" e "minhas requisições": botão do QR nas que aguardam o almox */
+  const oR = rqRender; rqRender = function () { const r = oR.apply(this, arguments);
+    try { if (rq && rq.modo === 'feito' && rq.feito) { const el = [...document.querySelectorAll('#screen-rq *')].find(x => x.children.length === 0 && /Fale este número/.test(x.textContent));
+        if (el && !document.getElementById('rq-qr-btn')) el.parentElement.insertAdjacentHTML('beforeend', `<button id="rq-qr-btn" class="btn btn-green" style="margin:12px auto 0;width:auto;padding:10px 20px;display:block" onclick="rqQrMostrar('${_esc(rq.feito.id)}')">▦ Mostrar QR para o almoxarifado</button>`);
+        if (el) el.textContent = 'Fale este número ou mostre o QR no balcão:'; }
+      if (rq && rq.modo === 'lista') { const L = rq._lista || JSON.parse(localStorage.getItem('campo_rq_meus') || '[]');
+        document.querySelectorAll('#screen-rq b').forEach(b => { const x = L.find(y => y.num === b.textContent.trim()); if (!x || x.status !== 'solicitada' || b.parentElement.querySelector('.rq-qr-mini')) return;
+          b.insertAdjacentHTML('afterend', `<button class="rq-qr-mini" onclick="rqQrMostrar('${_esc(x.id)}')" style="margin-left:auto;margin-right:8px;border:1.5px solid #16A34A;color:#16A34A;background:transparent;border-radius:999px;font-size:11.5px;font-weight:800;padding:3px 10px">▦ QR</button>`); }); } } catch (e) {}
+    return r; };
+  /* almox no app: botão para ler o QR */
+  const oA = axaRender; axaRender = function () { const r = oA.apply(this, arguments);
+    try { if (axa && axa.modo === 'lista') { const bx = document.querySelector('#axa-content .axa-busca'); if (bx && !bx.querySelector('.axa-qr')) bx.insertAdjacentHTML('beforeend', '<button class="btn btn-green axa-qr" style="width:auto;padding:0 14px" onclick="abrirQR(\'axrq\')">▦ Ler QR</button>'); } } catch (e) {}
+    return r; };
+  const oP = processarQR; processarQR = function (texto, contexto) {
+    const t = String(texto || '').trim();
+    if (/^rq:/i.test(t)) { const [id, num] = t.slice(3).split('|');
+      if (!axa) { if (_axaPode()) { axaAbrir().then(() => setTimeout(() => _axaQrAbrir(id, num), 400)); } else toast('QR de requisição: só o almoxarifado atende.', 'err'); return { ok: true }; }
+      _axaQrAbrir(id, num); return { ok: true }; }
+    return oP.apply(this, arguments); };
+})();
+async function _axaQrAbrir(id, num) {
+  if (!axa) return; showScreen('axa');
+  let r = (axa.L || []).find(x => x.id === id || x.num === num || x.numProv === num);
+  if (!r && db && _fbReady && isOnline) { try { const s = await db.collection('requisicoes').doc(id).get(); if (s.exists) { const x = { id: s.id, ...s.data() }; if (x.status === 'solicitada') { axa.L = (axa.L || []).concat([x]); r = x; } else { toast((x.num || num) + ' já foi ' + (x.status === 'cancelada' ? 'recusada' : 'entregue') + '.', 'err'); return; } } } catch (e) {} }
+  if (r) axaAtender(r.id); else toast('Requisição ' + (num || '') + ' não está aguardando entrega.', 'err');
+}
 
 </script>
 </body>

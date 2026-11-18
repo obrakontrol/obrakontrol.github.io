@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.101 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.102 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -21403,6 +21403,12 @@ function _kkRqNum(O, W) {
   L.forEach(r => { const am = _rqAMP(r.data); cnt[am] = (cnt[am] || 0) + 1; r.num = sig + '-' + am + '-' + String(cnt[am]).padStart(3, '0'); r.kick = true; });
   Object.entries(cnt).forEach(([am, n]) => W.push(['contadores', { id: 'rq-' + sig + '-' + am, n, obra: O, tipo: 'requisicao', em: new Date().toISOString(), kick: true }]));
 }
+
+// v4.102: QR da requisição no painel — leitor USB/teclado no campo de busca (texto "rq:<id>|<número>")
+(function () { const o = axBuscarNum; axBuscarNum = window.axBuscarNum = function (v) { const t = String(v || '').trim();
+  if (/^rq:/i.test(t)) { const [id, num] = t.slice(3).split('|'), r = (dados.requisicoes || []).find(x => x.id === id) || (dados.requisicoes || []).find(x => x.num === num);
+    if (!r) { toast('Requisição ' + (num || '') + ' não encontrada.', 'error'); return; } if (r.status === 'solicitada') axAtender(r.id); else axVer(r.id); return; }
+  return o.apply(this, arguments); }; })();
 
 // Apply configs on load
 setTimeout(applyConfigs, 200);
