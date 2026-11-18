@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.36</div>
+  <div class="login-versao">ObraKontrol Campo · v3.37</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -3937,7 +3937,11 @@ function mobRender() {
     // v3.22: família é catálogo — aparecem todas (uma por código; a da obra/geral tem preferência)
     const fams = (() => { const m = new Map(); (dadosCampo.familias || []).filter(f => f.cod && !/reprov|recus/i.test(f.status || '')).forEach(f => { const pri = !f.obra || f.obra === mob.obra || f.obra === (usuarioCampo && usuarioCampo.obra); const a = m.get(f.cod); if (!a || (pri && !a.pri)) m.set(f.cod, { ...f, pri }); });
       return [...m.values()].sort((a, b) => String(a.desc || a.cod).localeCompare(String(b.desc || b.cod), 'pt-BR')); })();
-    const mods = (dadosCampo.modelos || []).filter(m => (!mob.obra || !m.obra || m.obra === mob.obra) && (!mob.familia || !m.familia || m.familia === mob.familia));
+    /* v3.37: modelo casa com a família pelo código OU pelo nome (cadastros antigos gravaram a família por extenso) */
+    const _nf = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(.*?\)/g, '').trim();
+    const _fd = c => { const f = (dadosCampo.familias || []).find(x => x.cod === c); return f ? (f.desc || f.nome || c) : c; };
+    const _famOk = m => !mob.familia || !m.familia || m.familia === mob.familia || _nf(m.familia) === _nf(_fd(mob.familia)) || _nf(_fd(m.familia)) === _nf(_fd(mob.familia));
+    const mods = [...new Map((dadosCampo.modelos || []).filter(m => (!mob.obra || !m.obra || m.obra === mob.obra) && !/reprov|recus/i.test(m.status || '') && _famOk(m)).map(m => [_nf(m.nome || m.cod), m])).values()].sort((a, b) => String(a.nome || a.cod).localeCompare(String(b.nome || b.cod), 'pt-BR'));
     const emps = (dadosCampo.empresas || []).filter(e => !mob.obra || !e.obra || e.obra === mob.obra);
     const tag = mob.obra || usuarioCampo.obra ? mobTag(mob.obra, mob.familia) : '';
     h = `<div class="card"><div class="card-body">
@@ -8282,6 +8286,31 @@ function _axaBadge() { if (axa && axa.L) _axaNum = axa.L.length; const s = docum
   }
   setInterval(liga, 3000);
   window.addEventListener('online', () => { quem = ''; liga(); });
+})();
+
+// ══════════════════════════════════════════════════════════════
+// v3.37: VER FRENTE — serviço executado na frente que não está na programação da semana aparece em amarelo
+// ══════════════════════════════════════════════════════════════
+(function () {
+  const o = _fhSemana;
+  _fhSemana = function (res, frCod, ts) {
+    let base = ''; try { base = o.apply(this, arguments) || ''; } catch (e) {}
+    try {
+      const s = res && res.semana; if (!s) return base;
+      const hj = _hojeISO(), d = new Date(hj + 'T12:00'), w = d.getDay(); d.setDate(d.getDate() - (w === 0 ? 6 : w - 1)); if (s.seg !== _hojeISO(d)) return base;
+      const prog = new Set((s.itens || []).filter(x => x.frente === frCod).map(x => x.servico)), m = {};
+      (s.fora || []).filter(x => x.frente === frCod && !prog.has(x.servico)).forEach(x => { m[x.servico] = { servico: x.servico, unid: x.unid || '', feito: +x.feito || 0, hoje: 0 }; });
+      (ts || []).forEach(t => { const sv = t.servico, q = parseFloat(t.qtd) || 0; if (!sv || prog.has(sv) || !q) return; const x = m[sv] || (m[sv] = { servico: sv, unid: t.unid || '', feito: 0, hoje: 0 }); x.hoje += q; if (!x.unid) x.unid = t.unid || ''; });
+      const L = Object.values(m); if (!L.length) return base;
+      const rows = L.map(x => `<div style="margin:10px 0 2px;padding:8px 10px;border-radius:10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4)">
+        <div style="display:flex;justify-content:space-between;gap:8px;font-size:13.5px"><b style="font-weight:700">${_esc(x.servico)}</b><span style="white-space:nowrap"><b>${_fhN(x.feito + x.hoje)}</b> ${_esc(x.unid)}</span></div>
+        <div class="fx-small" style="margin-top:3px;color:#B45309;font-weight:700">⚠ fora da programação · feito na semana${x.hoje ? ' (hoje +' + _fhN(x.hoje) + ' ' + _esc(x.unid) + ')' : ''}</div></div>`).join('');
+      if (base) return base.replace(/<div class="fx-small" style="margin-top:6px">Programado pelo planejamento/, rows + '$&');
+      const fmt = x => x.slice(8, 10) + '/' + x.slice(5, 7);
+      return `<div class="fx-card"><div class="fx-h"><span>Programação da semana</span><span>${fmt(s.seg)} a ${fmt(s.fim || s.seg)}</span></div><div class="fx-small" style="margin-top:6px">Nada programado para esta frente na semana.</div>${rows}
+        <div class="fx-small" style="margin-top:6px">Programado pelo planejamento · feito = lançado na semana</div></div>`;
+    } catch (e) { return base; }
+  };
 })();
 
 </script>

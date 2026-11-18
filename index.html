@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.98 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.99 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18777,7 +18777,7 @@ async function _kkGerar(nUsr) {
   // ── famílias / modelos (reaproveita os que já existem pelo código)
   const FAM = [['ESC', 'Escavadeira hidráulica', 'Linha amarela'], ['RET', 'Retroescavadeira', 'Linha amarela'], ['CB', 'Caminhão basculante', 'Veículos pesados'], ['ROL', 'Rolo compactador', 'Linha amarela'], ['VL', 'Veículo leve', 'Veículos leves'], ['PD', 'Perfuratriz direcional (MND)', 'Linha amarela']];
   FAM.forEach(([cod, desc, cat], i) => { if (!(dados.familias || []).some(f => f.cod === cod && _mmBanco(f))) sv('familias', { id: 'kk_fam' + i, cod, desc, categoria: cat, obra: '', status: 'aprovado', ...K }); });   // v4.50: precisa estar no banco
-  const MOD = [['KK-PC200', 'Komatsu PC200', 'Escavadeira hidráulica', 400, 16, 0], ['KK-3CX', 'JCB 3CX', 'Retroescavadeira', 160, 7, 0], ['KK-2426', 'MB Atego 2426 basculante', 'Caminhão basculante', 275, 0, 2.4], ['KK-CA250', 'Dynapac CA250', 'Rolo compactador', 300, 8, 0], ['KK-D24X40', 'Vermeer D24x40', 'Perfuratriz direcional (MND)', 200, 12, 0]];
+  const MOD = [['KK-PC200', 'Komatsu PC200', 'ESC', 400, 16, 0], ['KK-CAT320', 'Caterpillar 320 GC', 'ESC', 410, 15, 0], ['KK-3CX', 'JCB 3CX', 'RET', 160, 7, 0], ['KK-416F', 'Caterpillar 416F2', 'RET', 160, 7, 0], ['KK-2426', 'MB Atego 2426 basculante', 'CB', 275, 0, 2.4], ['KK-CA250', 'Dynapac CA250', 'ROL', 300, 8, 0], ['KK-D24X40', 'Vermeer D24x40', 'PD', 200, 12, 0]];   /* v4.99: família pelo código */
   MOD.forEach(([cod, nome, fam, cap, lh, kml], i) => sv('modelos', { id: 'kk_mod' + i, cod, nome, familia: fam, capTanque: cap, consumoPrev: lh, consumoKmL: kml, obra: '', status: 'aprovado', ...K }));
   const EQ = [['ESC', 1, 'KK-PC200', 1, 165, 'BET'], ['ESC', 2, 'KK-PC200', 1, 165, 'BET'], ['RET', 1, 'KK-3CX', 1, 110, 'ALF'], ['RET', 2, 'KK-3CX', 1, 110, 'ALF'], ['RET', 3, 'KK-3CX', 1, 110, 'ALF'], ['CB', 1, 'KK-2426', 0, 140, 'GAM'], ['CB', 2, 'KK-2426', 0, 140, 'GAM'], ['ROL', 1, 'KK-CA250', 1, 120, 'BET'], ['PD', 1, 'KK-D24X40', 1, 260, 'BET']]
     .map(([f, n, m, hor, ch, pc], i) => { const pr = EMP.find(e => e.cod === pc);
@@ -21326,6 +21326,55 @@ setTimeout(async function _kkReparaAcessos() { try { if (!(db && _firebaseReady 
   const L = (typeof USUARIOS !== 'undefined' ? USUARIOS : []).filter(u => u.kick && u.authEmail); if (!L.length) return setTimeout(_kkReparaAcessos, 6000);
   for (const u of L) { const em = String(u.authEmail).toLowerCase(), d = await db.collection('acessos').doc(em).get().catch(() => null);
     if (d && !d.exists) await db.collection('acessos').doc(em).set({ cliente: window.OK_CLIENTE, nome: u.nome || '', perfil: u.perfil || '', kick: true, atualizadoEm: new Date().toISOString() }, { merge: true }).catch(() => {}); } } catch (e) {} }, 5000);
+// ═══════════════════════════════════════════════════════════════
+// v4.99: EXECUTADO FORA DA PROGRAMAÇÃO — serviço lançado numa frente que o planejamento não programou na semana.
+// Aparece na Programação semanal (painel) e no "Ver frente" do app (resumoObra.semana.fora).
+// ═══════════════════════════════════════════════════════════════
+function _pgFora(obra, seg, ate) {
+  const fim = _pgAdd(seg, 6), prog = new Set(_pgItens(obra, seg).map(p => p.frente + '|' + p.servico)), m = {};
+  (dados.aponMO || []).forEach(a => { if (a.obra !== obra || !_pgOk(a) || a.data < seg || a.data > fim || (ate && a.data >= ate)) return; const q = parseFloat(a.qtd) || 0; if (!q) return;
+    const k = (a.frente || '') + '|' + _pgSv(a); if (prog.has(k)) return; const x = m[k] || (m[k] = { frente: a.frente || '', servico: _pgSv(a), unid: a.unid || '', feito: 0, dias: new Set() }); x.feito += q; x.dias.add(a.data); });
+  return Object.values(m).map(x => ({ frente: x.frente, servico: x.servico, unid: x.unid, feito: +x.feito.toFixed(2), dias: x.dias.size })).sort((a, b) => (a.frente + a.servico).localeCompare(b.frente + b.servico));
+}
+(function () {
+  const oR = renderProgramacao;
+  renderProgramacao = window.renderProgramacao = function () { const r = oR.apply(this, arguments);
+    try { const obra = _pgObraSel('pg-obra'), corpo = document.getElementById('pg-corpo'); if (!obra || !corpo) return r; corpo.querySelectorAll('.pg-fora').forEach(x => x.remove());
+      const L = _pgFora(obra, _pgSem); if (!L.length) return r; const frs = _pgFrentesObra(obra), nomeFr = c => ((frs.find(x => x.cod === c) || {}).desc || '');
+      corpo.insertAdjacentHTML('beforeend', `<div class="card pg-fora" style="margin-top:12px;border-left:4px solid #D97706"><div class="card-header"><span class="card-title">⚠ Executado fora da programação <span class="tag tag-amber">${L.length}</span></span></div>
+        <div class="card-body"><div style="font-size:12.5px;color:var(--text-3);margin-bottom:8px">Produção lançada nesta semana em serviço que não estava programado para a frente. Programe (se faz parte da semana) ou entenda o desvio.</div>
+        <div class="table-wrap"><table><thead><tr><th>Frente</th><th>Serviço</th><th style="text-align:right">Feito na semana</th><th style="text-align:right">Dias</th><th></th></tr></thead><tbody>
+        ${L.map(x => `<tr><td><b>${_e(x.frente)}</b><div style="font-size:12px;color:var(--text-3)">${_e(nomeFr(x.frente))}</div></td><td>${_e(x.servico)}</td><td style="text-align:right;white-space:nowrap"><b>${_n1(x.feito)}</b> ${_e(x.unid)}</td><td style="text-align:right">${x.dias}</td>
+          <td style="text-align:right"><button class="btn btn-outline btn-sm" onclick="pgForaProgramar('${_e(x.frente)}','${_e(x.servico).replace(/'/g, "\\'")}')">+ Programar</button></td></tr>`).join('')}</tbody></table></div></div></div>`); } catch (e) { console.warn('pg fora', e); }
+    return r; };
+  const oS = _resumoObra;
+  _resumoObra = function (obra) { let r = oS.apply(this, arguments);
+    try { const seg = _pgSeg(), fora = _pgFora(obra, seg, _hojeLocal()); if (fora.length) { r = r || { obra, versao: '', servicos: [] }; r.semana = r.semana || { seg, fim: _pgAdd(seg, 5), ate: _hojeLocal(), itens: [] }; r.semana.fora = fora; } else if (r && r.semana) r.semana.fora = []; } catch (e) {}
+    return r; };
+})();
+function pgForaProgramar(frente, servico) {
+  pgEditar();
+  setTimeout(() => { const m = document.querySelector('.modal-overlay.open') || document; const set = (sel, v) => { const el = m.querySelector(sel); if (el) { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); } };
+    set('#pg-frente', frente); setTimeout(() => set('#pg-serv', servico), 60); }, 80);
+}
+// kickoff: a semana atual programa também os serviços que rodaram na semana anterior; um fica fora de propósito (demonstra o alerta)
+(function () {
+  const oK = _kkProgramacao;
+  _kkProgramacao = function (O, sv) {
+    const hoje = _hojeLocal(), atual = _pgSeg(hoje), ant = _pgAdd(atual, -7), m = {};
+    (dados.aponMO || []).filter(a => a.kick && a.obra === O && +a.qtd && a.data >= atual).forEach(a => { const k = a.frente + '|' + _pgSv(a); m[k] = (m[k] || 0) + (+a.qtd); });
+    const porFr = {}; Object.keys(m).forEach(k => { const f = k.split('|')[0]; (porFr[f] = porFr[f] || []).push(k); });
+    const cand = Object.keys(m).filter(k => porFr[k.split('|')[0]].length > 1).sort((a, b) => m[a] - m[b]);
+    const fora = cand[0] || Object.keys(m).sort((a, b) => m[a] - m[b])[0] || '';
+    const sv2 = (c, o) => (c === 'programacao' && o.semana === atual && (o.frente + '|' + o.servico) === fora) ? o : sv(c, o);
+    const r = oK.call(this, O, sv2);
+    try { const ja = new Set((dados.programacao || []).filter(p => p.obra === O && p.semana === atual).map(p => p.frente + '|' + p.servico)); let i = 0;
+      const prev = {}; (dados.aponMO || []).filter(a => a.kick && a.obra === O && +a.qtd && a.data >= ant && a.data < atual).forEach(a => { const k = a.frente + '|' + _pgSv(a) + '|' + (a.unid || ''); prev[k] = (prev[k] || 0) + (+a.qtd); });
+      Object.entries(prev).forEach(([k, q]) => { const [frente, servico, unid] = k.split('|'); if (ja.has(frente + '|' + servico) || (frente + '|' + servico) === fora) return; ja.add(frente + '|' + servico);
+        sv('programacao', { id: 'kk_pgx' + (i++), obra: O, semana: atual, frente, servico, unid, qtd: Math.round(q * 1.05), obs: '', criadoEm: atual + 'T08:00:00', criadoPor: 'Planejamento', kick: true }); }); } catch (e) { console.warn('kk prog+', e); }
+    return r; };
+})();
+
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
