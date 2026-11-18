@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.94 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.95 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18985,6 +18985,7 @@ async function _kkGerar(nUsr) {
   try { _kkAlmox(O, sv, dia); } catch (e) { console.warn('kk almox', e); }   // v4.88
   try { _kkAloj(O, sv, dia, PROP); } catch (e) { console.warn('kk aloj', e); }   /* v4.94 */
   try { _kkDesmob(O, sv, dia); } catch (e) { console.warn('kk desmob', e); }
+  try { _kkMatSemReq(); } catch (e) { console.warn('kk semreq', e); }   /* v4.95 */
   try { _kkProg('Criando login master…'); window._kkMasterOk = await _kkMaster(O, PROP, W); } catch (e) { console.warn('kk master', e); }
   window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
   try { _roHash && delete _roHash[O]; _publicarResumoObras(); } catch (e) {}   // v4.46: "Frente hoje" do app já mostra meta e avanço
@@ -21266,6 +21267,34 @@ async function _kkMaster(O, PROP, W) {
     perms: { dashboards: true, cadastros: true, apontamentos: true, relatorios: true, qrcodes: true, config: true, almoxarifado: true, aprovacao: true, abastecimento: true, mobilizacao: true, manutencao: true, frota: true, suprimentos: true, custoPessoal: true },
     empresa: PROP.id, cargo: 'Gestor', tel: '', kick: true };
   USUARIOS = (USUARIOS || []).filter(z => z.id !== u.id); USUARIOS.push(u); W.push(['usuarios', u]); return true;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// v4.95: MATERIAL SEM REQUISIÇÃO — o que o encarregado digitou na apropriação sem vir de requisição
+// aparece no Almoxarifado → Requisições (para o almox cobrar a requisição ou conferir).
+// ═══════════════════════════════════════════════════════════════
+function _axSemReq() {
+  const o = _okObraAtual(), vis = new Set(), L = [];
+  (dados.aponMO || []).concat(dados.aponEQ || []).filter(a => (a.materiais || []).length && a.status !== 'rejeitado' && (o === 'todas' || !a.obra || a.obra === o)).forEach(a => {
+    const k = a.apropriacao || a.uid || (a.data + a.frente + a.lancadoPor); if (vis.has(k)) return; vis.add(k);
+    a.materiais.filter(m => !m.req).forEach(m => L.push({ data: a.data, enc: a.lancadoPor || '', frente: a.frente || '', servico: a.servico || '', desc: m.desc, unid: m.unid, qtd: +m.qtd || 0 })); });
+  return L.filter(x => (!_AX.de || x.data >= _AX.de) && (!_AX.ate || x.data <= _AX.ate) && (!_AX.enc || x.enc === _AX.enc)).sort((a, b) => String(b.data).localeCompare(String(a.data)));
+}
+(function () {
+  const oR = renderAlmoxReq; renderAlmoxReq = window.renderAlmoxReq = function () { const r = oR.apply(this, arguments);
+    try { const pg = document.getElementById('page-almox-req'); if (!pg) return r; pg.querySelectorAll('.ax-semreq').forEach(x => x.remove());
+      if (_AX.aba !== 'req') return r; const L = _axSemReq(); if (!L.length) return r; const E = _e;
+      pg.insertAdjacentHTML('beforeend', `<div class="card ax-semreq" style="margin-top:14px;border-left:4px solid #D97706"><div class="card-header"><span class="card-title">⚠ Material lançado na apropriação sem requisição <span class="tag tag-amber">${L.length}</span></span></div>
+        <div class="card-body"><div style="font-size:12.5px;color:var(--text-3);margin-bottom:8px">O encarregado digitou como aplicado, mas não veio de requisição no nome dele. Confira se saiu do almoxarifado sem requisição ou se é material de terceiro/cliente.</div>
+        <div class="table-wrap" style="max-height:360px;overflow:auto"><table><thead><tr><th>Data</th><th>Encarregado</th><th>Frente</th><th>Serviço</th><th>Material</th><th>Unid.</th><th style="text-align:right">Qtd.</th></tr></thead><tbody>
+        ${L.slice(0, 200).map(x => `<tr><td class="td-mono">${fmtData(x.data)}</td><td>${E(x.enc)}</td><td><b>${E(x.frente)}</b></td><td style="font-size:12px">${E(x.servico)}</td><td>${E(x.desc)}</td><td>${E(x.unid)}</td><td class="td-mono" style="text-align:right">${String(x.qtd).replace('.', ',')}</td></tr>`).join('')}</tbody></table></div></div></div>`); } catch (e) { console.warn('semreq', e); }
+    return r; };
+})();
+function _kkMatSemReq() {
+  const M = [[{ desc: 'AREIA MÉDIA', unid: 'M³', qtd: 3, semReq: true }], [{ desc: 'BRITA 1', unid: 'M³', qtd: 2.5, semReq: true }, { desc: 'TUBO PVC DN150 OCRE', unid: 'M', qtd: 12, semReq: true }], [{ desc: 'CIMENTO CP II 50KG', unid: 'SC', qtd: 4, semReq: true }]];
+  const vis = new Set(), L = (dados.aponMO || []).filter(a => a.kick && /^kk_am/.test(a.id) && a.data).sort((a, b) => String(b.data).localeCompare(String(a.data))).filter(a => { if (vis.has(a.apropriacao)) return false; vis.add(a.apropriacao); return true; });
+  [2, 9, 17].forEach((ix, i) => { const a = L[ix]; if (a) a.materiais = M[i]; });
 }
 
 // Apply configs on load

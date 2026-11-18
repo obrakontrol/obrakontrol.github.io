@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.33</div>
+  <div class="login-versao">ObraKontrol Campo · v3.34</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8025,6 +8025,103 @@ async function eqdEnviar() {
     if (esc === 'edes') return eqdAbrir();
   };
   const s = document.querySelector('#card-mob .hcard-s'); if (s) s.textContent = 'Chegada e saída de equipamentos e veículos';
+})();
+
+
+// ══════════════════════════════════════════════════════════════
+// v3.34: MATERIAL APLICADO ligado às REQUISIÇÕES no nome do encarregado
+// • Entregues pelo almox: aparecem com o saldo; ele lança quanto aplicou NESTA frente (já vale como validação).
+//   O que não aplicar fica de saldo para outro turno — ou ele encerra a requisição ("o resto sobrou").
+// • Aguardando almox: aparecem em cinza, sem lançar.
+// • Material sem requisição: continua digitado, marcado como "sem requisição" (vai para o relatório do almox).
+// ══════════════════════════════════════════════════════════════
+const _mrq = { L: null, ap: {}, fecha: {}, em: 0, busy: false };
+function _mrqKey() { return 'campo_mrq_' + ((usuarioCampo && (usuarioCampo.id || usuarioCampo.nome)) || 'x'); }
+function _mrqSaldo(it) { return Math.max(0, Math.round(((+it.qtd || 0) - (+it.aplicado || 0)) * 100) / 100); }
+function _mrqN(v) { return String(Math.round((+v || 0) * 100) / 100).replace('.', ','); }
+async function _mrqBuscar() {
+  if (!usuarioCampo || _mrq.busy) return; _mrq.busy = true;
+  try {
+    if (db && _fbReady && isOnline) { try { const sn = await Promise.race([db.collection('requisicoes').where('encarregado', '==', usuarioCampo.nome).get(), new Promise(r => setTimeout(() => r(null), 7000))]);
+      if (sn) { _mrq.L = sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => !r.validadoEm && ['solicitada', 'entregue', 'aberta', 'exportada'].includes(r.status)).sort((a, b) => String(a.data + a.hora).localeCompare(String(b.data + b.hora)));
+        try { localStorage.setItem(_mrqKey(), JSON.stringify(_mrq.L)); } catch (e) {} } } catch (e) {} }
+    if (!_mrq.L) { try { _mrq.L = JSON.parse(localStorage.getItem(_mrqKey()) || '[]'); } catch (e) { _mrq.L = []; } }
+    _mrq.em = Date.now();
+  } finally { _mrq.busy = false; }
+  _mrqRender();
+}
+function mrqQtd(k, v) { const n = parseFloat(String(v).replace(',', '.')); if (isNaN(n) || n <= 0) delete _mrq.ap[k]; else _mrq.ap[k] = n; _mrqResumo(); }
+function mrqTudo(rid, i) { const r = (_mrq.L || []).find(x => x.id === rid), it = r && r.itens[i]; if (!it) return; _mrq.ap[rid + '|' + i] = _mrqSaldo(it); _mrqRender(); }
+function mrqFecha(rid, on) { if (on) _mrq.fecha[rid] = true; else delete _mrq.fecha[rid]; _mrqResumo(); }
+function _mrqResumo() { const el = document.getElementById('ap-mrq-res'); if (!el) return; const n = Object.keys(_mrq.ap).length; el.textContent = n ? n + ' item(ns) de requisição serão lançados nesta frente ao salvar' : ''; }
+function _mrqRender() {
+  const box = document.getElementById('ap-mrq'); if (!box) return; const E = _esc, L = _mrq.L;
+  if (!L) { box.innerHTML = '<div class="mrq-vz">Buscando requisições no seu nome…</div>'; return; }
+  const ent = L.filter(r => r.status !== 'solicitada' && (r.itens || []).some(it => _mrqSaldo(it) > 0)), sol = L.filter(r => r.status === 'solicitada');
+  const fr = document.getElementById('ap-frente')?.value || '';
+  let h = `<div class="mrq-sec">Requisições no seu nome</div>`;
+  if (!ent.length && !sol.length) h += '<div class="mrq-vz">Nenhuma requisição em aberto no seu nome.</div>';
+  h += ent.map(r => `<div class="mrq-r"><div class="mrq-h"><b>${E(r.num)}</b><span class="mrq-tg ok">entregue</span></div>
+      <div class="mrq-s">${E(String(r.data || '').split('-').reverse().join('/'))}${r.frenteInf ? ' · pedida para ' + E(r.frenteInf) : ''}${r.solicitante && r.solicitante !== r.encarregado ? ' · pedido por ' + E(r.solicitante) : ''}</div>
+      ${(r.itens || []).map((it, i) => { const s = _mrqSaldo(it), k = r.id + '|' + i; if (s <= 0) return '';
+        return `<div class="mrq-it"><div class="mrq-n"><b>${E(it.nome)}</b><small>${+it.aplicado ? 'retirou ' + _mrqN(it.qtd) + ' · já aplicou ' + _mrqN(it.aplicado) + ' · ' : ''}saldo <b>${_mrqN(s)} ${E(it.und)}</b></small></div>
+          <div class="mrq-q"><input class="form-control" inputmode="decimal" placeholder="aplicou" value="${_mrq.ap[k] != null ? _mrqN(_mrq.ap[k]) : ''}" onchange="mrqQtd('${k}',this.value)"/><span>${E(it.und)}</span><button type="button" class="mob-link" onclick="mrqTudo('${E(r.id)}',${i})">tudo</button></div></div>`; }).join('')}
+      <label class="mrq-fc"><input type="checkbox" ${_mrq.fecha[r.id] ? 'checked' : ''} onchange="mrqFecha('${E(r.id)}',this.checked)"/> Encerrar esta requisição — o que não apliquei sobrou (fica comigo até devolver)</label></div>`).join('');
+  h += sol.map(r => `<div class="mrq-r off"><div class="mrq-h"><b>${E(r.num)}</b><span class="mrq-tg">⏳ aguardando almox</span></div>
+      <div class="mrq-s">Ainda não entregue pelo almoxarifado — depois da entrega aparece aqui para lançar.</div>
+      <div class="mrq-s" style="margin-top:4px">${(r.itens || []).map(it => _mrqN(it.qtd) + ' ' + E(it.und) + ' ' + E(it.nome)).join(' · ')}</div></div>`).join('');
+  h += `<div id="ap-mrq-res" class="mrq-res"></div>${ent.length && !fr ? '<div class="mrq-s" style="color:#D97706">Escolha a frente do turno — o material é lançado nela.</div>' : ''}
+    <div class="mrq-sec" style="margin-top:14px">Material sem requisição</div><div class="mrq-s" style="margin:-2px 0 8px">Só o que não veio do almoxarifado no seu nome (vai para o relatório do almox como "sem requisição").</div>`;
+  box.innerHTML = h; _mrqResumo();
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `.mrq-sec{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);margin:2px 0 6px}
+    .mrq-vz{font-size:13px;color:var(--text3);padding:4px 0 8px}.mrq-r{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px}.mrq-r.off{opacity:.62;background:rgba(127,127,127,.06)}
+    .mrq-h{display:flex;justify-content:space-between;align-items:center;gap:8px}.mrq-h b{font-family:ui-monospace,monospace;font-size:15px}.mrq-tg{font-size:11px;font-weight:800;border-radius:999px;padding:3px 9px;background:#FEF3C7;color:#92400E}.mrq-tg.ok{background:#DCFCE7;color:#166534}
+    .mrq-s{font-size:12px;color:var(--text2)}.mrq-it{border-top:1px solid rgba(127,127,127,.15);margin-top:8px;padding-top:8px}.mrq-n>b{display:block;font-size:13.5px}.mrq-n small{font-size:12px;color:var(--text2)}
+    .mrq-q{display:flex;align-items:center;gap:8px;margin-top:6px}.mrq-q .form-control{width:96px;text-align:center;font-weight:800}.mrq-q span{font-size:13px;font-weight:700}
+    .mrq-fc{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--text2);margin-top:10px}.mrq-fc input{margin-top:2px;width:18px;height:18px}.mrq-res{font-size:12.5px;font-weight:700;color:#15803D;margin:2px 0 4px}`;
+  document.head.appendChild(css);
+  const lst = document.getElementById('ap-mat-lista');
+  if (lst && !document.getElementById('ap-mrq')) lst.insertAdjacentHTML('beforebegin', '<div id="ap-mrq"></div>');
+  const tt = document.querySelector('#ap-mat-card .card-title'); if (tt) tt.textContent = 'Material aplicado';
+  const oM = matRender; matRender = function () { const r = oM.apply(this, arguments); _mrqRender(); if (!_mrq.L || Date.now() - _mrq.em > 60000) _mrqBuscar(); return r; };
+  /* materiais digitados = sem requisição; os da requisição entram no RDO/apontamento com o número */
+  const oV = _matValidos; _matValidos = function (l) { const base = oV.apply(this, arguments); if (l) return base;
+    const out = base.map(m => ({ ...m, semReq: true }));
+    Object.entries(_mrq.ap).forEach(([k, q]) => { const [rid, i] = k.split('|'), r = (_mrq.L || []).find(x => x.id === rid), it = r && r.itens[+i]; if (it) out.push({ desc: String(it.nome || '').toUpperCase(), unid: it.und || 'UN', qtd: Math.min(q, _mrqSaldo(it)), req: r.num, cod: it.cod || '' }); });
+    return out; };
+  const oS = salvarApropriacao;
+  salvarApropriacao = window.salvarApropriacao = async function () {
+    const uid = ap.uid, g = id => document.getElementById(id)?.value || '', fr = g('ap-frente'), sv = g('ap-servico'), dt = g('ap-data') || _hojeISO();
+    const lanc = { ...(_mrq.ap) }, fecha = { ...(_mrq.fecha) };
+    const r0 = await oS.apply(this, arguments);
+    if (!(uid && ap.uid !== uid)) return r0;
+    const ids = new Set([...Object.keys(lanc).map(k => k.split('|')[0]), ...Object.keys(fecha)]); if (!ids.size) return r0;
+    const ag = new Date().toISOString(), quem = usuarioCampo?.nome || ''; let n = 0;
+    for (const rid of ids) { const r = (_mrq.L || []).find(x => x.id === rid); if (!r) continue;
+      r.itens = (r.itens || []).map((it, i) => { const q = lanc[rid + '|' + i]; if (!q) return it; const qq = Math.min(q, _mrqSaldo(it)); if (qq <= 0) return it; n++;
+        const apl = [...(it.aplicacoes || []), { frente: fr, servico: sv, qtd: qq, data: dt, uid, em: ag, por: quem }], tot = Math.round(apl.reduce((s, a) => s + (+a.qtd || 0), 0) * 100) / 100;
+        return { ...it, aplicacoes: apl, aplicado: tot, sobra: Math.max(0, Math.round(((+it.qtd || 0) - tot) * 100) / 100), frente: it.frente || fr, servico: it.servico || sv, regra: 'val' }; });
+      const fim = fecha[rid] || r.itens.every(it => _mrqSaldo(it) <= 0);
+      if (fim) { r.itens = r.itens.map(it => it.regra === 'val' && it.aplicacoes ? it : { ...it, aplicado: +it.aplicado || 0, sobra: _mrqSaldo(it), frente: it.frente || fr, servico: it.servico || sv, regra: 'val' }); Object.assign(r, { validadoEm: ag, validadoPor: quem, validadoNoTurno: uid }); }
+      try { await fbSalvar('requisicoes', r); } catch (e) {} }
+    _mrq.ap = {}; _mrq.fecha = {}; _mrq.L = (_mrq.L || []).filter(r => !r.validadoEm); try { localStorage.setItem(_mrqKey(), JSON.stringify(_mrq.L)); } catch (e) {}
+    try { _rqValN = (_mrq.L || []).filter(r => r.status !== 'solicitada').length; _rqCardSub(); } catch (e) {}
+    if (n) setTimeout(() => toast(n + ' material(is) da requisição lançado(s) em ' + (fr || 'frente') + ' ✓', 'ok'), 1600);
+    return r0;
+  };
+  /* tela "Validar material" respeita o que já foi lançado na apropriação (mostra só o saldo) */
+  const oVal = _rqValBuscar; _rqValBuscar = async function () { const L = await oVal.apply(this, arguments); if (!L) return L;
+    L.forEach(r => (r.itens || []).forEach(it => { if (it.aplicacoes && it.aplicacoes.length) { it._jaApl = +it.aplicado || 0; } })); return L; };
+  const oC = rqValConfirmar; rqValConfirmar = window.rqValConfirmar = async function (k) { const v = rq.val && rq.val[k];
+    if (v) v.r.itens.forEach((it, i) => { if (it._jaApl && v.itens[i]) { v.itens[i].apl = Math.min((+v.itens[i].apl || 0) + it._jaApl, +it.qtd || 0); } });
+    if (v) v.r.itens = v.r.itens.map(it => { const c = { ...it }; delete c._jaApl; return c; });
+    return oC.apply(this, arguments); };
+  const oVR = rqValidar; rqValidar = window.rqValidar = async function () { const r = await oVR.apply(this, arguments);
+    if (rq && rq.val) { rq.val.forEach(v => v.r.itens.forEach((it, i) => { if (it._jaApl && v.itens[i]) v.itens[i].apl = Math.max(0, Math.round(((+it.qtd || 0) - it._jaApl) * 100) / 100); })); if (rq.modo === 'validar') rqRender(); }
+    return r; };
 })();
 
 </script>
