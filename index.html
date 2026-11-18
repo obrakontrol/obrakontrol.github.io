@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.102 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.103 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18783,7 +18783,7 @@ async function _kkGerar(nUsr) {
   const EQ = [['ESC', 1, 'KK-PC200', 1, 165, 'BET'], ['ESC', 2, 'KK-PC200', 1, 165, 'BET'], ['RET', 1, 'KK-3CX', 1, 110, 'ALF'], ['RET', 2, 'KK-3CX', 1, 110, 'ALF'], ['RET', 3, 'KK-3CX', 1, 110, 'ALF'], ['CB', 1, 'KK-2426', 0, 140, 'GAM'], ['CB', 2, 'KK-2426', 0, 140, 'GAM'], ['ROL', 1, 'KK-CA250', 1, 120, 'BET'], ['PD', 1, 'KK-D24X40', 1, 260, 'BET']]
     .map(([f, n, m, hor, ch, pc], i) => { const pr = EMP.find(e => e.cod === pc);
       return sv('equipamentos', { id: 'kk_q' + i, tag: S + '-' + f + '-' + String(n).padStart(2, '0'), placa: f === 'CB' ? 'KKB' + (2100 + i) : '', serie: f !== 'CB' ? 'SN' + (88310 + i * 17) : '', codModelo: m, familia: f, prop: pr.nome, propId: pr.id, dataMob: dia(60 - i), dataDesmob: '',
-        custoHora: ch, valorLoc: ch + 20, franquiaH: 200, cobranca: 'Hora', status: 'Mobilizado', medidor: hor ? 'horimetro' : 'hodometro', ...X }); });
+        custoHora: ch, valorLoc: f === 'CB' ? 16500 : ch + 20, franquiaH: f === 'CB' ? 0 : 176, cobranca: f === 'CB' ? 'Mês' : 'Hora', status: 'Mobilizado', medidor: hor ? 'horimetro' : 'hodometro', ...X }); });
   const QH = EQ.map((e, i) => e.medidor === 'hodometro' ? 48200 + i * 3100 : 2100 + i * 640);   // leitura atual (vai somando)
   // ── frentes e serviços
   const B = { lat: -21.4677, lng: -47.0047 };
@@ -18885,10 +18885,11 @@ async function _kkGerar(nUsr) {
       lancadoPor: FS[12].nome, status: 'campo', lancadoEm: dia(0) + 'T' + h + ':00.000Z', ...X }); });
   try { _kkProgramacao(O, sv); } catch (e) { console.warn('kk prog', e); }   // v4.47
   // ── partes diárias (últimos 6 dias úteis, 4 máquinas)
-  let pdn = 0; for (let n = 8; n >= 1; n--) { const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;
-    [0, 1, 2, 7].forEach((qi, j) => { const e = EQ[qi], ap = (dados.aponEQ || []).find(a => a.kick && a.equipId === e.id && a.data === d); if (!ap) return;
+  let pdn = 0; window._kkPdUlt = {}; for (let n = 45; n >= 1; n--) { const d = dia(n), wd = new Date(d + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue;   /* v4.103: ~45 dias, todas as máquinas */
+    EQ.map((q, i) => i).forEach((qi, j) => { const e = EQ[qi], ap = (dados.aponEQ || []).find(a => a.kick && a.equipId === e.id && a.data === d); if (!ap) return;
       const par = ap.hpar ? [{ grupo: /Chuva/.test(ap.motivo) ? 'P' : 'C', cod: /Chuva/.test(ap.motivo) ? '5' : '6', nome: /Chuva/.test(ap.motivo) ? 'Chuva' : 'Defeito / manutenção', ini: '09:10', fim: '10:30', horas: ap.hpar }] : [];
-      sv('partesDiarias', { id: 'kk_pd' + (pdn++), obra: O, equipId: e.id, tag: e.tag, placa: e.placa, prop: (EMP.find(z => z.id === e.propId) || {}).cod, data: d, operador: ap.operador, horaIni: '07:00', horaFim: '17:00', frente: ap.frente, horIni: r1(ap.hor - ap.hp), horFim: ap.hor, trabalhado: ap.hp, paradas: par, situacao: n <= 1 ? 'aberta' : 'fechada', lancadoPor: ap.operador, kick: true }); }); }
+      const _km = e.medidor === 'hodometro', _hi = (window._kkPdUlt = window._kkPdUlt || {})[e.id] ?? r1(ap.hor - (_km ? 60 + qi * 7 : ap.hp)), _salto = e.tag.endsWith('ESC-01') && n === 9 ? 6.5 : 0, _hi2 = r1(_hi + _salto), _hf = r1(_hi2 + (_km ? 58 + ((n * 7 + qi * 3) % 40) : ap.hp)); window._kkPdUlt[e.id] = _hf;
+      sv('partesDiarias', { id: 'kk_pd' + (pdn++), obra: O, equipId: e.id, tag: e.tag, placa: e.placa, prop: (EMP.find(z => z.id === e.propId) || {}).cod, data: d, operador: ap.operador, horaIni: '07:00', horaFim: '17:00', frente: ap.frente, horIni: _hi2, horFim: _hf, trabalhado: r1(_hf - _hi2), medidor: e.medidor, paradas: par, situacao: n <= 1 ? 'aberta' : 'fechada', lancadoPor: ap.operador, kick: true }); }); }
   // ── manutenção: produtos, planos, ordens
   const PRD = [['FLT-001', 'Filtro de óleo do motor', 'Filtro', 'un', 128, 6, 2], ['FLT-002', 'Filtro de combustível', 'Filtro', 'un', 96, 4, 2], ['FLT-003', 'Filtro de ar', 'Filtro', 'un', 210, 1, 2], ['OLE-15W40', 'Óleo 15W40', 'Lubrificante', 'Litros', 28.5, 60, 40], ['OLE-HID68', 'Óleo hidráulico 68', 'Lubrificante', 'Litros', 24.9, 35, 40],
     ['MNG-12', 'Mangueira hidráulica 1/2"', 'Peça', 'un', 340, 3, 1], ['GRX-01', 'Graxa EP2 (balde 20 kg)', 'Lubrificante', 'un', 610, 2, 1], ['BAT-150', 'Bateria 150 Ah', 'Elétrica', 'un', 1180, 0, 1]]
@@ -21409,6 +21410,111 @@ function _kkRqNum(O, W) {
   if (/^rq:/i.test(t)) { const [id, num] = t.slice(3).split('|'), r = (dados.requisicoes || []).find(x => x.id === id) || (dados.requisicoes || []).find(x => x.num === num);
     if (!r) { toast('Requisição ' + (num || '') + ' não encontrada.', 'error'); return; } if (r.status === 'solicitada') axAtender(r.id); else axVer(r.id); return; }
   return o.apply(this, arguments); }; })();
+
+
+// ═══════════════════════════════════════════════════════════════
+// v4.103: BOLETIM MENSAL DE EQUIPAMENTOS DE TERCEIROS (por fornecedor) — PDF A4 deitado + Excel
+// Base: partes diárias do app (leitura de horímetro/km, paradas) + cadastro de locação do equipamento.
+// Hora: faturável = maior entre trabalhado e a hora mínima do mês (franquia proporcional aos dias na obra),
+//       e a hora mínima é reduzida pelas horas paradas por manutenção corretiva (culpa da locadora).
+// Mês:  valor mensal proporcional aos dias na obra; corretiva desconta 1 diária a cada 8 h paradas.
+// ═══════════════════════════════════════════════════════════════
+function _bmMes() { const v = document.getElementById('pd-mes')?.value; if (v) return v; const l = (dados.partesDiarias || []).map(x => String(x.data).slice(0, 7)).sort(); return l[l.length - 1] || _hojeLocal().slice(0, 7); }
+function _bmEmpresa(cod, obra) { return (dados.empresas || []).find(z => z.cod === cod && (!z.obra || z.obra === obra)) || (dados.empresas || []).find(z => z.cod === cod) || {}; }
+function _bmProprio(emp) { return /pr[oó]pri/i.test(emp.tipo || emp.categoria || '') ; }
+function _bmCalc(obra, mes, fornSel) {
+  const o = obra === 'todas' ? '' : obra, hoje = _hojeLocal();
+  const P = (dados.partesDiarias || []).filter(x => (!o || x.obra === o) && String(x.data).slice(0, 7) === mes && (!fornSel || x.prop === fornSel));
+  const porForn = new Map();
+  P.forEach(x => { const emp = _bmEmpresa(x.prop, x.obra); if (_bmProprio(emp)) return; const k = x.prop || '—'; if (!porForn.has(k)) porForn.set(k, { cod: k, emp, eqs: new Map() }); const f = porForn.get(k); if (!f.eqs.has(x.equipId)) f.eqs.set(x.equipId, []); f.eqs.get(x.equipId).push(x); });
+  return [...porForn.values()].map(f => {
+    const linhas = [...f.eqs.entries()].map(([id, L]) => {
+      L.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+      const e = (dados.equipamentos || []).find(q => q.id === id) || { tag: L[0].tag, placa: L[0].placa }, km = (L[0].medidor || e.medidor) === 'hodometro';
+      const md = (dados.modelos || []).find(m => m.cod === e.codModelo) || {}, fm = (dados.familias || []).find(z => z.cod === e.familia) || {};
+      const mn = (() => { const [a2, m2] = mes.split('-').map(Number), diasMes = new Date(a2, m2, 0).getDate(), ini0 = mes + '-01', fim0 = mes + '-' + String(diasMes).padStart(2, '0'), fimC = fim0 > hoje ? hoje : fim0;
+        const di = e.dataMob && e.dataMob > ini0 ? e.dataMob : ini0, df = e.dataDesmob && e.dataDesmob < fimC ? e.dataDesmob : fimC, dias = di > df ? 0 : Math.round((new Date(df + 'T12:00') - new Date(di + 'T12:00')) / 864e5) + 1;
+        return { h: +e.franquiaH ? Math.round(+e.franquiaH * dias / diasMes * 10) / 10 : 0, dias, diasMes }; })();
+      const n = v => { const k = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(k) ? null : k; };
+      const trab = L.reduce((t, x) => t + (n(x.trabalhado) || 0), 0);
+      const corr = L.reduce((t, x) => t + (x.paradas || []).filter(y => y.grupo === 'C').reduce((u, y) => u + (+y.horas || 0), 0), 0);
+      const outras = L.reduce((t, x) => t + (x.paradas || []).filter(y => y.grupo !== 'C').reduce((u, y) => u + (+y.horas || 0), 0), 0);
+      const ini = n(L[0].horIni), fim = n(L[L.length - 1].horFim);
+      const saltos = []; for (let i = 1; i < L.length; i++) { const a = n(L[i - 1].horFim), b = n(L[i].horIni); if (a != null && b != null && Math.abs(b - a) > (km ? 5 : 0.5)) saltos.push({ data: L[i].data, de: a, para: b }); }
+      const abertas = L.filter(x => x.situacao !== 'fechada').length;
+      /* dias úteis (seg–sex) com o equipamento na obra, até hoje, sem parte diária */
+      const [aa, mm] = mes.split('-').map(Number), ult = new Date(aa, mm, 0).getDate(), tem = new Set(L.map(x => x.data)), faltam = [];
+      for (let d = 1; d <= ult; d++) { const ds = mes + '-' + String(d).padStart(2, '0'); if (ds >= hoje || (e.dataMob && ds < e.dataMob) || (e.dataDesmob && ds > e.dataDesmob)) continue; const wd = new Date(ds + 'T12:00').getDay(); if (wd === 0 || wd === 6) continue; if (!tem.has(ds)) faltam.push(ds); }
+      let cob = e.cobranca || '', vl = +e.valorLoc || 0, fat = null, valor = null, regra = '', desc = 0, minAdj = null;
+      if (cob === 'Hora' && vl) { minAdj = Math.max(0, Math.round((mn.h - corr) * 10) / 10); fat = km ? trab : Math.max(trab, minAdj); valor = fat * vl;
+        regra = `R$ ${_bn2(vl)}/h · mín. ${_bn1(mn.h)} h (${mn.dias}/${mn.diasMes} dias)` + (corr && !km ? ` − ${_bn1(corr)} h corretiva = ${_bn1(minAdj)} h` : ''); }
+      else if (cob === 'Mês' && vl) { const base = vl * mn.dias / mn.diasMes, diaria = vl / mn.diasMes; desc = Math.round(corr / 8 * diaria * 100) / 100;
+        const exc = e.franquiaH && !km ? Math.max(0, trab - e.franquiaH * mn.dias / mn.diasMes) : 0; valor = Math.max(0, base - desc + (exc && e.franquiaH ? exc * vl / e.franquiaH : 0)); fat = mn.dias;
+        regra = `R$ ${_bn2(vl)}/mês · ${mn.dias}/${mn.diasMes} dias` + (desc ? ` − corretiva R$ ${_bn2(desc)}` : '') + (exc ? ` + excedente ${_bn1(exc)} h` : ''); }
+      return { e, km, L, modelo: md.nome || e.codModelo || '', familia: fm.desc || e.familia || '', dias: mn.dias, diasMes: mn.diasMes, partes: L.length, ini, fim, trab, corr, outras, saltos, abertas, faltam, cob, vl, fat, valor, regra };
+    }).sort((a, b) => String(a.e.tag || a.e.placa).localeCompare(String(b.e.tag || b.e.placa), 'pt-BR', { numeric: true }));
+    return { ...f, linhas, total: linhas.reduce((t, x) => t + (x.valor || 0), 0) };
+  }).sort((a, b) => String(a.emp.nome || a.cod).localeCompare(String(b.emp.nome || b.cod)));
+}
+const _bn1 = v => v == null || isNaN(+v) ? '—' : (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const _bn2 = v => (+v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function pdBoletim() {
+  const obra = _okObraAtual(), mes = _bmMes(), forn = document.getElementById('pd-forn')?.value || '';
+  const B = _bmCalc(obra, mes, forn); if (!B.length) { toast('Nenhuma parte diária de equipamento de terceiro em ' + _mesTxt(mes) + (forn ? ' para esse fornecedor' : '') + '.', 'error'); return; }
+  const w = window.open('', '_blank'); if (!w) return toast('Libere as janelas (pop-up) para imprimir.', 'error');
+  const E = _e, d = s => _abFmtD(s), un = x => x.km ? ' km' : ' h', hm = h => { const m = Math.round(+h * 60); return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); };
+  const pag = f => {
+    const emp = f.emp, alertas = f.linhas.reduce((t, x) => t + x.saltos.length + (x.faltam.length ? 1 : 0) + (x.abertas ? 1 : 0), 0);
+    const resumo = f.linhas.map(x => `<tr><td><b>${E(x.e.tag || x.e.placa || '')}</b><div class="s">${E(x.familia)}</div></td><td>${E(x.modelo)}${x.e.placa && x.e.tag ? '<div class="s">' + E(x.e.placa) + '</div>' : ''}</td><td class="n">${x.dias}</td><td class="n">${x.partes}</td>
+      <td class="n">${_bn1(x.ini)}</td><td class="n">${_bn1(x.fim)}</td><td class="n"><b>${_bn1(x.trab)}${un(x)}</b></td><td class="n">${x.corr ? hm(x.corr) : '—'}</td><td class="n">${x.outras ? hm(x.outras) : '—'}</td>
+      <td class="s2">${x.regra ? E(x.regra) : '<span class="s">sem locação cadastrada</span>'}</td><td class="n">${x.fat == null ? '—' : x.cob === 'Mês' ? x.fat + ' dias' : _bn1(x.fat) + un(x)}</td><td class="n"><b>${x.valor == null ? '—' : 'R$ ' + _bn2(x.valor)}</b></td></tr>`).join('');
+    const al = f.linhas.flatMap(x => [...x.saltos.map(s => `<li><b>${E(x.e.tag)}</b> — salto de ${x.km ? 'hodômetro' : 'horímetro'} em ${d(s.data)}: terminou ${_bn1(s.de)} e começou ${_bn1(s.para)}</li>`),
+      ...(x.faltam.length ? [`<li><b>${E(x.e.tag)}</b> — ${x.faltam.length} dia(s) útil(eis) na obra sem parte diária: ${x.faltam.slice(0, 12).map(z => z.slice(8, 10) + '/' + z.slice(5, 7)).join(', ')}${x.faltam.length > 12 ? '…' : ''}</li>`] : []),
+      ...(x.abertas ? [`<li><b>${E(x.e.tag)}</b> — ${x.abertas} parte(s) diária(s) ainda aberta(s) (sem fechamento no app)</li>`] : [])]).join('');
+    const det = f.linhas.map(x => `<div class="eqd"><h3>${E(x.e.tag || x.e.placa)} · ${E(x.modelo)} — dia a dia</h3><table><thead><tr><th>Dia</th><th>Operador</th><th>Frente</th><th>Jornada</th><th class="n">Leitura inicial</th><th class="n">Leitura final</th><th class="n">${x.km ? 'Rodado' : 'Trabalhado'}</th><th>Paradas</th><th>Situação</th></tr></thead><tbody>
+      ${x.L.map(p => `<tr><td class="nw">${d(p.data)}</td><td>${E(p.operador || '')}</td><td>${E(p.frente || '')}</td><td class="nw">${E(p.horaIni || '')}–${E(p.horaFim || '')}</td><td class="n">${_bn1(p.horIni)}</td><td class="n">${_bn1(p.horFim)}</td><td class="n"><b>${p.trabalhado === '' || p.trabalhado == null ? '—' : _bn1(p.trabalhado)}</b></td>
+        <td class="s2">${(p.paradas || []).map(y => `<span class="${y.grupo === 'C' ? 'pc' : 'po'}">${E(y.grupo)}${E(y.cod)} ${E(y.nome || '')}${y.horas ? ' ' + hm(y.horas) : ''}</span>`).join(' ') || '—'}</td><td>${p.situacao === 'fechada' ? 'Fechada' : '<b style="color:#B45309">Aberta</b>'}</td></tr>`).join('')}
+      <tr class="t"><td colspan="6">Total do mês</td><td class="n">${_bn1(x.trab)}${un(x)}</td><td colspan="2">${x.corr ? 'Corretiva ' + hm(x.corr) : ''}${x.corr && x.outras ? ' · ' : ''}${x.outras ? 'Outras ' + hm(x.outras) : ''}</td></tr></tbody></table></div>`).join('');
+    return `<section class="pg"><div class="hd">${_pddLogo(f.linhas[0].L[0].obra)}<div><b>BOLETIM DE EQUIPAMENTOS DE TERCEIROS</b><div>${E(_mesTxt(mes))} · ${E(getNomeObra(f.linhas[0].L[0].obra) || '')}</div></div></div>
+      ${mes === _hojeLocal().slice(0, 7) ? `<div class="pa">Mês em andamento: boletim <b>parcial até ${_abFmtD(_hojeLocal())}</b> — dias na obra e hora mínima contados até hoje.</div>` : ''}
+      <div class="fx"><div><span>Fornecedor</span><b>${E(emp.nome || emp.razao || f.cod)}</b>${emp.cnpj ? ' · CNPJ ' + E(emp.cnpj) : ''}</div><div><span>Equipamentos</span><b>${f.linhas.length}</b></div><div><span>Trabalhado</span><b>${[f.linhas.some(x => !x.km) ? _bn1(f.linhas.filter(x => !x.km).reduce((t, x) => t + x.trab, 0)) + ' h' : '', f.linhas.some(x => x.km) ? _bn1(f.linhas.filter(x => x.km).reduce((t, x) => t + x.trab, 0)) + ' km' : ''].filter(Boolean).join(' · ')}</b></div><div><span>Valor do mês</span><b>R$ ${_bn2(f.total)}</b></div></div>
+      <h3>Resumo por equipamento</h3><table><thead><tr><th>Equipamento</th><th>Modelo</th><th class="n">Dias na obra</th><th class="n">Partes</th><th class="n">Leitura inicial</th><th class="n">Leitura final</th><th class="n">Trabalhado</th><th class="n">Corretiva</th><th class="n">Outras paradas</th><th>Cobrança</th><th class="n">Faturável</th><th class="n">Valor</th></tr></thead>
+        <tbody>${resumo}<tr class="t"><td colspan="11">Total do fornecedor</td><td class="n">R$ ${_bn2(f.total)}</td></tr></tbody></table>
+      ${al ? `<h3 class="al">Pontos para conferir (${alertas})</h3><ul class="al">${al}</ul>` : '<div class="okk">✓ Sem salto de leitura, sem dia útil sem parte diária e sem parte aberta.</div>'}
+      <div class="rg">Regra de cálculo: <b>Hora</b> — faturável é o maior entre o trabalhado (leitura do horímetro nas partes diárias) e a hora mínima do mês (franquia proporcional aos dias na obra), reduzida pelas horas paradas por <b>manutenção corretiva</b>. <b>Mês</b> — valor mensal proporcional aos dias na obra; cada 8 h de corretiva descontam uma diária. Paradas "outras" (chuva, falta de frente…) não descontam.</div>
+      <div class="ass"><div><br>Custos / Equipamentos — ${E(getNomeObra(f.linhas[0].L[0].obra) || 'obra')}</div><div><br>Engenheiro / gestor da obra</div><div><br>${E(emp.nome || emp.razao || f.cod)}</div></div>
+      <div class="rd">Gerado pelo ObraKontrol em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} a partir das partes diárias lançadas no app de campo.</div></section>
+      <section class="pg">${det}</section>`;
+  };
+  const t = 'Boletim equipamentos ' + _mesTxt(mes) + (B.length === 1 ? ' - ' + (B[0].emp.nome || B[0].cod) : '');
+  w.document.open(); w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${E(t)}</title><style>
+    @page{size:A4 landscape;margin:9mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:10.5px;background:#e9e9ec}
+    .pg{background:#fff;width:279mm;min-height:190mm;margin:12px auto;padding:9mm;box-shadow:0 2px 12px rgba(0,0,0,.15);page-break-after:always}.pg:last-child{page-break-after:auto}
+    .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:7px}.hd img{height:40px;max-width:190px;object-fit:contain}.hd b{font-size:16px;display:block;text-align:right}.hd>div:last-child{text-align:right;color:#444}
+    .fx{display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr;border:1px solid #bbb;margin-top:9px}.fx div{padding:6px 9px;border-right:1px solid #ddd}.fx span{display:block;font-size:8.5px;color:#666;text-transform:uppercase;letter-spacing:.06em}.fx b{font-size:14px}
+    h3{font-size:10px;text-transform:uppercase;letter-spacing:.07em;background:#111;color:#fff;padding:4px 8px;margin:10px 0 0;border-radius:3px 3px 0 0}h3.al{background:#B45309}
+    table{width:100%;border-collapse:collapse;border:1px solid #bbb;border-top:0}th{font-size:8.5px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #999;padding:4px 5px;background:#f2f2f2}td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top}
+    .n{text-align:right;white-space:nowrap}.nw{white-space:nowrap}.s{font-size:9px;color:#666}.s2{font-size:9.5px}tr.t td{font-weight:800;background:#f6f6f6;border-top:1px solid #999}.eqd{break-inside:avoid;page-break-inside:avoid}h3{break-after:avoid}
+    .pc{display:inline-block;background:#FEF3C7;color:#92400E;border-radius:3px;padding:0 4px;margin:1px 0}.po{display:inline-block;background:#eee;color:#444;border-radius:3px;padding:0 4px;margin:1px 0}
+    ul.al{margin:0;border:1px solid #F59E0B;border-top:0;padding:6px 8px 6px 24px;background:#FFFBEB}ul.al li{margin:2px 0}.okk{margin-top:9px;padding:6px 9px;border:1px solid #86EFAC;background:#F0FDF4;color:#166534;font-weight:700}
+    .pa{margin-top:8px;padding:5px 9px;background:#EFF6FF;border:1px solid #93C5FD;color:#1E3A8A;font-size:10px}.rg{margin-top:8px;font-size:9px;color:#555;line-height:1.4}.ass{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:26px}.ass div{border-top:1px solid #111;padding-top:4px;text-align:center;font-size:9.5px}.rd{margin-top:10px;font-size:8.5px;color:#888;text-align:right}
+    @media print{body{background:#fff}.pg{margin:0;box-shadow:none;width:auto;min-height:0}}</style></head><body>${B.map(pag).join('')}<script>setTimeout(()=>print(),400)<\/script></body></html>`); w.document.close();
+}
+function pdBoletimExcel() {
+  const obra = _okObraAtual(), mes = _bmMes(), forn = document.getElementById('pd-forn')?.value || '', B = _bmCalc(obra, mes, forn);
+  if (!B.length) { toast('Nada para exportar em ' + _mesTxt(mes) + '.', 'error'); return; }
+  const r1 = [['Fornecedor', 'CNPJ', 'TAG', 'Placa', 'Família', 'Modelo', 'Dias na obra', 'Partes', 'Leitura inicial', 'Leitura final', 'Trabalhado', 'Unid.', 'Corretiva (h)', 'Outras paradas (h)', 'Cobrança', 'Valor locação', 'Faturável', 'Valor (R$)', 'Dias úteis sem parte', 'Saltos de leitura', 'Partes abertas']];
+  const r2 = [['Fornecedor', 'TAG', 'Dia', 'Operador', 'Frente', 'Início', 'Fim', 'Leitura inicial', 'Leitura final', 'Trabalhado', 'Corretiva (h)', 'Outras (h)', 'Paradas', 'Situação']];
+  B.forEach(f => f.linhas.forEach(x => { const nm = f.emp.nome || f.cod;
+    r1.push([nm, f.emp.cnpj || '', x.e.tag || '', x.e.placa || '', x.familia, x.modelo, x.dias, x.partes, x.ini, x.fim, Math.round(x.trab * 10) / 10, x.km ? 'km' : 'h', Math.round(x.corr * 10) / 10, Math.round(x.outras * 10) / 10, x.cob || '', x.vl || '', x.fat == null ? '' : Math.round(x.fat * 10) / 10, x.valor == null ? '' : Math.round(x.valor * 100) / 100, x.faltam.length, x.saltos.length, x.abertas]);
+    x.L.forEach(p => r2.push([nm, x.e.tag || '', p.data, p.operador || '', p.frente || '', p.horaIni || '', p.horaFim || '', p.horIni, p.horFim, p.trabalhado, (p.paradas || []).filter(y => y.grupo === 'C').reduce((t, y) => t + (+y.horas || 0), 0), (p.paradas || []).filter(y => y.grupo !== 'C').reduce((t, y) => t + (+y.horas || 0), 0), (p.paradas || []).map(y => y.grupo + y.cod + ' ' + (y.nome || '') + (y.horas ? ' ' + y.horas + 'h' : '')).join('; '), p.situacao === 'fechada' ? 'Fechada' : 'Aberta'])); }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(r1), 'Resumo'); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(r2), 'Dia a dia');
+  XLSX.writeFile(wb, 'Boletim_equipamentos_' + mes + (forn ? '_' + forn : '') + '.xlsx');
+}
+(function () { const oR = window.renderPartesDiarias; window.renderPartesDiarias = renderPartesDiarias = function () { const r = oR.apply(this, arguments);
+  try { const hb = document.querySelector('#page-partes-diarias .page-header .btn-group') || document.querySelector('#page-partes-diarias .page-header');
+    if (hb && !hb.querySelector('.bm-b')) hb.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary btn-sm bm-b" onclick="pdBoletim()" title="Resumo do mês por fornecedor: horímetro, horas, paradas e valor da locação">📄 Boletim do mês</button> <button class="btn btn-outline btn-sm bm-b" onclick="pdBoletimExcel()" title="Boletim do mês em Excel (resumo + dia a dia)">↓ Boletim Excel</button> '); } catch (e) {}
+  return r; }; })();
 
 // Apply configs on load
 setTimeout(applyConfigs, 200);
