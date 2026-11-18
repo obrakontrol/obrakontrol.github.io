@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.29</div>
+  <div class="login-versao">ObraKontrol Campo · v3.30</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -6806,12 +6806,13 @@ function _manProxNum(tipo) {
 function _manModo() { let m = ''; try { m = localStorage.getItem('campo_modo') || ''; } catch (e) {} if (!m) m = /manuten/i.test((usuarioCampo && usuarioCampo.perfil) || '') ? 'man' : 'op'; return m; }
 function manModo(m) { try { localStorage.setItem('campo_modo', m); } catch (e) {} _manHome(); }
 function _manHome() {
-  const home = document.getElementById('screen-home'), grid = home && home.querySelector('.hgrid:not(#hgrid-man)'); if (!grid) return;
+  const home = document.getElementById('screen-home'), grid = home && home.querySelector('.hgrid:not(#hgrid-man):not(#hgrid-sup)'); if (!grid) return;
   let sw = document.getElementById('modo-sw'), gm = document.getElementById('hgrid-man');
-  const pode = _manPode();
-  if (!pode) { if (sw) sw.style.display = 'none'; if (gm) gm.style.display = 'none'; grid.style.display = ''; return; }
+  const pode = _manPode(), podeS = typeof _supPode === 'function' ? _supPode() : false;
+  try { _opOrdenar(grid); } catch (e) {}
+  if (!pode && !podeS) { if (sw) sw.style.display = 'none'; if (gm) gm.style.display = 'none'; const gs0 = document.getElementById('hgrid-sup'); if (gs0) gs0.style.display = 'none'; grid.style.display = ''; return; }
   if (!sw) {
-    grid.insertAdjacentHTML('beforebegin', `<div class="modo-sw" id="modo-sw"><button type="button" data-m="op" onclick="manModo('op')">Operação</button><button type="button" data-m="man" onclick="manModo('man')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>Manutenção</button></div>`);
+    grid.insertAdjacentHTML('beforebegin', `<div class="modo-sw" id="modo-sw"><button type="button" data-m="op" onclick="manModo('op')">Operação</button><button type="button" data-m="sup" onclick="manModo('sup')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Suprimentos</button><button type="button" data-m="man" onclick="manModo('man')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>Manutenção</button></div>`);
     sw = document.getElementById('modo-sw');
   }
   if (!gm) {
@@ -6826,9 +6827,11 @@ function _manHome() {
     </div>`);
     gm = document.getElementById('hgrid-man');
   }
-  const m = _manModo();
-  sw.style.display = ''; sw.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
-  grid.style.display = m === 'man' ? 'none' : ''; gm.style.display = m === 'man' ? '' : 'none';
+  let gs = document.getElementById('hgrid-sup'); if (!gs) { gm.insertAdjacentHTML('afterend', '<div class="hgrid" id="hgrid-sup"></div>'); gs = document.getElementById('hgrid-sup'); }
+  try { _supGrid(gs); } catch (e) {}
+  let m = _manModo(); if ((m === 'man' && !pode) || (m === 'sup' && !podeS)) m = 'op';
+  sw.style.display = ''; sw.querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.m === m); if (b.dataset.m === 'man') b.style.display = pode ? '' : 'none'; if (b.dataset.m === 'sup') b.style.display = podeS ? '' : 'none'; });
+  grid.style.display = m === 'op' ? '' : 'none'; gm.style.display = m === 'man' ? '' : 'none'; gs.style.display = m === 'sup' ? '' : 'none';
   const ab = _manAbertas(), par = ab.filter(o => o.parado);
   const s = document.getElementById('man-s-ab'); if (s) s.textContent = ab.length ? par.length + ' parado(s) agora' : 'Nenhuma aberta';
   const b = document.getElementById('man-b-ab'); if (b) { b.style.display = ab.length ? '' : 'none'; b.textContent = ab.length + ' aberta(s)'; }
@@ -7254,7 +7257,7 @@ function _manPrevLista() {
   const css = document.createElement('style'); css.textContent = `
     .modo-sw{display:flex;gap:4px;margin:4px 16px 12px;padding:4px;border-radius:14px;background:rgba(22,23,27,.72);border:1px solid rgba(255,255,255,.14);position:relative;z-index:1}
     .modo-sw button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;border:0;border-radius:10px;background:transparent;color:rgba(255,255,255,.7);font-weight:800;font-size:14.5px;cursor:pointer}
-    .modo-sw button svg{width:17px;height:17px}.modo-sw button.on{background:#fff;color:#16171B}.modo-sw button.on[data-m=man]{background:#1D4ED8;color:#fff}
+    .modo-sw button svg{width:17px;height:17px}.modo-sw button.on{background:#fff;color:#16171B}.modo-sw button.on[data-m=man]{background:#1D4ED8;color:#fff}.modo-sw button.on[data-m=sup]{background:#0F766E;color:#fff}
     .hcard.man{background:linear-gradient(155deg,#2563EB,#1E3A8A);border-color:transparent;box-shadow:0 12px 28px rgba(37,99,235,.3)}
     .hcard .module-card-badge.alerta{background:#DC2626}
     #hgrid-man .module-card-badge{background:rgba(96,165,250,.25)}
@@ -7757,6 +7760,36 @@ async function rqValConfirmar(k) { const v = rq.val[k], r = v.r, falta = v.itens
   const oS = salvarApropriacao; salvarApropriacao = window.salvarApropriacao = async function () { const r = await oS.apply(this, arguments);
     try { const L = await _rqValBuscar(); if (L && L.length) setTimeout(() => { toast('Você tem ' + L.length + ' requisição(ões) de material para validar.', 'ok'); if (document.getElementById('screen-home')?.classList.contains('active')) rqValidar(); }, 1500); } catch (e) {}
     return r; };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v3.30: ABA SUPRIMENTOS (Operação | Suprimentos | Manutenção) — liberada pelo perfil ("suprimentos");
+// sem marcação no perfil, quem apropria também vê (o encarregado precisa validar o material no nome dele).
+// Operação reorganizada: Apropriação, Abastecimento, Parte diária, Produção de terceiro, Movimentação, Alojamentos, Pendentes, Meu Resumo, Ver frente.
+// ═══════════════════════════════════════════════════════════════
+function _supPode() { const u = usuarioCampo; if (!u) return false; if (u.perfil === 'Admin') return true;
+  const pf = (dadosCampo.perfis || []).find(p => p.nome === u.perfil); if (pf && pf.perms && pf.perms.suprimentos !== undefined) return !!pf.perms.suprimentos;
+  if (u.perms && u.perms.suprimentos !== undefined) return !!u.perms.suprimentos; return typeof podeModulo === 'function' ? podeModulo('apontamentos') : true; }
+function _opOrdenar(grid) { const q = sel => grid.querySelector(sel) || document.querySelector('#screen-home ' + sel);
+  const ord = ['.hcard[onclick="abrirModulo(\'ap\')"]', '#card-fuel', '#card-pd', '#card-pt', '#card-mob', '#card-aloj', '.hcard[onclick="sincronizarPendentes()"]', '.hcard[onclick="abrirMeuResumo()"]', '.hcard[onclick="abrirQR(\'verfrente\')"]', '#card-rdo'];
+  ord.forEach(sel => { const el = [...grid.querySelectorAll(':scope > .hcard')].find(c => c.matches(sel)); if (el) grid.appendChild(el); }); }
+function _supGrid(gs) {
+  if (!gs.dataset.ok) { gs.dataset.ok = '1'; const ic = p => `<svg class="hic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    gs.innerHTML = `<div class="hcard sup" onclick="rqAbrir()">${ic('<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M12 11v6M9 14h6"/>')}<div class="hcard-t">Requisição de material</div><div class="hcard-s">Pedir ao almoxarifado</div></div>
+      <div class="hcard" onclick="rqValidar()">${ic('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2h9"/>')}<div class="hcard-t">Validar material</div><div class="hcard-s" id="sup-s-val">No meu nome</div><span class="hbadge" id="sup-b-val" style="display:none"></span></div>
+      <div class="hcard" onclick="rqAbrir().then(()=>rqLista())">${ic('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>')}<div class="hcard-t">Minhas requisições</div><div class="hcard-s">Pedidas e no meu nome</div></div>
+      <div class="hcard" onclick="sincronizarPendentes()">${ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>')}<div class="hcard-t">Pendentes</div><div class="hcard-s" id="sup-s-pend">offline</div></div>`; }
+  const c = document.getElementById('card-rq'); if (c) c.remove();   // o card sai da Operação
+  const sv = document.getElementById('sup-s-val'), bv = document.getElementById('sup-b-val'); if (sv) sv.innerHTML = _rqValN ? `<b style="color:#FCA5A5">${_rqValN} para validar</b>` : 'Nada pendente';
+  if (bv) { bv.style.display = _rqValN ? '' : 'none'; bv.textContent = _rqValN; }
+  const sp = document.getElementById('sup-s-pend'), pl = document.getElementById('pendentes-label'); if (sp && pl) sp.textContent = pl.textContent;
+}
+(function () {
+  const css = document.createElement('style'); css.textContent = `.hcard.sup{background:linear-gradient(145deg,#0F766E,#115E59);border-color:rgba(255,255,255,.12)}.hcard.sup .hcard-s{color:rgba(255,255,255,.8)}
+    #sup-b-val{position:absolute;top:10px;right:10px;background:#F59E0B;color:#111;border-radius:999px;font-size:12px;font-weight:800;padding:2px 9px}`; document.head.appendChild(css);
+  const oC = _rqCardSub; _rqCardSub = function () { try { oC.apply(this, arguments); } catch (e) {} const gs = document.getElementById('hgrid-sup'); if (gs) _supGrid(gs); };
+  setTimeout(() => { try { _manHome(); } catch (e) {} }, 1800);
+  // se o usuário não tem Manutenção mas tem Suprimentos, a chave aparece mesmo assim
+  setInterval(() => { try { if (usuarioCampo && document.getElementById('screen-home')?.classList.contains('active') && !document.getElementById('hgrid-sup') && _supPode()) _manHome(); } catch (e) {} }, 2500);
 })();
 </script>
 </body>

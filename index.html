@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.91 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.92 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -21115,6 +21115,8 @@ const _oKkAlmox2 = _kkAlmox; _kkAlmox = function (O, sv, dia) { _oKkAlmox2.apply
       itens: [[ia, qa], [ib, qb]].map(([e, q]) => ({ cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, qtd: q, custo: e.custoMedio })), assinatura: '', status: 'entregue', origem: 'almox', entreguePor: 'Almoxarifado', entregueEm: dia(0) + 'T06:5' + (i % 10) + ':00', criadoPor: 'Almoxarifado', criadoEm: dia(0) + 'T06:4' + (i % 10) + ':00', kick: true });
     sv('requisicoes', r); });
 };
+// v4.92: módulo Suprimentos/Almoxarifado no app de campo (aba própria), liberado pelo perfil
+try { if (!MODULOS.some(m => m[0] === 'suprimentos')) MODULOS.push(['suprimentos', 'Suprimentos / Almoxarifado no app de campo (requisição e validação de material)', []]); if (!_APP_MODS.some(m => m[0] === 'suprimentos')) _APP_MODS.push(['suprimentos', 'Suprimentos']); } catch (e) {}
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
