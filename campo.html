@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.37</div>
+  <div class="login-versao">ObraKontrol Campo · v3.38</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -1040,7 +1040,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
   <!-- 4) REVISAR -->
   <div class="content" id="ap-panel-rev" style="display:none">
     <div class="card" id="ap-hor-card" style="display:none">
-      <div class="card-header"><span class="card-title">Horímetro dos equipamentos</span></div>
+      <div class="card-header"><span class="card-title">Horímetro dos equipamentos</span><span style="font-size:11px;color:var(--text3);font-weight:600">opcional</span></div>
       <div class="card-body" id="ap-hor-lista"></div>
     </div>
     <div class="card">
@@ -2658,8 +2658,10 @@ function apHorVer(id) {
 async function apHorValidar() {
   for (const e of dadosCampo.equipamentos.filter(x => ap.eq.has(x.id))) {
     const v = ap.eq.get(e.id), nome = e.tag || e.placa;
-    if (v.hor === '' || v.hor === undefined || isNaN(parseFloat(String(v.hor).replace(',', '.')))) return 'Informe o ' + _medNomeC(e) + ' de ' + nome + '.';
-    if (!v.foto) return 'Tire a foto do ' + _medNomeC(e) + ' de ' + nome + '.';
+    /* v3.38: horímetro do fechamento OPCIONAL (a leitura oficial vai pela parte diária). Se informar, vale a foto e a regra do "não menor que o último". */
+    if (v.hor === '' || v.hor === undefined || v.hor === null) continue;
+    if (isNaN(parseFloat(String(v.hor).replace(',', '.')))) return 'O ' + _medNomeC(e) + ' de ' + nome + ' não é um número válido.';
+    if (!v.foto) return 'Você informou o ' + _medNomeC(e) + ' de ' + nome + ': tire a foto (ou apague o valor).';
     if (v._ult === undefined) { const u = await ultimoHorimetro(e.id); v._ult = u ? u.hor : null; }
     if (v._ult !== null && parseFloat(String(v.hor).replace(',', '.')) < v._ult) return (_medKmC(e) ? 'Hodômetro' : 'Horímetro') + ' de ' + nome + ' (' + _fmtHor(v.hor) + ') menor que o último fechamento (' + _fmtHor(v._ult) + ').';
   }
@@ -2715,7 +2717,7 @@ async function salvarApropriacao() {
       const idEq = 'ae' + sufixo(), hor = parseFloat(String(v.hor).replace(',', '.'));
       let fotoId = '';
       if (v.foto) { fotoId = 'fh' + sufixo(); await fbSalvar('fotos', { id: fotoId, tipo: 'horimetro', equipId: e.id, equip: e.tag || e.placa, aponEQ: idEq, data, hor, obra: _apObra(), lancadoPor: usuarioCampo.nome, tiradaEm: v.fotoEm || '', img: v.foto }); }
-      _ultHorGravar(e.id, hor, data);
+      if (!isNaN(hor)) _ultHorGravar(e.id, hor, data);
       await fbSalvar('aponEQ', { ...base, id: idEq, hora: horaIni, horaIni, horaFim, fotoHor: fotoId,
         hp: parseFloat(v.hp) || 0, hpar: parseFloat(v.hpar) || 0, motivo: v.motivo || '', hor: isNaN(hor) ? '' : hor,
         equip: e.tag || e.placa, equipId: e.id, tipo: e.familia || e.codFamilia || '—', operador: v.operador || '' });
