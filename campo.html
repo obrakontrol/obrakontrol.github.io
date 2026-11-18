@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.30</div>
+  <div class="login-versao">ObraKontrol Campo · v3.31</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7790,6 +7790,30 @@ function _supGrid(gs) {
   setTimeout(() => { try { _manHome(); } catch (e) {} }, 1800);
   // se o usuário não tem Manutenção mas tem Suprimentos, a chave aparece mesmo assim
   setInterval(() => { try { if (usuarioCampo && document.getElementById('screen-home')?.classList.contains('active') && !document.getElementById('hgrid-sup') && _supPode()) _manHome(); } catch (e) {} }, 2500);
+})();
+// ═══════════════════════════════════════════════════════════════
+// v3.31: MATERIAL FORA DA LISTA — o encarregado digita o material com justificativa; o almox vincula ao código do estoque ao atender
+// ═══════════════════════════════════════════════════════════════
+function rqManualAbrir() { rq.manual = { nome: rq.busca || '', und: 'UN', qtd: '', just: '' }; rqRender(); setTimeout(() => document.getElementById('rqm-nome')?.focus(), 50); }
+function rqManualOk() { const m = rq.manual, q = parseFloat(String(m.qtd).replace(',', '.')), f = [];
+  if (!String(m.nome).trim()) f.push('o nome do material'); if (!(q > 0)) f.push('a quantidade'); if (String(m.just).trim().length < 5) f.push('a justificativa');
+  if (f.length) { toast('Falta: ' + f.join(', ') + '.', 'err'); return; }
+  rq.itens.push({ cod: '', nome: String(m.nome).trim().toUpperCase(), und: String(m.und || 'UN').trim().toUpperCase(), grupo: '', qtd: q, custo: 0, saldo: 0, manual: true, justificativa: String(m.just).trim() }); rq.manual = null; rq.busca = ''; rqRender(); }
+(function () {
+  const oRes = _rqResHTML; _rqResHTML = function () { const h = oRes.apply(this, arguments); if (_rqN(rq.busca).length < 2) return h;
+    return h + `<button type="button" class="btn btn-outline" style="width:100%;margin-top:8px;font-size:13px" onclick="rqManualAbrir()">Não achei na lista — digitar o material</button>`; };
+  const oR = rqRender; rqRender = window.rqRender = function () { oR.apply(this, arguments); if (!rq || rq.modo !== 'novo') return; const E = _rqE;
+    // itens digitados: mostra a marca e a justificativa
+    rq.itens.forEach((it, i) => { if (!it.manual) return; const row = document.querySelectorAll('#rq-content .rq-it')[i]; const sub = row && row.querySelector(':scope > div:first-child > div'); if (sub) sub.style.color = 'var(--text3)'; if (sub) sub.innerHTML = `<span style="color:#F59E0B;font-weight:700">✍ digitado</span> · ${E(it.justificativa)}`; });
+    if (rq.manual) { const m = rq.manual, box = document.getElementById('rq-res'); if (box) box.innerHTML = `<div style="border:1.5px solid #F59E0B;border-radius:12px;padding:12px;margin-top:8px">
+      <div style="font-weight:800;font-size:14px;margin-bottom:8px">Material fora da lista</div>
+      <div class="form-group"><label class="form-label">Material *</label><input id="rqm-nome" class="form-control" value="${E(m.nome)}" oninput="rq.manual.nome=this.value" placeholder="Ex.: luva PVC DN150 com anel"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="form-group"><label class="form-label">Quantidade *</label><input class="form-control" inputmode="decimal" value="${E(m.qtd)}" oninput="rq.manual.qtd=this.value"/></div>
+        <div class="form-group"><label class="form-label">Unidade</label><select class="form-control" onchange="rq.manual.und=this.value">${['UN', 'M', 'M²', 'M³', 'KG', 'T', 'L', 'SC', 'PAR', 'CX', 'PC', 'RL'].map(u => `<option ${u === m.und ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
+      <div class="form-group"><label class="form-label">Justificativa *</label><textarea class="form-control" rows="2" oninput="rq.manual.just=this.value" placeholder="Por que não está na lista? Ex.: material novo, comprado direto para esta frente">${E(m.just)}</textarea></div>
+      <div style="display:flex;gap:8px"><button type="button" class="btn btn-outline" style="flex:1" onclick="rq.manual=null;rqRender()">Cancelar</button><button type="button" class="btn btn-green" style="flex:1" onclick="rqManualOk()">Incluir</button></div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:6px">O almoxarifado vincula ao código do estoque na hora de entregar.</div></div>`; }
+  };
 })();
 </script>
 </body>

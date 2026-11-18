@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.92 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.93 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -21117,6 +21117,30 @@ const _oKkAlmox2 = _kkAlmox; _kkAlmox = function (O, sv, dia) { _oKkAlmox2.apply
 };
 // v4.92: módulo Suprimentos/Almoxarifado no app de campo (aba própria), liberado pelo perfil
 try { if (!MODULOS.some(m => m[0] === 'suprimentos')) MODULOS.push(['suprimentos', 'Suprimentos / Almoxarifado no app de campo (requisição e validação de material)', []]); if (!_APP_MODS.some(m => m[0] === 'suprimentos')) _APP_MODS.push(['suprimentos', 'Suprimentos']); } catch (e) {}
+// ═══════════════════════════════════════════════════════════════
+// v4.93: ITEM DIGITADO NO APP — no atendimento o almox precisa vincular ao código do estoque (ou entregar 0)
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const oA = axAtender; axAtender = window.axAtender = function (id) { oA.apply(this, arguments); const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const E = _axEst();
+    if (!document.getElementById('axa-dl')) document.body.insertAdjacentHTML('beforeend', `<datalist id="axa-dl">${E.map(e => `<option value="${_e(e.cod + ' · ' + e.nome)}">`).join('')}</datalist>`);
+    const rows = document.querySelectorAll('#modal-axa .ax-t tbody tr');
+    (r.itens || []).forEach((it, i) => { if (!it.manual || !rows[i]) return; const td = rows[i].children[0];
+      td.innerHTML = `<b>${_e(it.nome)}</b> <span class="ax-st" style="background:#FEF3C7;color:#92400E">digitado no app</span><div class="ax-sm">Justificativa: ${_e(it.justificativa || '—')}</div>
+        <input class="form-control axa-cod" data-i="${i}" list="axa-dl" placeholder="Vincular ao código do estoque *" style="margin-top:6px;width:100%" value="${_e(it.cod ? it.cod + ' · ' + it.nome : '')}"/>`;
+      rows[i].children[2].innerHTML = '—'; });
+  };
+  const oE = axEntregar; axEntregar = window.axEntregar = async function (id) { const r = (dados.requisicoes || []).find(x => x.id === id); if (!r) return; const E = _axEst();
+    const qs = [...document.querySelectorAll('#modal-axa .axa-q')].map(x => +x.value || 0);
+    for (const inp of document.querySelectorAll('#modal-axa .axa-cod')) { const i = +inp.dataset.i, it = r.itens[i]; if (!(qs[i] > 0)) continue;
+      const cod = String(inp.value).split(' · ')[0].trim(), e = E.find(z => z.cod === cod);
+      if (!e) { toast('Vincule "' + it.nome + '" a um código do estoque (ou entregue 0).', 'error'); inp.focus(); return; }
+      Object.assign(it, { nomeDigitado: it.nomeDigitado || it.nome, cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, custo: +e.custoMedio || 0 }); }
+    return oE.apply(this, arguments); };
+  // na lista de pedidos, destaca o item digitado
+  const oR = renderAlmoxReq; renderAlmoxReq = window.renderAlmoxReq = function () { oR.apply(this, arguments);
+    if (_AX.aba === 'sol') document.querySelectorAll('#page-almox-req .ax-t tbody tr').forEach(tr => { const id = ((tr.querySelector('button[onclick^="axAtender"]')?.getAttribute('onclick') || '').match(/'([^']+)'/) || [])[1], r = (dados.requisicoes || []).find(x => x.id === id);
+      if (r && (r.itens || []).some(it => it.manual)) tr.children[4]?.insertAdjacentHTML('beforeend', `<div class="ax-sm" style="color:#B45309">✍ ${(r.itens || []).filter(it => it.manual).length} item(ns) digitado(s) — vincular ao código</div>`); }); };
+})();
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
