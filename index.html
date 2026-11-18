@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.90 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.91 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -21107,6 +21107,13 @@ const _oKkAlmox2 = _kkAlmox; _kkAlmox = function (O, sv, dia) { _oKkAlmox2.apply
     r.itens.forEach((it, i) => { const ap = (k + i) % 4 === 0 ? Math.round(+it.qtd * .85 * 100) / 100 : +it.qtd; if (!it.frente) { const t = _axTurnos(r.encarregado, r.data)[0]; if (!t) return; it.frente = t.frente; it.servico = t.servico; }
       Object.assign(it, { aplicado: ap, sobra: Math.round((+it.qtd - ap) * 100) / 100, regra: 'val' }); });
     if (r.itens.every(it => it.regra === 'val')) Object.assign(r, { validadoEm: r.data + 'T17:3' + (k % 10) + ':00', validadoPor: r.encarregado }); });
+  /* v4.90: cada participante (kickoff01…) recebe uma requisição entregue hoje no nome dele, para testar a validação no app */
+  const E = (dados.almoxEstoque || []).filter(e => String(e.id).startsWith('kk_ax')), pk = n => E.find(e => e.nome.includes(n)), KITS = [['DN150', 12, 'AREIA', 2], ['KIT LIGA', 4, 'DN100 ESGOTO', 10], ['ANEL', 2, 'TAMPÃO', 1], ['PEAD', 30, 'BENTONITA', 4], ['CBUQ', 1, 'EMULSÃO', 20]];
+  const FRP = ['DN150', 'KIT LIGA', 'ANEL', 'PEAD', 'CBUQ'].map(k => { const sv0 = { DN150: /VCA/, 'KIT LIGA': /Liga/i, ANEL: /Po[çc]o/, PEAD: /MND|Furo/, CBUQ: /Recomp/ }[k], a = (dados.aponMO || []).find(x => String(x.id).startsWith('kk_am') && sv0.test(x.servico || '')); return a ? [a.frente, a.servico] : ['', '']; });
+  (USUARIOS || []).filter(u => String(u.id).startsWith('kk_u')).forEach((u, i) => { const [a, qa, b, qb] = KITS[i % KITS.length], ia = pk(a), ib = pk(b); if (!ia || !ib) return;
+    const r = _axAprop({ id: 'kk_rqp' + i, num: 'RQ-P' + String(i + 1).padStart(2, '0'), obra: O, data: dia(0), hora: '06:4' + (i % 10), local: 'ESTOQUE CANTEIRO', encarregado: u.nome, retirante: u.nome, frenteInf: FRP[i % FRP.length][0], servicoInf: FRP[i % FRP.length][1],
+      itens: [[ia, qa], [ib, qb]].map(([e, q]) => ({ cod: e.cod, nome: e.nome, und: e.und, grupo: e.grupo, qtd: q, custo: e.custoMedio })), assinatura: '', status: 'entregue', origem: 'almox', entreguePor: 'Almoxarifado', entregueEm: dia(0) + 'T06:5' + (i % 10) + ':00', criadoPor: 'Almoxarifado', criadoEm: dia(0) + 'T06:4' + (i % 10) + ':00', kick: true });
+    sv('requisicoes', r); });
 };
 // Apply configs on load
 setTimeout(applyConfigs, 200);

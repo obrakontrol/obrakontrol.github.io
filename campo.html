@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.28</div>
+  <div class="login-versao">ObraKontrol Campo · v3.29</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7706,7 +7706,7 @@ function _rqLista(el, bar) { const E = _rqE, l = rq._lista || JSON.parse(localSt
 // No fim do turno o encarregado VALIDA as requisições no nome dele: confirma a frente/serviço e o quanto aplicou.
 // ═══════════════════════════════════════════════════════════════
 function _rqEncs() { const o = usuarioCampo?.obra || '', F = (dadosCampo.funcionarios || []).filter(f => (!o || !f.obra || f.obra === o) && f.nome);
-  let L = F.filter(f => f.apropriador === 'Sim').map(f => f.nome); if (!L.length) L = F.map(f => f.nome); return [...new Set(L)].sort((a, b) => a.localeCompare(b, 'pt-BR')); }
+  let L = F.filter(f => f.apropriador === 'Sim').map(f => f.nome); if (!L.length) L = F.map(f => f.nome); if (usuarioCampo?.nome) L.push(usuarioCampo.nome); return [...new Set(L)].sort((a, b) => a.localeCompare(b, 'pt-BR')); }
 let _rqValN = 0, _rqValEm = 0;
 async function _rqValBuscar() {
   if (!(db && _fbReady && isOnline) || !usuarioCampo) return null;
