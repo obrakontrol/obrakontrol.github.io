@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.32</div>
+  <div class="login-versao">ObraKontrol Campo · v3.33</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7847,6 +7847,186 @@ function ptDescartar(rid) { if (!confirm('Descartar este lançamento em aberto?'
   // lembra no fim do turno de apropriação
   const oA = salvarApropriacao; salvarApropriacao = window.salvarApropriacao = async function () { const r = await oA.apply(this, arguments); const n = _ptRasc().length; if (n) setTimeout(() => toast('Você tem ' + n + ' produção(ões) de terceiro em aberto para finalizar.', 'ok'), 3500); return r; };
 })();
+
+// ══════════════════════════════════════════════════════════════
+// v3.33: DESMOBILIZAÇÃO DE EQUIPAMENTO pelo app (saída da obra)
+// Escolhe a TAG, motivo (fim de contrato, transferência, manutenção externa…), horímetro/km final,
+// checklist de saída, fotos, transporte e assinaturas. Vai para o painel como "saída pendente":
+// o escritório confirma e o equipamento fica Desmobilizado com a data de saída.
+// ══════════════════════════════════════════════════════════════
+let eqd = null;
+const EQD_MOT = ['Fim do contrato / devolução à locadora', 'Transferência para outra obra', 'Manutenção externa (oficina)', 'Fim do serviço (equipamento próprio)', 'Outro'];
+const EQD_COMB = ['Vazio', '1/4', '1/2', '3/4', 'Cheio'];
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `.eqd-info{background:#F8FAFC;border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5}.eqd-info b{font-size:15px}
+    .eqd-pend{background:#FFF7ED;border:1px solid #FDBA74;color:#9A3412;border-radius:10px;padding:8px 10px;font-size:12.5px;margin-top:8px}
+    .eqd-hz{font-size:12px;color:var(--text2);margin-top:4px}.eqd-ok{color:#15803D;font-weight:700}.eqd-bad{color:var(--red);font-weight:700}`;
+  document.head.appendChild(css);
+})();
+function _eqdE(s) { return _esc(String(s ?? '')); }
+function _eqdTela() {
+  if (document.getElementById('screen-eqd')) return;
+  const back = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
+  document.getElementById('screen-home').insertAdjacentHTML('afterend', `<div class="screen" id="screen-eqd"><div class="topbar"><div class="topbar-row"><div class="tb-left"><button class="tb-back" onclick="eqdSair()" aria-label="Voltar">${back}</button><div><div class="topbar-title">Saída de equipamento</div><div class="topbar-sub" id="eqd-sub">Desmobilização da obra</div></div></div></div></div>
+    <div class="content" id="eqd-content"></div>
+    <div class="mob-bar"><button class="btn btn-outline" onclick="eqdSair()">Cancelar</button><button class="btn btn-green" onclick="eqdEnviar()">Enviar saída</button></div></div>`);
+}
+function _eqdEqs() { const o = eqd ? eqd.obra : ''; return (dadosCampo.equipamentos || []).filter(e => (!o || !e.obra || e.obra === o) && !/desmob|inativ|baixad/i.test(e.status || '') && (e.tag || e.placa)).sort((a, b) => String(a.tag || a.placa).localeCompare(String(b.tag || b.placa), 'pt-BR', { numeric: true })); }
+function _eqdEq() { return eqd && (dadosCampo.equipamentos || []).find(e => e.id === eqd.equipId); }
+function _eqdModelo(e) { const m = (dadosCampo.modelos || []).find(x => x.cod === e.codModelo); return (m && m.nome) || e.modeloNome || e.codModelo || ''; }
+function _eqdEmpresa(e) { const m = (dadosCampo.empresas || []).find(x => x.cod === e.prop || x.id === e.prop); return (m && (m.nome || m.razao)) || e.empresaNome || e.prop || ''; }
+function _eqdMed(e) { return e && e.medidor === 'hodometro' ? 'km' : 'h'; }
+async function eqdAbrir() {
+  _eqdTela();
+  eqd = { obra: (usuarioCampo && usuarioCampo.obra) || '', equipId: '', motivo: '', destino: '', data: _hojeISO(), hora: new Date().toTimeString().slice(0, 5), hor: '', comb: '', fotoHor: null,
+    check: MOB_CHECK.map(t => ({ t, st: '', obs: '' })), fotos: {}, avarias: '', acess: '', obs: '', prancha: '', motorista: '', nomeEnt: (usuarioCampo && usuarioCampo.nome) || '', sigEnt: '', sigEntTipo: null, nomeRec: '', sigRec: '', sigRecTipo: null };
+  showScreen('eqd'); document.getElementById('eqd-content').innerHTML = '<div class="card"><div class="card-body" style="color:var(--text2)">Carregando os equipamentos…</div></div>';
+  try { const l = await Promise.race([fbCarregar('equipamentos'), new Promise(r => setTimeout(() => r(null), 6000))]); if (l && l.length) dadosCampo.equipamentos = l; } catch (e) {}
+  try { const ob = await Promise.race([fbCarregar('obras'), new Promise(r => setTimeout(() => r(null), 5000))]); if (ob) window._mobObras = ob; } catch (e) {}
+  window._eqdPend = {};
+  try { if (db && _fbReady) { const s = await Promise.race([db.collection('mobilizacoes').where('tipo', '==', 'desmobilizacao').get(), new Promise(r => setTimeout(() => r(null), 5000))]);
+    if (s) s.docs.forEach(d => { const x = d.data(); if (x.status === 'pendente') window._eqdPend[x.equipId] = x; }); } } catch (e) {}
+  eqdRender();
+}
+function eqdSair() { if (eqd && (eqd.equipId || eqd.hor) && !confirm('Sair sem enviar a saída do equipamento?')) return; eqd = null; showScreen('home'); }
+function eqdCampo(k, v) { eqd[k] = v; if (k === 'equipId' || k === 'motivo') eqdRender(); else if (k === 'hor') _eqdHoras(); }
+function _eqdHoras() { const e = _eqdEq(), el = document.getElementById('eqd-hz'); if (!e || !el) return; const ini = parseFloat(String(e.horMob ?? '').replace(',', '.')), fim = parseFloat(String(eqd.hor).replace(',', '.'));
+  if (isNaN(fim)) { el.innerHTML = isNaN(ini) ? '' : 'Na chegada: ' + ini.toLocaleString('pt-BR') + ' ' + _eqdMed(e); return; }
+  if (!isNaN(ini) && fim < ini) { el.innerHTML = `<span class="eqd-bad">Menor que na chegada (${ini.toLocaleString('pt-BR')} ${_eqdMed(e)}). Confira.</span>`; return; }
+  el.innerHTML = isNaN(ini) ? '' : `<span class="eqd-ok">${(fim - ini).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${_eqdMed(e)}</span> desde a chegada (${ini.toLocaleString('pt-BR')})`; }
+async function eqdFoto(k, input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  try { const v = { img: await _reduzirFoto(f), em: new Date().toISOString() }; if (k === 'hor') eqd.fotoHor = v; else eqd.fotos[k] = v; eqdRender(); toast('Foto registrada', 'ok'); } catch (e) { toast('Não consegui usar essa foto. Tente de novo.', 'err'); }
+}
+function _eqdFotoBtn(k, label, v, obrig) {
+  return `<div class="hor-linha" style="margin-top:6px">${v ? `<img class="hor-thumb" src="${v.img}"/>` : ''}
+    <label class="hor-foto-btn ${v ? 'ok' : ''}" style="display:flex;align-items:center;justify-content:center;flex:1;min-height:48px">📷 ${v ? 'Trocar foto' : label + (obrig ? ' (obrigatória)' : '')}<input type="file" accept="image/*" capture="environment" style="display:none" onchange="eqdFoto('${k}', this)"/></label></div>`;
+}
+function eqdRender() {
+  const el = document.getElementById('eqd-content'); if (!el || !eqd) return; const E = _eqdE, eqs = _eqdEqs(), e = _eqdEq(), pend = e && (window._eqdPend || {})[e.id];
+  const obras = (window._mobObras || []).filter(o => o.id !== eqd.obra && !/encerr/i.test(o.status || ''));
+  const nok = eqd.check.filter(c => c.st === 'nok').length, feitos = eqd.check.filter(c => c.st).length;
+  el.innerHTML = `<div class="card"><div class="card-header"><span class="card-title">1. Equipamento</span></div><div class="card-body">
+      <div class="form-group"><label class="form-label">TAG *</label><select class="form-control" onchange="eqdCampo('equipId',this.value)"><option value="">Escolha o equipamento…</option>${eqs.map(x => `<option value="${E(x.id)}" ${x.id === eqd.equipId ? 'selected' : ''}>${E(_eqRotulo(x))}${(window._eqdPend || {})[x.id] ? ' ⏳' : ''}</option>`).join('')}</select>
+        ${eqs.length ? '' : '<div class="eqd-hz">Nenhum equipamento mobilizado nesta obra.</div>'}</div>
+      ${e ? `<div class="eqd-info"><b>${E(e.tag || e.placa)}</b> · ${E(_famDe(e))}<br>${E(_eqdModelo(e))}${e.placa ? ' · placa ' + E(e.placa) : ''}<br>Proprietária: ${E(_eqdEmpresa(e) || '—')}${e.dataMob ? '<br>Chegou em ' + E(String(e.dataMob).split('-').reverse().join('/')) : ''}</div>
+        ${pend ? `<div class="eqd-pend">⏳ Já existe uma saída deste equipamento aguardando o escritório (${E(String(pend.data || '').split('-').reverse().join('/'))}, por ${E(pend.lancadoPor || '—')}).</div>` : ''}` : ''}
+    </div></div>
+    <div class="card"><div class="card-header"><span class="card-title">2. Saída</span></div><div class="card-body">
+      <div style="display:flex;gap:10px"><div class="form-group" style="flex:1"><label class="form-label">Data *</label><input type="date" class="form-control" value="${E(eqd.data)}" max="${_hojeISO()}" onchange="eqdCampo('data',this.value)"/></div>
+        <div class="form-group" style="flex:1"><label class="form-label">Hora *</label><input type="time" class="form-control" value="${E(eqd.hora)}" onchange="eqdCampo('hora',this.value)"/></div></div>
+      <div class="form-group"><label class="form-label">Motivo da saída *</label><select class="form-control" onchange="eqdCampo('motivo',this.value)"><option value="">Escolha…</option>${EQD_MOT.map(m => `<option ${m === eqd.motivo ? 'selected' : ''}>${E(m)}</option>`).join('')}</select></div>
+      ${/transfer/i.test(eqd.motivo) ? `<div class="form-group"><label class="form-label">Obra de destino *</label><select class="form-control" onchange="eqdCampo('destino',this.value)"><option value="">Escolha…</option>${obras.map(o => `<option value="${E(o.id)}" ${o.id === eqd.destino ? 'selected' : ''}>${E(o.nome || o.cod || o.id)}</option>`).join('')}<option value="__outra" ${eqd.destino === '__outra' ? 'selected' : ''}>Outra (escrever na observação)</option></select></div>` : ''}
+      <div class="form-group"><label class="form-label">${e && e.medidor === 'hodometro' ? 'Hodômetro (km) na saída' : 'Horímetro na saída'} *</label><input class="form-control" inputmode="decimal" value="${E(eqd.hor)}" oninput="eqdCampo('hor',this.value)" placeholder="${e && e.medidor === 'hodometro' ? 'km' : 'horas'}"/><div class="eqd-hz" id="eqd-hz"></div>
+        ${_eqdFotoBtn('hor', 'Foto do ' + (e && e.medidor === 'hodometro' ? 'hodômetro' : 'horímetro'), eqd.fotoHor, true)}</div>
+      <div class="form-group"><label class="form-label">Combustível no tanque</label><div class="mob-seg mob-seg-sm">${EQD_COMB.map(c => `<button type="button" class="${eqd.comb === c ? 'on' : ''}" onclick="eqd.comb='${c}';eqdRender()">${c}</button>`).join('')}</div></div>
+    </div></div>
+    <div class="card"><div class="card-header"><span class="card-title">3. Checklist de saída</span></div>
+      <div class="mob-resumo">${feitos} de ${eqd.check.length} conferidos${nok ? ` · <b style="color:var(--red)">${nok} com problema</b>` : ''} <button type="button" class="mob-link" onclick="eqd.check.forEach(c=>{if(!c.st)c.st='ok'});eqdRender()">Marcar o resto como OK</button></div>
+      <div class="card-body" style="padding:4px 14px">${eqd.check.map((c, i) => `<div class="mob-ck ${c.st === 'nok' ? 'nok' : ''}"><div class="mob-ck-t">${i + 1}. ${E(c.t)}</div>
+        <div class="mob-seg mob-seg-sm">${[['ok', 'OK'], ['nok', 'Não OK'], ['na', 'N/A']].map(([v, t]) => `<button type="button" class="${c.st === v ? 'on ' + v : ''}" onclick="eqd.check[${i}].st='${v}';eqdRender()">${t}</button>`).join('')}</div>
+        ${c.st === 'nok' ? `<input class="form-control" style="margin-top:8px" placeholder="O que está errado? (obrigatório)" value="${E(c.obs)}" oninput="eqd.check[${i}].obs=this.value"/>` : ''}</div>`).join('')}</div></div>
+    <div class="card"><div class="card-header"><span class="card-title">4. Fotos da saída</span></div><div class="card-body"><div class="eqd-hz" style="margin:0 0 6px">Mínimo 2 fotos (frente e traseira).</div>
+      ${MOB_FOTOS.map(([k, t]) => `<div class="form-group"><label class="form-label">${t}</label>${_eqdFotoBtn(k, 'Foto ' + t.toLowerCase(), eqd.fotos[k], k === 'frente' || k === 'tras')}</div>`).join('')}</div></div>
+    <div class="card"><div class="card-header"><span class="card-title">5. Avarias e acessórios</span></div><div class="card-body">
+      <div class="form-group"><label class="form-label">Avarias na saída</label><textarea class="form-control" rows="2" oninput="eqd.avarias=this.value" placeholder="Deixe em branco se não tiver">${E(eqd.avarias)}</textarea></div>
+      <div class="form-group"><label class="form-label">Acessórios que saíram junto</label><input class="form-control" value="${E(eqd.acess)}" oninput="eqd.acess=this.value" placeholder="Ex.: concha de 60 cm, rompedor, manual"/></div>
+      <div class="form-group"><label class="form-label">Observação</label><textarea class="form-control" rows="2" oninput="eqd.obs=this.value">${E(eqd.obs)}</textarea></div></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">6. Transporte (opcional)</span></div><div class="card-body">
+      <div style="display:flex;gap:10px"><div class="form-group" style="flex:1"><label class="form-label">Placa da prancha / caminhão</label><input class="form-control" style="text-transform:uppercase" value="${E(eqd.prancha)}" oninput="eqd.prancha=this.value.toUpperCase()"/></div>
+        <div class="form-group" style="flex:1.4"><label class="form-label">Motorista / quem retirou</label><input class="form-control" value="${E(eqd.nomeRec)}" oninput="eqd.nomeRec=this.value"/></div></div>
+      <div class="mob-sig"><canvas id="eqdsig-rec" width="600" height="180" aria-label="Assinatura de quem retirou"></canvas><button type="button" class="mob-link" onclick="eqdSigLimpar('rec')">Limpar</button><span>Assinatura de quem retirou (opcional)</span></div></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">7. Quem entregou pela obra *</span></div><div class="card-body">
+      <div class="form-group"><input class="form-control" value="${E(eqd.nomeEnt)}" oninput="eqd.nomeEnt=this.value"/></div>
+      <div class="mob-sig"><canvas id="eqdsig-ent" width="600" height="180" aria-label="Assinatura de quem entregou"></canvas><button type="button" class="mob-link" onclick="eqdSigLimpar('ent')">Limpar</button><span>Assine com o dedo ou gere pelo nome</span></div>
+      <button type="button" class="btn btn-outline" style="width:100%;margin-top:8px" onclick="eqdSigNome()">✍ Gerar assinatura pelo nome</button></div></div>
+    <div class="bottom-safe"></div>`;
+  _eqdSig('ent'); _eqdSig('rec'); _eqdHoras();
+}
+function _eqdSig(k) {
+  const c = document.getElementById('eqdsig-' + k); if (!c) return; const g = c.getContext('2d'), campo = k === 'ent' ? 'sigEnt' : 'sigRec';
+  g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#111';
+  if (eqd[campo]) { const im = new Image(); im.onload = () => g.drawImage(im, 0, 0, c.width, c.height); im.src = eqd[campo]; }
+  let des = false; const pos = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
+  c.onpointerdown = e => { des = true; c.setPointerCapture(e.pointerId); const [x, y] = pos(e); g.beginPath(); g.moveTo(x, y); e.preventDefault(); };
+  c.onpointermove = e => { if (!des) return; const [x, y] = pos(e); g.lineTo(x, y); g.stroke(); e.preventDefault(); };
+  c.onpointerup = c.onpointercancel = () => { if (!des) return; des = false; eqd[campo] = c.toDataURL('image/png'); eqd[campo + 'Tipo'] = { tipo: 'manuscrita', em: new Date().toISOString() }; };
+}
+function eqdSigLimpar(k) { const campo = k === 'ent' ? 'sigEnt' : 'sigRec'; eqd[campo] = ''; eqd[campo + 'Tipo'] = null; const c = document.getElementById('eqdsig-' + k); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height); }
+async function eqdSigNome() {
+  const nome = String(eqd.nomeEnt || '').trim(); if (!nome) { toast('Preencha o nome primeiro.', 'err'); return; }
+  const c = document.getElementById('eqdsig-ent'); if (!c) return; const g = c.getContext('2d');
+  try { await document.fonts.load("600 64px 'Dancing Script'"); } catch (e) {}
+  g.clearRect(0, 0, c.width, c.height); g.fillStyle = '#0B2E6B'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let tam = 70; do { g.font = `600 ${tam}px 'Dancing Script', 'Brush Script MT', cursive`; tam -= 4; } while (g.measureText(nome).width > c.width - 40 && tam > 24);
+  g.fillText(nome, c.width / 2, c.height / 2 - 6); g.font = '15px Arial'; g.fillStyle = '#64748B'; g.fillText('assinado eletronicamente · ' + new Date().toLocaleString('pt-BR').replace(',', '').slice(0, 16), c.width / 2, c.height - 18);
+  eqd.sigEnt = c.toDataURL('image/png'); eqd.sigEntTipo = { tipo: 'nome', em: new Date().toISOString(), login: (usuarioCampo && (usuarioCampo.mat || usuarioCampo.nome)) || '' };
+}
+function _eqdFalta() {
+  const f = [], e = _eqdEq();
+  if (!e) f.push('o equipamento'); if (!eqd.data) f.push('a data'); if (!eqd.hora) f.push('a hora'); if (!eqd.motivo) f.push('o motivo');
+  if (/transfer/i.test(eqd.motivo) && !eqd.destino) f.push('a obra de destino');
+  const h = parseFloat(String(eqd.hor).replace(',', '.')); if (isNaN(h)) f.push(e && e.medidor === 'hodometro' ? 'o hodômetro' : 'o horímetro');
+  else if (e) { const ini = parseFloat(String(e.horMob ?? '').replace(',', '.')); if (!isNaN(ini) && h < ini) f.push('um ' + (e.medidor === 'hodometro' ? 'hodômetro' : 'horímetro') + ' maior que o da chegada'); }
+  if (!eqd.fotoHor) f.push('a foto do ' + (e && e.medidor === 'hodometro' ? 'hodômetro' : 'horímetro'));
+  const sem = eqd.check.filter(c => !c.st).length; if (sem) f.push(sem + ' item(ns) do checklist');
+  if (eqd.check.some(c => c.st === 'nok' && !String(c.obs || '').trim())) f.push('a descrição dos itens Não OK');
+  if (!eqd.fotos.frente || !eqd.fotos.tras) f.push('as fotos de frente e traseira');
+  if (!String(eqd.nomeEnt || '').trim()) f.push('o nome de quem entregou'); if (!eqd.sigEnt) f.push('a assinatura de quem entregou');
+  return f;
+}
+async function eqdEnviar() {
+  if (!eqd) return; const f = _eqdFalta();
+  if (f.length) { toast('Falta ' + f.slice(0, 3).join(', ') + (f.length > 3 ? '…' : '') + '.', 'err'); if (navigator.vibrate) { try { navigator.vibrate([60, 60, 60]); } catch (e) {} } return; }
+  const e = _eqdEq(); if ((window._eqdPend || {})[e.id] && !confirm('Este equipamento já tem uma saída aguardando o escritório. Enviar outra mesmo assim?')) return;
+  if (!confirm('Enviar a saída de ' + (e.tag || e.placa) + '?\n\nO escritório confirma no painel e o equipamento passa a Desmobilizado a partir de ' + String(eqd.data).split('-').reverse().join('/') + '.')) return;
+  const btn = document.querySelector('#screen-eqd .mob-bar .btn-green'); if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+  try {
+    const suf = Date.now().toString(36) + Math.random().toString(36).slice(2, 5), idMob = 'dm' + suf, obra = eqd.obra || e.obra || '', por = (usuarioCampo && usuarioCampo.nome) || '';
+    const sv = async (k, v, rot) => { if (!v) return ''; const id = 'fdm' + suf + '_' + k; await fbSalvar('fotos', { id, tipo: 'desmobilizacao_' + k, rotulo: rot, mobilizacao: idMob, equipId: e.id, equip: e.tag, obra, data: eqd.data, hor: eqd.hor, lancadoPor: por, tiradaEm: v.em || '', img: v.img }); return id; };
+    const fHor = await sv('hor', eqd.fotoHor, 'Horímetro na saída'), fotos = {};
+    for (const [k, t] of MOB_FOTOS) { if (eqd.fotos[k]) fotos[k] = await sv(k, eqd.fotos[k], t); }
+    const ini = parseFloat(String(e.horMob ?? '').replace(',', '.')), fim = parseFloat(String(eqd.hor).replace(',', '.')), ob = (window._mobObras || []).find(o => o.id === eqd.destino);
+    const doc = { id: idMob, tipo: 'desmobilizacao', status: 'pendente', equipId: e.id, tag: e.tag || '', placa: e.placa || '', obra, data: eqd.data, hora: eqd.hora, motivo: eqd.motivo,
+      destino: eqd.destino === '__outra' ? '' : eqd.destino, destinoNome: eqd.destino === '__outra' ? 'Outra (ver observação)' : (ob ? (ob.nome || ob.cod) : ''),
+      familia: e.familia || '', familiaNome: _famDe(e), codModelo: e.codModelo || '', modeloNome: _eqdModelo(e), prop: e.prop || '', empresaNome: _eqdEmpresa(e), medidor: e.medidor || 'horimetro',
+      hor: eqd.hor, horMob: e.horMob ?? '', usoNaObra: !isNaN(ini) && !isNaN(fim) ? Math.round((fim - ini) * 10) / 10 : '', dataMob: e.dataMob || '', comb: eqd.comb, fotoHor: fHor, fotos,
+      checklist: eqd.check.map(c => ({ t: c.t, st: c.st, obs: c.obs })), avarias: eqd.avarias.trim() ? eqd.avarias.trim().split(/\n+/).map(d => ({ desc: d.trim() })).filter(a => a.desc) : [], acess: eqd.acess.trim(), obs: eqd.obs.trim(),
+      prancha: eqd.prancha.trim(), nomeRec: eqd.nomeRec.trim(), sigRec: eqd.sigRec || '', sigRecTipo: eqd.sigRecTipo || null, nomeEnt: eqd.nomeEnt.trim(), sigEnt: eqd.sigEnt, sigEntTipo: eqd.sigEntTipo || null,
+      lancadoPor: por, lancadoPorId: (usuarioCampo && usuarioCampo.id) || '', validadoEm: new Date().toISOString(), origem: 'app' };
+    await fbSalvar('mobilizacoes', doc);
+    (window._eqdPend = window._eqdPend || {})[e.id] = doc;
+    toast('Saída de ' + (e.tag || e.placa) + ' enviada' + (isOnline ? ' — aguardando o escritório confirmar' : ' — offline, sincroniza depois'), 'ok');
+    eqd = null; showScreen('home');
+  } catch (er) { toast('Não consegui enviar. Tente de novo.', 'err'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Enviar saída'; } }
+}
+// item novo na escolha da mobilização
+(function () {
+  const b = (k, ic, t, s) => `<button type="button" data-k="${k}"><span class="vl-ic">${ic}</span><span><b>${t}</b><small>${s}</small></span></button>`;
+  const oEsc = _vlEscolha;
+  _vlEscolha = function () {
+    const p = oEsc.apply(this, arguments);
+    setTimeout(() => { const sh = document.querySelector('#vl-esc .vl-sheet'); if (!sh || sh.querySelector('[data-k="edes"]')) return;
+      const eq = sh.querySelector('[data-k="eq"]'); if (eq) { const bb = eq.querySelector('b'); if (bb) bb.textContent = 'Equipamento — chegada'; }
+      (eq || sh.querySelector('.vl-canc')).insertAdjacentHTML(eq ? 'afterend' : 'beforebegin', b('edes', '🚚', 'Equipamento — saída da obra', 'Desmobilização · checklist e assinatura'));
+      if (window._eqdSoEq) sh.querySelectorAll('button[data-k]').forEach(x => { if (!['eq', 'edes', ''].includes(x.dataset.k)) x.remove(); }); }, 0);
+    return p;
+  };
+  const oAb = abrirMobilizacao;
+  abrirMobilizacao = async function () {
+    const frota = typeof okModuloAtivo !== 'function' || okModuloAtivo('frota', usuarioCampo && usuarioCampo.obra);
+    if (!frota) { window._eqdSoEq = true; let k = ''; try { k = await _vlEscolha(); } finally { window._eqdSoEq = false; }
+      if (k === 'edes') return eqdAbrir(); if (k === 'eq') return oAb.apply(this, arguments); return; }
+    const oE = _vlEscolha; let esc = null;
+    _vlEscolha = function () { const p = oE.apply(this, arguments); p.then(k => esc = k); return p.then(k => k === 'edes' ? '' : k); };
+    try { await oAb.apply(this, arguments); } finally { _vlEscolha = oE; }
+    if (esc === 'edes') return eqdAbrir();
+  };
+  const s = document.querySelector('#card-mob .hcard-s'); if (s) s.textContent = 'Chegada e saída de equipamentos e veículos';
+})();
+
 </script>
 </body>
 </html>

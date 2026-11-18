@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.93 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.94 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -14161,7 +14161,7 @@ async function _diaFotos(el) {
       .sort((a, b) => String(a.dt || a.hora || '').localeCompare(String(b.dt || b.hora || '')));
     const litros = abs.reduce((s, d) => s + (+d.litros || 0), 0);
     const mobs = (dados.mobilizacoes || []).filter(m => daObra(m) && m.data === dataSel).sort((a, b) => String(a.hora).localeCompare(String(b.hora)));
-    const nEnt = mobs.filter(m => m.tipo !== 'veiculo_saida').length, nSai = mobs.length - nEnt;
+    const nEnt = mobs.filter(m => !['veiculo_saida', 'veiculo_dev_condutor', 'desmobilizacao'].includes(m.tipo)).length, nSai = mobs.length - nEnt;
     // 1) números: litros e mobilizações
     const k = main.querySelector('.dx-kpis');
     if (k && !k.querySelector('.dia-k2')) k.insertAdjacentHTML('beforeend', `<span class="dia-k2" style="display:none"></span>`
@@ -14191,7 +14191,7 @@ async function _diaFotos(el) {
       ${abs.map(d => { const al = typeof _absAlertas === 'function' ? _absAlertas(d) : []; return `<tr><td class="td-mono">${E(d.hora || String(d.dt || '').slice(11, 16) || '—')}</td><td><b>${E(d.equip || '—')}</b></td><td class="td-mono" style="text-align:right">${_fmtN(+d.litros || 0)}</td>
         <td class="td-mono" style="text-align:right">${E(d.hor || d.horimetro || '—')}</td><td>${E(tq(d.tanqueId || d.tanque))}</td><td class="mu">${E(d.lancadoPor || '—')}</td><td>${al.length ? al.map(x => `<span class="dia-tg al">⚠ ${E(x.txt)}</span>`).join(' ') : '<span class="mu">—</span>'}</td></tr>`; }).join('')}</tbody></table></div>`;
     // Mobilizações
-    const rotMob = m => m.tipo === 'veiculo_entrada' ? ['ent', 'Veículo chegou'] : m.tipo === 'veiculo_saida' ? ['sai', 'Veículo devolvido à locadora'] : m.tipo === 'veiculo_entrega' ? ['ent', 'Entregue a ' + String(m.condutor || '').split(' ')[0]] : m.tipo === 'veiculo_dev_condutor' ? ['sai', 'Devolvido por ' + String(m.condutor || '').split(' ')[0]] : ['ent', 'Equipamento chegou'];
+    const rotMob = m => m.tipo === 'veiculo_entrada' ? ['ent', 'Veículo chegou'] : m.tipo === 'veiculo_saida' ? ['sai', 'Veículo devolvido à locadora'] : m.tipo === 'veiculo_entrega' ? ['ent', 'Entregue a ' + String(m.condutor || '').split(' ')[0]] : m.tipo === 'veiculo_dev_condutor' ? ['sai', 'Devolvido por ' + String(m.condutor || '').split(' ')[0]] : m.tipo === 'desmobilizacao' ? ['sai', 'Equipamento saiu' + (m.status === 'pendente' ? ' (a confirmar)' : '')] : ['ent', 'Equipamento chegou'];
     const corpoMob = `<div class="table-wrap"><table class="dx-tb"><thead><tr><th>Hora</th><th>Movimento</th><th>TAG / placa</th><th>Modelo</th><th>Proprietária / locadora</th><th style="text-align:right">Horím. / km</th><th>Registrado por</th><th></th></tr></thead><tbody>
       ${mobs.map(m => { const [c, t] = rotMob(m), veic = /^veiculo/.test(m.tipo || ''); return `<tr><td class="td-mono">${E(m.hora || '—')}</td><td><span class="dia-tg ${c}">${t}</span></td><td><b>${E(m.tag || m.placa || '—')}</b></td><td>${E(m.modeloNome || '—')}</td>
         <td>${E(m.empresaNome || m.locadora || '—')}</td><td class="td-mono" style="text-align:right">${E(m.hor || m.km || '—')}${m.rodados != null && m.rodados !== '' ? '<div class="mu" style="font-size:10.5px">' + E(m.rodados) + ' km rodados</div>' : ''}</td><td class="mu">${E(m.lancadoPor || '—')}</td>
@@ -17332,7 +17332,7 @@ function _eqCatDe(e) { const f = (dados.familias || []).find(x => x.cod === e.fa
 function _eqStDe(e) { const s = _stEq(e.status) || e.status || 'Mobilizado'; return /desmob/i.test(s) ? 'Desmobilizado' : /manut/i.test(s) ? 'Em manutenção' : 'Mobilizado'; }
 function eqFiltro(tipo, v) { if (tipo === 'cat') window._eqCat = window._eqCat === v ? '' : v; else window._eqSt = window._eqSt === v ? '' : v; try { renderEquipamentos(); } catch (e) {} }
 function _eqCards() {
-  const card = document.querySelector('#page-equipamentos .card .card-body'); if (!card) return;
+  const card = document.querySelector('#page-equipamentos .card:not(.dm-card) .card-body'); if (!card) return;
   let bar = card.querySelector('.eq-cards'); if (!bar) { card.insertAdjacentHTML('afterbegin', '<div class="eq-cards"></div>'); bar = card.querySelector('.eq-cards'); }
   const o = obraAtiva && obraAtiva.id, l = (dados.equipamentos || []).filter(e => !o || o === 'todas' || !e.obra || e.obra === o);
   const lc = window._eqSt ? l.filter(e => _eqStDe(e) === window._eqSt) : l, ls = window._eqCat ? l.filter(e => _eqCatDe(e) === window._eqCat) : l;
@@ -18914,10 +18914,7 @@ async function _kkGerar(nUsr) {
         combustivel: dsl ? 'Diesel S-10' : 'Gasolina', litros: Lt, precoL: pl, valor: r2(Lt * pl), km, posto: ['Posto Ipiranga Centro', 'Posto Shell Rodovia', 'Auto Posto Mococa'][(i + n) % 3], origem: 'campo', lancadoPor: rs.nome || '', lancadoEm: dia(n) + 'T18:00:00', ...K }); } });
   sv('multas', { id: 'kk_mu1', obra: O, veicId: VS[0].id, placa: VS[0].placa, data: dia(21), valor: 195.23, tipo: 'Excesso de velocidade (até 20%)', gravidade: 'Média', pontos: 4, status: 'Aberta', responsavel: VS[0].resp[0].nome, desconto: '', ...K });
   sv('multas', { id: 'kk_mu2', obra: O, veicId: VS[2].id, placa: VS[2].placa, data: dia(37), valor: 293.47, tipo: 'Avançar sinal vermelho', gravidade: 'Gravíssima', pontos: 7, status: 'Paga', responsavel: VS[2].resp[0].nome, desconto: 'sim', descontoData: dia(10), ...K });
-  // ── alojamento
-  const MOR = (ix, ent) => ix.map(i => ({ id: 'kk_m' + i, func: FS[i].id, nome: FS[i].nome, mat: FS[i].mat, funcao: FS[i].funcao, entrada: ent }));
-  sv('republicas', { id: 'kk_r1', cod: 'REP-001', nome: 'República Centro', tipo: 'República', endereco: 'Rua Barão de Monte Santo, 410', vagas: 6, responsavel: 'Maria Souza', aluguel: 3200, agua: 160, luz: 320, internet: 110, inicio: dia(60), fim: '2027-06-30', moradores: MOR([5, 6, 8, 13, 15], dia(58)), ...X });
-  sv('republicas', { id: 'kk_r2', cod: 'REP-002', nome: 'Alojamento do canteiro', tipo: 'Alojamento', endereco: 'Canteiro de obras', vagas: 12, responsavel: PROP.fantasia, aluguel: 0, agua: 400, luz: 900, internet: 150, extras: [{ desc: 'Limpeza', valor: 1200 }], moradores: MOR([9, 10, 11, 16, 17, 18, 23, 24, 25, 30], dia(56)), ...X });
+  // ── alojamento: v4.94 em _kkAloj (5 casas, quartos, vistorias)
   // ── mobilizações (registro de chegada de 2 máquinas e 1 veículo)
   // ── v4.74: kickoff completo — RDOs dos turnos, termo de mobilização de todos os equipamentos, equipes, tipos de perda, notas de diesel e movimentação do tanque
   { const nomeFam = c => (typeof _nomeFamilia === 'function' && _nomeFamilia(c)) || c, modNome = e => ((dados.modelos || []).find(m => m.cod === e.codModelo) || {}).nome || e.codModelo || '';
@@ -18986,6 +18983,9 @@ async function _kkGerar(nUsr) {
     }
   }
   try { _kkAlmox(O, sv, dia); } catch (e) { console.warn('kk almox', e); }   // v4.88
+  try { _kkAloj(O, sv, dia, PROP); } catch (e) { console.warn('kk aloj', e); }   /* v4.94 */
+  try { _kkDesmob(O, sv, dia); } catch (e) { console.warn('kk desmob', e); }
+  try { _kkProg('Criando login master…'); window._kkMasterOk = await _kkMaster(O, PROP, W); } catch (e) { console.warn('kk master', e); }
   window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
   try { _roHash && delete _roHash[O]; _publicarResumoObras(); } catch (e) {}   // v4.46: "Frente hoje" do app já mostra meta e avanço
   try { window._absCache = { k: '', m: {} }; } catch (e) {}
@@ -18997,9 +18997,9 @@ async function _kkGerar(nUsr) {
 }
 function kkResumo(obra, nUsr, nMO, nEQ, nD) {
   const L = _accLinks();
-  const txt = `ObraKontrol · KICKOFF\n\nObra: ${obra.nome}\n\n📊 Painel: ${L.painel}\n📲 App de campo: ${L.campo}\n\n👤 Login: kickoff01 a kickoff${String(nUsr || 0).padStart(2, '0')} (cada um pega um número)\n🔑 Senha: Demo@2026\n\nNo app: Apropriação (frente → equipe → equipamentos), Parada, Abastecimento, Movimentação e Manutenção. Tudo que você lançar aparece no painel para aprovação.`;
+  const txt = `ObraKontrol · KICKOFF\n\nObra: ${obra.nome}\n\n📊 Painel: ${L.painel}\n📲 App de campo: ${L.campo}\n\n👤 Login: kickoff01 a kickoff${String(nUsr || 0).padStart(2, '0')} (cada um pega um número) — sem custo de pessoal\n👑 Login master: kickoffmaster (vê tudo, inclusive custos)\n🔑 Senha: Demo@2026\n\nNo app: Apropriação (frente → equipe → equipamentos), Parada, Abastecimento, Movimentação e Manutenção. Tudo que você lançar aparece no painel para aprovação.`;
   if (!document.getElementById('modal-kk')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-kk"><div class="modal" style="max-width:560px"><div class="modal-header"><div class="modal-title">🎬 Kickoff pronto</div><button class="modal-close" onclick="closeModal('modal-kk')">×</button></div><div class="modal-body" id="kk-body"></div><div class="modal-footer"><button class="btn btn-outline" onclick="navigator.clipboard.writeText(document.getElementById('kk-msg').value).then(()=>toast('Copiado.'))">📋 Copiar</button><button class="btn btn-primary" onclick="closeModal('modal-kk')">Fechar</button></div></div></div>`);
-  document.getElementById('kk-body').innerHTML = `<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Gerado: <b>${nMO}</b> apontamentos de mão de obra, <b>${(dados.rdos || []).filter(r => String(r.id).startsWith('kk_')).length || '—'}</b> RDOs, <b>${(dados.mobilizacoes || []).filter(r => String(r.id).startsWith('kk_')).length}</b> termos de mobilização, <b>${nEQ}</b> de equipamentos, <b>${nD}</b> abastecimentos, 8 ordens de manutenção, 5 veículos, 2 alojamentos${nUsr ? ' e <b>' + nUsr + '</b> logins' : ''}. Os 2 últimos dias ficaram <b>pendentes de aprovação</b> para você aprovar ao vivo.</div>
+  document.getElementById('kk-body').innerHTML = `<div class="alert alert-success" style="margin-bottom:10px;font-size:13px">Gerado: <b>${nMO}</b> apontamentos de mão de obra, <b>${(dados.rdos || []).filter(r => String(r.id).startsWith('kk_')).length || '—'}</b> RDOs, <b>${(dados.mobilizacoes || []).filter(r => String(r.id).startsWith('kk_')).length}</b> termos de mobilização, <b>${nEQ}</b> de equipamentos, <b>${nD}</b> abastecimentos, 8 ordens de manutenção, 5 veículos, 5 repúblicas/alojamentos (com vistorias), 2 saídas de equipamento aguardando confirmação${nUsr ? ' e <b>' + nUsr + '</b> logins' : ''}${window._kkMasterOk ? ' + login master <b>kickoffmaster</b>' : ''}. Os 2 últimos dias ficaram <b>pendentes de aprovação</b> para você aprovar ao vivo.</div>
     ${Object.keys(window._kkFalhas || {}).length ? `<div class="alert alert-danger" style="margin-bottom:10px;font-size:13px">⚠ Alguns registros <b>não foram gravados</b> no Firebase: ${Object.entries(window._kkFalhas).map(([c, n]) => n + ' em ' + c).join(', ')} (${_e(window._kkErro || '')}). Me mande um print desta mensagem.</div>` : ''}<label class="form-label">Mensagem para os participantes</label><textarea class="form-control" id="kk-msg" rows="12" style="width:100%;font-size:13px">${_e(txt)}</textarea>`;
   openModal('modal-kk');
 }
@@ -21141,6 +21141,133 @@ try { if (!MODULOS.some(m => m[0] === 'suprimentos')) MODULOS.push(['suprimentos
     if (_AX.aba === 'sol') document.querySelectorAll('#page-almox-req .ax-t tbody tr').forEach(tr => { const id = ((tr.querySelector('button[onclick^="axAtender"]')?.getAttribute('onclick') || '').match(/'([^']+)'/) || [])[1], r = (dados.requisicoes || []).find(x => x.id === id);
       if (r && (r.itens || []).some(it => it.manual)) tr.children[4]?.insertAdjacentHTML('beforeend', `<div class="ax-sm" style="color:#B45309">✍ ${(r.itens || []).filter(it => it.manual).length} item(ns) digitado(s) — vincular ao código</div>`); }); };
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// v4.94: SAÍDA DE EQUIPAMENTO (desmobilização) vinda do app — o escritório confirma ou recusa.
+// Confirmar: status Desmobilizado + data de desmobilização = data da saída (sai da apropriação a partir dela).
+// Kickoff: alojamentos completos (5 casas, quartos, provisório, encerrada, vistorias) + 2 saídas pendentes + login master.
+// ═══════════════════════════════════════════════════════════════
+function _dmLista() { const o = _okObraAtual(); return (dados.mobilizacoes || []).filter(m => m.tipo === 'desmobilizacao' && (o === 'todas' || !m.obra || m.obra === o)); }
+function _dmBloco() {
+  const pg = document.getElementById('page-equipamentos'), card = pg && pg.querySelector('.card:not(.dm-card)'); if (!card) return;
+  let el = document.getElementById('dm-bloco'); if (!el) { card.insertAdjacentHTML('beforebegin', '<div id="dm-bloco"></div>'); el = document.getElementById('dm-bloco'); }
+  const l = _dmLista(), pend = l.filter(m => m.status === 'pendente').sort((a, b) => String(b.data + b.hora).localeCompare(String(a.data + a.hora)));
+  const rec = l.filter(m => m.status !== 'pendente').sort((a, b) => String(b.confirmadoEm || b.data).localeCompare(String(a.confirmadoEm || a.data))).slice(0, 5);
+  if (!pend.length && !rec.length) { el.innerHTML = ''; return; }
+  const E = _e, d = s => String(s || '').split('-').reverse().join('/');
+  el.innerHTML = `<div class="card dm-card" style="margin-bottom:14px;border-left:4px solid ${pend.length ? '#D97706' : '#6B7280'}"><div class="card-header"><span class="card-title">🚚 Saídas de equipamento ${pend.length ? '<span class="tag tag-amber">' + pend.length + ' aguardando confirmação</span>' : ''}</span></div>
+    <div class="card-body"><div style="font-size:12.5px;color:var(--text-3);margin-bottom:8px">Registradas no app de campo. Ao confirmar, o equipamento fica <b>Desmobilizado</b> a partir da data da saída e sai da apropriação.</div>
+    <div class="table-wrap"><table><thead><tr><th>Data</th><th>TAG</th><th>Modelo</th><th>Proprietária</th><th>Motivo</th><th style="text-align:right">Horím./km saída</th><th style="text-align:right">Uso na obra</th><th>Checklist</th><th>Registrado por</th><th>Situação</th><th></th></tr></thead><tbody>
+    ${pend.concat(rec).map(m => { const nok = (m.checklist || []).filter(c => c.st === 'nok').length, un = m.medidor === 'hodometro' ? 'km' : 'h';
+      return `<tr><td class="td-mono" style="white-space:nowrap">${d(m.data)} ${E(m.hora || '')}</td><td><strong>${E(m.tag || m.placa)}</strong><div style="font-size:11px;color:var(--text-3)">${E(m.familiaNome || '')}</div></td><td>${E(m.modeloNome || '—')}</td><td>${E(m.empresaNome || '—')}</td>
+        <td>${E(m.motivo || '—')}${m.destinoNome ? '<div style="font-size:11px;color:var(--text-3)">→ ' + E(m.destinoNome) + '</div>' : ''}</td><td class="td-mono" style="text-align:right">${E(m.hor || '—')} ${un}</td><td class="td-mono" style="text-align:right">${m.usoNaObra !== '' && m.usoNaObra != null ? _n1(+m.usoNaObra) + ' ' + un : '—'}</td>
+        <td>${nok ? '<span class="tag tag-red">' + nok + ' não OK</span>' : '<span class="tag tag-green">tudo OK</span>'}${(m.avarias || []).length ? ' <span class="tag tag-amber">' + m.avarias.length + ' avaria(s)</span>' : ''}</td><td>${E(m.lancadoPor || '—')}</td>
+        <td>${m.status === 'pendente' ? '<span class="tag tag-amber">aguardando</span>' : m.status === 'confirmada' ? '<span class="tag tag-green">confirmada</span>' + (m.confirmadoPor ? '<div style="font-size:11px;color:var(--text-3)">' + E(m.confirmadoPor) + '</div>' : '') : '<span class="tag tag-red">recusada</span>' + (m.motivoRecusa ? '<div style="font-size:11px;color:var(--text-3)">' + E(m.motivoRecusa) + '</div>' : '')}</td>
+        <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="verTermoMob('${E(m.id)}')">📋 Termo</button>${m.status === 'pendente' ? ` <button class="btn btn-primary btn-sm" onclick="dmConfirmar('${E(m.id)}')">✓ Confirmar</button> <button class="btn btn-outline btn-sm" style="color:#b91c1c" onclick="dmRecusar('${E(m.id)}')">✕</button>` : ''}</td></tr>`; }).join('')}</tbody></table></div></div></div>`;
+}
+async function dmConfirmar(id) {
+  const m = (dados.mobilizacoes || []).find(x => x.id === id); if (!m) return; const e = (dados.equipamentos || []).find(x => x.id === m.equipId);
+  if (!e) { toast('Equipamento não encontrado no cadastro.', 'error'); return; }
+  if (e.dataMob && m.data < e.dataMob) { toast('A data da saída é antes da mobilização (' + fmtData(e.dataMob) + ').', 'error'); return; }
+  const depois = (dados.aponEQ || []).filter(a => (a.equipId === e.id || a.equip === e.tag) && a.data > m.data && a.status !== 'rejeitado').length;
+  if (!confirm('Confirmar a desmobilização de ' + (e.tag || e.placa) + ' em ' + fmtData(m.data) + '?\n\nMotivo: ' + (m.motivo || '—') + (m.destinoNome ? ' → ' + m.destinoNome : '') + '\nO equipamento fica Desmobilizado e sai da apropriação a partir dessa data.' + (depois ? '\n\n⚠ Existem ' + depois + ' apontamento(s) dele depois dessa data.' : ''))) return;
+  const quem = (typeof usuarioLogado !== 'undefined' && usuarioLogado && usuarioLogado.nome) || '';
+  e.status = 'Desmobilizado'; e.dataDesmob = m.data; e.horDesmob = m.hor; e.desmobId = m.id; e.motivoDesmob = m.motivo || ''; if (m.destino) e.transfDestino = m.destino;
+  m.status = 'confirmada'; m.confirmadoPor = quem; m.confirmadoEm = new Date().toISOString();
+  try { await fbSave('equipamentos', e.id, e); await fbSave('mobilizacoes', m.id, m); } catch (er) { toast('Salvo aqui, mas não no servidor. Tente de novo.', 'error'); }
+  toast((e.tag || e.placa) + ' desmobilizado em ' + fmtData(m.data)); try { renderEquipamentos(); } catch (er) {}
+}
+async function dmRecusar(id) {
+  const m = (dados.mobilizacoes || []).find(x => x.id === id); if (!m) return;
+  const mot = prompt('Por que a saída de ' + (m.tag || m.placa) + ' foi recusada? (o equipamento continua mobilizado)', ''); if (mot === null) return;
+  if (!String(mot).trim()) { toast('Escreva o motivo da recusa.', 'error'); return; }
+  m.status = 'recusada'; m.motivoRecusa = String(mot).trim(); m.confirmadoPor = (typeof usuarioLogado !== 'undefined' && usuarioLogado && usuarioLogado.nome) || ''; m.confirmadoEm = new Date().toISOString();
+  try { await fbSave('mobilizacoes', m.id, m); } catch (er) {}
+  toast('Saída recusada.'); try { renderEquipamentos(); } catch (er) {}
+}
+(function () {
+  const oR = window.renderEquipamentos || renderEquipamentos;
+  renderEquipamentos = window.renderEquipamentos = function () { const r = oR.apply(this, arguments); try { _dmBloco(); } catch (e) { console.warn('dm', e); } return r; };
+  /* termo: mesma tela da mobilização, com título, checklist e dados da saída */
+  const oT = window.verTermoMob || verTermoMob;
+  verTermoMob = window.verTermoMob = async function (id) {
+    const r = await oT.apply(this, arguments);
+    const m = (dados.mobilizacoes || []).find(x => x.id === id), t = document.getElementById('mob-termo'); if (!m || !t || m.tipo !== 'desmobilizacao') return r;
+    t.querySelectorAll('div,h3,figcaption').forEach(x => { if (x.children.length) return;
+      if (x.textContent === 'TERMO DE MOBILIZAÇÃO') x.textContent = 'TERMO DE DESMOBILIZAÇÃO';
+      else if (/^Avarias que já vieram/.test(x.textContent)) x.textContent = 'Avarias na saída';
+      else if (x.textContent === 'Recebeu') x.textContent = 'Retirou (transporte)'; else if (x.textContent === 'Entregou') x.textContent = 'Entregou pela obra'; });
+    t.querySelectorAll('div').forEach(x => { if (x.children.length || !x.parentElement) return; if (/^(Horímetro|Hodômetro|Combustível na chegada|Combustível)$/i.test(x.textContent.trim()) && x.parentElement.children.length === 2 && x.parentElement.parentElement && !x.parentElement.parentElement.closest('[data-dm]')) x.parentElement.remove(); });
+    t.querySelectorAll('h3').forEach(h => { if (/^Checklist de recebimento/.test(h.textContent)) h.innerHTML = h.innerHTML.replace('Checklist de recebimento', 'Checklist de saída'); if (/^Acessórios recebidos/.test(h.textContent)) h.textContent = 'Acessórios que saíram junto'; });
+    const L = (k, v) => v === '' || v == null ? '' : `<div><div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.06em">${k}</div><div style="font-weight:700">${_e(v)}</div></div>`, un = m.medidor === 'hodometro' ? ' km' : ' h';
+    const st = m.status === 'confirmada' ? `<span style="color:#15803D">✓ Confirmada${m.confirmadoPor ? ' por ' + _e(m.confirmadoPor) : ''}${m.confirmadoEm ? ' em ' + _e(new Date(m.confirmadoEm).toLocaleString('pt-BR')) : ''}</span>` : m.status === 'recusada' ? `<span style="color:#B91C1C">✕ Recusada${m.motivoRecusa ? ' — ' + _e(m.motivoRecusa) : ''}</span>` : '<span style="color:#B45309">⏳ Aguardando confirmação do escritório</span>';
+    const hr = t.querySelector('hr'); if (hr) hr.insertAdjacentHTML('afterend', `<div data-dm="1" style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:10px 12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+      ${L('Motivo da saída', m.motivo)}${L('Obra de destino', m.destinoNome)}${L(m.medidor === 'hodometro' ? 'Hodômetro na saída' : 'Horímetro na saída', m.hor ? m.hor + un : '')}${L('Na chegada', m.horMob !== '' && m.horMob != null ? m.horMob + un : '')}${L('Uso na obra', m.usoNaObra !== '' && m.usoNaObra != null ? _n1(+m.usoNaObra) + un : '')}${L('Chegou em', m.dataMob ? fmtData(m.dataMob) : '')}${L('Combustível', m.comb)}${L('Prancha / caminhão', m.prancha)}
+      <div style="grid-column:1/-1;font-size:12.5px;font-weight:700">${st}</div>${m.obs ? `<div style="grid-column:1/-1;font-size:12.5px">Obs.: ${_e(m.obs)}</div>` : ''}</div>`);
+    return r;
+  };
+})();
+
+// ── kickoff: alojamentos completos
+function _kkAloj(O, sv, dia, PROP) {
+  const FS = (dados.funcionarios || []).filter(f => /^kk_f\d+$/.test(f.id)).sort((a, b) => +a.id.slice(4) - +b.id.slice(4)); if (FS.length < 31) return;
+  const M = (i, ent, qto, extra) => ({ id: 'kk_m' + i, func: FS[i].id, nome: FS[i].nome, mat: FS[i].mat, funcao: FS[i].funcao, entrada: ent, quarto: qto || '', ...(extra || {}) });
+  const X = { kick: true, obra: O, status: 'Ativa', criadoEm: new Date().toISOString() };
+  const R = [];
+  R.push(sv('republicas', { id: 'kk_r1', cod: 'REP-001', nome: 'República Centro', tipo: 'República', endereco: 'Rua Barão de Monte Santo, 410 — Centro, Mococa/SP', vagas: 6,
+    quartos: [{ cod: 'Q1', vagas: 2 }, { cod: 'Q2', vagas: 2 }, { cod: 'Q3', vagas: 2 }], responsavel: 'Maria Aparecida Souza', propDoc: _docFmt(_kkCpf(901)), tel: '(19) 99812-4410',
+    aluguel: 3200, agua: 160, luz: 320, internet: 110, extras: [{ desc: 'IPTU', valor: 140 }], inicio: dia(60), fim: '2027-06-30', dataContrato: dia(63), obs: 'Chave reserva com o encarregado Paulo.',
+    moradores: [M(5, dia(58), 'Q1'), M(6, dia(58), 'Q1'), M(8, dia(58), 'Q2'), M(13, dia(40), 'Q2'), M(15, dia(22), 'Q3'), M(26, dia(58), 'Q3', { saida: dia(23) })], ...X }));
+  R.push(sv('republicas', { id: 'kk_r2', cod: 'REP-002', nome: 'Alojamento do canteiro', tipo: 'Alojamento', endereco: 'Canteiro de obras — Av. Dr. Américo Pereira Lima, s/n', vagas: 12,
+    quartos: [{ cod: 'A-01', vagas: 4 }, { cod: 'A-02', vagas: 4 }, { cod: 'A-03', vagas: 4 }], responsavel: PROP.fantasia || PROP.nome, aluguel: 0, agua: 400, luz: 900, internet: 150,
+    extras: [{ desc: 'Limpeza (terceirizada)', valor: 1200 }, { desc: 'Locação dos módulos', valor: 2800 }], inicio: dia(62), fim: '2027-12-31',
+    moradores: [M(9, dia(56), 'A-01'), M(10, dia(56), 'A-01'), M(11, dia(56), 'A-01'), M(16, dia(56), 'A-01'), M(17, dia(50), 'A-02'), M(18, dia(50), 'A-02'), M(23, dia(44), 'A-02'), M(24, dia(30), 'A-03'), M(25, dia(30), 'A-03'), M(30, dia(12), 'A-03'),
+      { id: 'kk_mp1', func: '', mat: '', nome: 'Josué Batista Ferreira', funcao: 'Ajudante (aguardando admissão)', cpf: _docFmt(_kkCpf(733)), entrada: dia(3), quarto: 'A-03', externo: true, provisorio: true }], ...X }));
+  R.push(sv('republicas', { id: 'kk_r3', cod: 'REP-003', nome: 'Pousada São Benedito', tipo: 'Hotel / pousada', endereco: 'Rua São Benedito, 77 — Mococa/SP', vagas: 4, responsavel: 'Pousada São Benedito Ltda', propDoc: '', tel: '(19) 3656-2210',
+    aluguel: 0, agua: 0, luz: 0, internet: 0, extras: [{ desc: 'Diárias (4 vagas × R$ 95 × 30)', valor: 11400 }, { desc: 'Café da manhã', valor: 1440 }], inicio: dia(35), fim: dia(-12), dataContrato: dia(36), obs: 'Contrato mensal — renovar antes do vencimento.',
+    moradores: [M(19, dia(34)), M(20, dia(34)), M(21, dia(20)), M(22, dia(20))], ...X }));
+  R.push(sv('republicas', { id: 'kk_r4', cod: 'REP-004', nome: 'República Vila Nova', tipo: 'República', endereco: 'Rua Sete de Setembro, 1230 — Vila Nova, Mococa/SP', vagas: 4,
+    quartos: [{ cod: 'Q1', vagas: 2 }, { cod: 'Q2', vagas: 2 }], responsavel: 'João Batista Ramos', propDoc: _docFmt(_kkCpf(905)), tel: '(19) 99654-1188',
+    aluguel: 2400, agua: 140, luz: 260, internet: 99, inicio: dia(70), fim: dia(5), dataContrato: dia(72), obs: 'Contrato VENCIDO — negociar renovação. Casa acima da lotação.',
+    moradores: [M(12, dia(66), 'Q1'), M(14, dia(66), 'Q1'), M(27, dia(41), 'Q2'), M(28, dia(41), 'Q2'), M(29, dia(9), 'Q2')], ...X }));
+  R.push(sv('republicas', { id: 'kk_r5', cod: 'REP-005', nome: 'Casa Jardim Europa', tipo: 'República', endereco: 'Rua Lisboa, 54 — Jardim Europa, Mococa/SP', vagas: 3, responsavel: 'Ana Lúcia Prado', propDoc: _docFmt(_kkCpf(907)),
+    aluguel: 1800, agua: 90, luz: 150, internet: 0, inicio: dia(68), fim: dia(15), dataContrato: dia(69), obs: 'Encerrada — pessoal foi para o alojamento do canteiro.',
+    moradores: [M(3, dia(66), '', { saida: dia(15) }), M(4, dia(66), '', { saida: dia(15) })], ...X, status: 'Encerrada' }));
+  /* vistorias (check-list do app) */
+  const CK = ['Limpeza geral', 'Banheiros', 'Cozinha', 'Quartos e camas', 'Colchões e roupa de cama', 'Instalação elétrica / iluminação', 'Hidráulica / vazamentos', 'Portas, janelas e fechaduras', 'Extintor e segurança', 'Lixo e área externa'];
+  const PB = { 'Banheiros': 'Chuveiro do banheiro 2 sem aquecer', 'Hidráulica / vazamentos': 'Vazamento na pia da cozinha', 'Extintor e segurança': 'Extintor vencido', 'Limpeza geral': 'Casa suja, lixo acumulado', 'Colchões e roupa de cama': 'Faltam 2 jogos de cama', 'Portas, janelas e fechaduras': 'Fechadura do portão quebrada' };
+  const VS = [['kk_r1', 2, ['Banheiros']], ['kk_r1', 16, []], ['kk_r1', 30, ['Extintor e segurança']], ['kk_r2', 1, ['Limpeza geral', 'Colchões e roupa de cama']], ['kk_r2', 9, []], ['kk_r2', 23, ['Hidráulica / vazamentos']], ['kk_r3', 6, []], ['kk_r4', 4, ['Portas, janelas e fechaduras', 'Hidráulica / vazamentos', 'Extintor e segurança']], ['kk_r4', 25, ['Banheiros']]];
+  const QUEM = ['Paulo Henrique Souza', 'Carlos Eduardo Santos', 'Valdir Mendes'];
+  VS.forEach(([rid, n, pbs], i) => { const r = R.find(x => x.id === rid), d = dia(n), ativos = (r.moradores || []).filter(m => (m.entrada || '') <= d && (!m.saida || m.saida > d)).length;
+    const itens = CK.map(t => ({ item: t, st: pbs.includes(t) ? 'pb' : 'ok', obs: pbs.includes(t) ? PB[t] : '' }));
+    sv('vistoriasRep', { id: 'kk_vr' + i, repId: r.id, repNome: r.nome, obra: O, data: d, em: d + 'T' + ['09:12', '17:40', '08:05'][i % 3] + ':00', por: QUEM[i % 3], porId: '', itens, problemas: pbs.length, obs: pbs.length ? 'Avisado o proprietário.' : '', moradores: ativos, vagas: +r.vagas || 0, fotos: [], kick: true }); });
+}
+// ── kickoff: 2 saídas de equipamento aguardando confirmação (uma fim de contrato, uma transferência)
+function _kkDesmob(O, sv, dia) {
+  const eqs = (dados.equipamentos || []).filter(e => /^kk_q\d+$/.test(e.id)); if (eqs.length < 7) return;
+  const hor = e => { const l = (dados.diesel || []).filter(d => d.equipId === e.id || d.equip === e.tag).map(d => parseFloat(d.hor || d.horimetro)).filter(v => !isNaN(v)); return l.length ? Math.max(...l) : (e.medidor === 'hodometro' ? 52000 : 2400); };
+  const mods = c => ((dados.modelos || []).find(m => m.cod === c) || {}).nome || c, fam = c => (typeof _nomeFamilia === 'function' && _nomeFamilia(c)) || c;
+  const obraDest = (dados.obras || []).find(o => o.id !== O && !/encerr/i.test(o.status || ''));
+  const CKI = ['Nível do óleo do motor', 'Nível do óleo hidráulico', 'Nível do líquido de arrefecimento', 'Pneus ou esteiras', 'Vazamentos (óleo, combustível, hidráulico)', 'Faróis e luzes', 'Sirene de ré e buzina', 'Extintor de incêndio (carga e validade)', 'Cinto de segurança', 'Espelhos e vidros', 'Freios e freio de estacionamento', 'Painel e instrumentos', 'Documentação (CRLV, manual, certificados)', 'Kit de mitigação ambiental', 'Limpeza geral e cabine'];
+  [[eqs[6], 'Fim do contrato / devolução à locadora', null, 0, '14:20', ['Espelhos e vidros'], [{ desc: 'Retrovisor direito trincado' }], 'Carlos Eduardo Santos', 'Marcos (Gama Transportes)', 'FTR-4C21'],
+   [eqs[3], 'Transferência para outra obra', obraDest, 1, '16:05', [], [], 'Paulo Henrique Souza', 'Rogério Lima', 'PRA-8J55']].forEach(([e, mot, dest, n, h, nok, av, ent, rec, pr], i) => {
+    const fim = hor(e) + 3 + i * 2, ini = Math.round(fim - (e.medidor === 'hodometro' ? 5240 : 612.5));
+    sv('mobilizacoes', { id: 'kk_dm' + i, tipo: 'desmobilizacao', status: 'pendente', equipId: e.id, tag: e.tag, placa: e.placa || '', obra: O, data: dia(n), hora: h, motivo: mot,
+      destino: dest ? dest.id : '', destinoNome: dest ? (dest.nome || dest.cod) : (/transfer/i.test(mot) ? 'Obra Lote 19 — Casa Branca' : ''),
+      familia: e.familia, familiaNome: fam(e.familia), codModelo: e.codModelo, modeloNome: mods(e.codModelo), prop: e.prop, empresaNome: e.prop, medidor: e.medidor, hor: String(fim), horMob: ini, usoNaObra: Math.round((fim - ini) * 10) / 10, dataMob: e.dataMob, comb: ['1/4', '1/2'][i],
+      fotoHor: '', fotos: {}, checklist: CKI.map(t => ({ t, st: nok.includes(t) ? 'nok' : 'ok', obs: nok.includes(t) ? 'Trincado no canto inferior' : '' })), avarias: av, acess: i ? 'Concha de 60 cm e rompedor' : 'Manual e lona',
+      obs: '', prancha: pr, nomeRec: rec, sigRec: '', nomeEnt: ent, sigEnt: '', lancadoPor: ent, lancadoPorId: '', validadoEm: dia(n) + 'T' + h + ':00', origem: 'app', kick: true }); });
+}
+// ── kickoff: login master (vê tudo, inclusive custo de pessoal)
+async function _kkMaster(O, PROP, W) {
+  const login = 'kickoffmaster', em = _preCampo() + login + '@' + _DOMINIO_PAINEL;
+  try { await criarAcessoFirebase(em, 'Demo@2026'); } catch (e) { if (e.code !== 'auth/email-already-in-use') { console.warn(login, e); return false; } }
+  const u = { id: 'kk_umaster', nome: 'Gestor Kickoff (master)', email: login + '@kickoff.obrakontrol.com.br', login, authEmail: em, senhaProvisoria: false, senhaDefinida: true, mat: '', perfil: 'Admin', obra: O, status: 'Ativo', master: true,
+    perms: { dashboards: true, cadastros: true, apontamentos: true, relatorios: true, qrcodes: true, config: true, almoxarifado: true, aprovacao: true, abastecimento: true, mobilizacao: true, manutencao: true, frota: true, suprimentos: true, custoPessoal: true },
+    empresa: PROP.id, cargo: 'Gestor', tel: '', kick: true };
+  USUARIOS = (USUARIOS || []).filter(z => z.id !== u.id); USUARIOS.push(u); W.push(['usuarios', u]); return true;
+}
+
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
