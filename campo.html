@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.39</div>
+  <div class="login-versao">ObraKontrol Campo · v3.40</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -991,7 +991,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
         <button type="button" class="ap-qr-frente" onclick="abrirQR('frente')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Ler QR Code da frente</button>
       </div>
       <div class="form-group">
-        <label class="form-label">Tipo de serviço</label>
+        <label class="form-label">Tipo de serviço *</label>
         <div class="fld"><svg class="fld-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><select class="form-control" id="ap-servico" onchange="apServicoMudou();apGuardar()"><option value="">Selecione o serviço…</option></select></div>
       </div>
       <div class="time-row">
@@ -2428,6 +2428,7 @@ function apServicoMudou() {
 
 function apConfirmarFrente() {
   if (!document.getElementById('ap-frente').value) { toast('Escolha a frente de serviço.', 'err'); return; }
+  if (!document.getElementById('ap-servico').value) { toast('Escolha o tipo de serviço.', 'err'); document.getElementById('ap-servico').focus(); return; }   /* v3.40 */
   if (!document.getElementById('ap-data').value) { toast('Informe a data.', 'err'); return; }
   apTab('mo');
 }
@@ -2435,6 +2436,7 @@ function apConfirmarFrente() {
 function apTab(aba) {
   const temFrente = !!document.getElementById('ap-frente').value;
   if (aba !== 'frente' && !temFrente) { toast('Escolha a frente de serviço primeiro.', 'err'); aba = 'frente'; }
+  else if (aba !== 'frente' && !document.getElementById('ap-servico').value) { toast('Escolha o tipo de serviço.', 'err'); aba = 'frente'; }   /* v3.40: serviço obrigatório */
   ap.aba = aba;
   document.getElementById('ap-panel-lista').style.display = 'none';
   ['frente','mo','eq','rev'].forEach(t => {
@@ -8352,6 +8354,7 @@ async function _rqRenumerar() {
 }
 setInterval(_rqRenumerar, 20000); window.addEventListener('online', () => setTimeout(_rqRenumerar, 4000));
 /* rqSalvar: mesmo fluxo, só o número muda */
+(function () { const oSA = salvarApropriacao; salvarApropriacao = window.salvarApropriacao = async function () { if (!document.getElementById('ap-servico')?.value) { toast('Escolha o tipo de serviço (aba Frente).', 'err'); apTab('frente'); return; } return oSA.apply(this, arguments); }; })();   /* v3.40 */
 rqSalvar = async function () {
   const f = []; if (!rq.enc) f.push('o encarregado responsável'); if (!rq.itens.some(it => it.qtd > 0)) f.push('ao menos um material');
   if (f.length) { toast('Falta: ' + f.join(', ') + '.', 'err'); return; }
@@ -8372,6 +8375,135 @@ rqSalvar = async function () {
 /* o almox no app acha a requisição pelo número definitivo ou pelo provisório */
 (function () { const o = axaBuscarNum; axaBuscarNum = function (v) { const q = String(v || '').trim().toUpperCase().replace(/[\s-]+/g, ''); if (!q) return;
   const r = (axa && axa.L || []).find(x => { const n = String(x.numProv || '').toUpperCase().replace(/[\s-]+/g, ''); return n && (n === q || n.endsWith(q)); }); if (r) return axaAtender(r.id); return o.apply(this, arguments); }; })();
+
+
+// ══════════════════════════════════════════════════════════════
+// v3.40: HORÍMETRO/KM COERENTE COM O ÚLTIMO REGISTRO + LEITURA AUTOMÁTICA DA FOTO
+// • Último registro do equipamento = maior leitura entre abastecimentos, apropriação e parte diária (servidor + celular).
+// • Não deixa salvar MENOR que o último, nem MAIOR do que a máquina conseguiria rodar desde então
+//   (horímetro: horas corridas desde o último registro + 2 h; km: 80 km/h corridos + 50 km).
+//   Exceção (horímetro trocado/com defeito): só com justificativa — vai marcada para o escritório.
+// • Ao tirar a foto do horímetro, o app lê o número (OCR no próprio celular) e preenche para a pessoa conferir.
+//   Usa o último registro para escolher o número certo entre os que aparecem na foto.
+// ══════════════════════════════════════════════════════════════
+const _hu = { cache: {} };
+function _huNum(v) { const n = parseFloat(String(v ?? '').replace(/\./g, (m, i, s) => (/,/.test(s) ? '' : '.')).replace(',', '.')); return isNaN(n) ? null : n; }
+function _huFmt(v, km) { return (+v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + (km ? ' km' : ' h'); }
+async function _huUltimo(equipId) {
+  const e = (dadosCampo.equipamentos || []).find(x => x.id === equipId) || {}, tag = e.tag || e.placa || '';
+  const c = _hu.cache[equipId]; if (c && Date.now() - c.em < 60000) return c.r;
+  let best = null; const up = (v, quando, fonte) => { const h = _huNum(v); if (h == null || h <= 0) return; if (!best || h > best.hor || (h === best.hor && quando > best.quando)) best = { hor: h, quando: quando || '', fonte }; };
+  try { const u = await ultimoHorimetro(equipId); if (u) up(u.hor, (u.data || '') + ' 23:59', 'apropriação'); } catch (er) {}
+  try { (typeof pendentes !== 'undefined' ? pendentes : []).forEach(p => { if (p.colecao === 'diesel' && (p.item.equipId === equipId || p.item.equip === tag)) up(p.item.hor, p.item.dt, 'abastecimento'); if (p.colecao === 'partesDiarias' && p.item.equipId === equipId) up(p.item.horFim, (p.item.data || '') + ' ' + (p.item.horaFim || '23:59'), 'parte diária'); }); } catch (er) {}
+  if (db && _fbReady && isOnline) {
+    const T = q => Promise.race([q.get(), new Promise(r => setTimeout(() => r(null), 6000))]).catch(() => null);
+    const [a, b, d] = await Promise.all([T(db.collection('diesel').where('equipId', '==', equipId)), tag ? T(db.collection('diesel').where('equip', '==', tag)) : null, T(db.collection('partesDiarias').where('equipId', '==', equipId))]);
+    [a, b].forEach(s => s && s.forEach(x => { const y = x.data(); if (!/rejeit|descart/i.test(y.status || '')) up(y.hor, y.dt, 'abastecimento'); }));
+    if (d) d.forEach(x => { const y = x.data(); up(y.horFim, (y.data || '') + ' ' + (y.horaFim || '23:59'), 'parte diária'); });
+  }
+  _hu.cache[equipId] = { em: Date.now(), r: best }; return best;
+}
+function _huLimite(ult, km, quando) {
+  if (!ult) return null; const ref = new Date(String(ult.quando || '').replace(' ', 'T') || 0), alvo = quando ? new Date(String(quando).replace(' ', 'T')) : new Date();
+  let hrs = (alvo - ref) / 3600000; if (isNaN(hrs) || hrs < 0) hrs = 0; hrs = Math.max(hrs, 1);
+  return km ? ult.hor + Math.round(hrs * 80 + 50) : Math.round((ult.hor + hrs + 2) * 10) / 10;
+}
+/* 'ok' | {erro, ult, max} */
+function _huChecar(v, ult, km, quando) {
+  const h = _huNum(v); if (h == null || !ult) return 'ok'; const max = _huLimite(ult, km, quando);
+  if (h < ult.hor) return { erro: (km ? 'Km' : 'Horímetro') + ' ' + _huFmt(h, km) + ' é MENOR que o último registro (' + _huFmt(ult.hor, km) + ' em ' + String(ult.quando).slice(8, 10) + '/' + String(ult.quando).slice(5, 7) + ', ' + ult.fonte + ').', ult, max };
+  if (max != null && h > max) return { erro: (km ? 'Km' : 'Horímetro') + ' ' + _huFmt(h, km) + ' passa do possível desde o último registro (' + _huFmt(ult.hor, km) + ' em ' + String(ult.quando).slice(8, 10) + '/' + String(ult.quando).slice(5, 7) + '): máximo ' + _huFmt(max, km) + '.', ult, max };
+  return 'ok';
+}
+function _huInfoHtml(ult, km, quando, v) {
+  if (!ult) return '<span style="color:var(--text3)">Sem registro anterior deste equipamento.</span>';
+  const max = _huLimite(ult, km, quando), ck = v != null && String(v).trim() !== '' ? _huChecar(v, ult, km, quando) : 'ok';
+  const base = `Último: <b>${_huFmt(ult.hor, km)}</b> em ${String(ult.quando).slice(8, 10)}/${String(ult.quando).slice(5, 7)} (${ult.fonte}) · aceito até <b>${_huFmt(max, km)}</b>`;
+  return ck === 'ok' ? `<span style="color:var(--text2)">${base}</span>` : `<span style="color:var(--red);font-weight:700">⚠ ${_esc(ck.erro)}</span>`;
+}
+async function _huJustificar(ck) {
+  const j = prompt(ck.erro + '\n\nSe o horímetro foi TROCADO ou está COM DEFEITO, escreva o motivo para salvar assim (vai marcado para o escritório). Senão, cancele e corrija o número.', '');
+  return j && String(j).trim().length >= 5 ? String(j).trim() : null;
+}
+
+// ── OCR (Tesseract.js, roda no celular; baixa ~4 MB na 1ª vez e fica em cache)
+const _ocr = { p: null, w: null };
+function _ocrLib() { if (window.Tesseract) return Promise.resolve(); if (_ocr.p) return _ocr.p;
+  _ocr.p = new Promise((ok, f) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'; s.onload = () => ok(); s.onerror = () => { _ocr.p = null; f(new Error('ocr')); }; document.head.appendChild(s); }); return _ocr.p; }
+function _ocrPrep(src, inverter) { return new Promise((ok, f) => { const im = new Image(); im.onload = () => { const W = Math.min(1600, Math.max(900, im.width)), H = Math.round(im.height * W / im.width), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'); g.drawImage(im, 0, 0, W, H); const d = g.getImageData(0, 0, W, H), p = d.data; let mn = 255, mx = 0; const L = new Uint8ClampedArray(W * H);
+  for (let i = 0, j = 0; i < p.length; i += 4, j++) { const y = .299 * p[i] + .587 * p[i + 1] + .114 * p[i + 2]; L[j] = y; if (y < mn) mn = y; if (y > mx) mx = y; }
+  const k = 255 / Math.max(30, mx - mn); for (let i = 0, j = 0; i < p.length; i += 4, j++) { let y = (L[j] - mn) * k; if (inverter) y = 255 - y; p[i] = p[i + 1] = p[i + 2] = y; }
+  g.putImageData(d, 0, 0); ok(c); }; im.onerror = f; im.src = src; }); }
+async function ocrNumeros(src) {
+  await _ocrLib();
+  if (!_ocr.w) { _ocr.w = await Tesseract.createWorker('eng'); await _ocr.w.setParameters({ tessedit_char_whitelist: '0123456789.,', tessedit_pageseg_mode: '11' }); }
+  const out = new Set(), lido = [];
+  for (const inv of [false, true]) { try { const c = await _ocrPrep(src, inv), r = await _ocr.w.recognize(c); (String(r.data.text || '').match(/\d[\d.,]*\d|\d/g) || []).forEach(t => { const s = t.replace(/[.,](?=\d{3}(\D|$))/g, ''); const n = _huNum(s); if (n != null) { out.add(n); lido.push(n); } const so = t.replace(/\D/g, ''); if (so.length >= 2) { out.add(+so); out.add(+so / 10); } }); } catch (e) {} }
+  const L = [...out]; L.lido = lido; return L;
+}
+function ocrEscolher(nums, ult, km, quando) {
+  if (!nums.length) return null;
+  if (ult) { const max = _huLimite(ult, km, quando); const ok = nums.filter(n => n >= ult.hor && n <= max).sort((a, b) => a - b); return ok.length ? ok[ok.length - 1] : null; }
+  const lid = (nums.lido || []).filter(n => Math.floor(n) >= 100).sort((a, b) => b - a); if (lid.length) return lid[0];
+  const g = nums.filter(n => n >= 10).sort((a, b) => String(Math.round(b)).length - String(Math.round(a)).length || b - a); return g[0] ?? null;
+}
+async function ocrPreencher(src, input, ult, km, quando, hintEl) {
+  if (!input || !src) return; const antes = input.value; if (hintEl) hintEl.innerHTML = '<span style="color:var(--text3)">📷 Lendo o número da foto…</span>';
+  let v = null; try { v = ocrEscolher(await ocrNumeros(src), ult, km, quando); } catch (e) { if (hintEl) hintEl.innerHTML = '<span style="color:var(--text3)">Não consegui ler a foto (sem internet na 1ª vez?). Digite o número.</span>'; return null; }
+  if (input.value !== antes && input.value !== '' && !input.dataset.ocr) return null;   // a pessoa digitou enquanto lia
+  if (v == null) { if (hintEl) hintEl.innerHTML = '<span style="color:#B45309">📷 Não achei um número coerente na foto. Digite olhando o horímetro.</span>'; return null; }
+  input.value = String(v).replace('.', ','); input.type === 'number' && (input.value = String(v)); input.dataset.ocr = '1';
+  input.style.boxShadow = '0 0 0 2px #F59E0B inset'; input.dispatchEvent(new Event('input', { bubbles: true }));
+  const lim = () => { input.style.boxShadow = ''; delete input.dataset.ocr; input.removeEventListener('input', lim2); }; const lim2 = e => { if (e.isTrusted) lim(); }; input.addEventListener('input', lim2);
+  if (hintEl) hintEl.insertAdjacentHTML('afterbegin', '<div style="color:#B45309;font-weight:800;margin-bottom:2px">📷 Lido da foto: ' + _huFmt(v, km) + ' — confira com o horímetro</div>');
+  return v;
+}
+
+// ── ABASTECIMENTO
+(function () {
+  const inp = () => document.getElementById('fuel-horimetro');
+  const info = () => { let el = document.getElementById('fuel-hor-info'); const i = inp(); if (!el && i) { i.insertAdjacentHTML('afterend', '<div id="fuel-hor-info" style="font-size:12px;margin-top:6px;line-height:1.4"></div>'); el = document.getElementById('fuel-hor-info'); } return el; };
+  const isKm = () => typeof _fuelMedNome === 'function' && _fuelMedNome() === 'hodômetro';
+  const quando = () => (document.getElementById('fuel-data')?.value || _hojeISO()) + ' ' + (document.getElementById('fuel-hora')?.value || '23:59');
+  let ultAtual = null, eqAtual = '';
+  async function atualizar() { const id = document.getElementById('fuel-equip')?.value || '', el = info(); if (!el) return;
+    if (!id) { el.innerHTML = ''; ultAtual = null; eqAtual = ''; return; }
+    if (id !== eqAtual) { eqAtual = id; ultAtual = undefined; el.innerHTML = '<span style="color:var(--text3)">Buscando o último registro…</span>'; ultAtual = await _huUltimo(id); if (eqAtual !== id) return; }
+    el.innerHTML = _huInfoHtml(ultAtual, isKm(), quando(), inp()?.value); }
+  document.addEventListener('change', e => { if (['fuel-equip', 'fuel-data', 'fuel-hora'].includes(e.target.id)) atualizar(); }, true);
+  document.addEventListener('input', e => { if (e.target.id === 'fuel-horimetro' && ultAtual !== undefined) { const el = info(); if (el) { const ocr = el.querySelector('div'); el.innerHTML = (e.isTrusted ? '' : (ocr ? ocr.outerHTML : '')) + _huInfoHtml(ultAtual, isKm(), quando(), e.target.value); } } }, true);
+  setInterval(() => { const id = document.getElementById('fuel-equip')?.value || ''; if (id !== eqAtual && document.getElementById('screen-fuel')?.classList.contains('active')) atualizar(); }, 1500);
+  const oF = fuelFoto; fuelFoto = async function (k) { const r = await oF.apply(this, arguments);
+    if (k === 'hor' && _fuelFotos.hor) { if (ultAtual === undefined || eqAtual !== (document.getElementById('fuel-equip')?.value || '')) await atualizar(); ocrPreencher(_fuelFotos.hor.img, inp(), ultAtual, isKm(), quando(), info()); }
+    return r; };
+  const oS = salvarFuel; salvarFuel = async function () {
+    const id = document.getElementById('fuel-equip')?.value || '', v = inp()?.value;
+    window._fuelExtra = { ...(window._fuelExtra || {}) }; delete window._fuelExtra.horJust;
+    if (id && String(v || '').trim()) { const ult = await _huUltimo(id), ck = _huChecar(v, ult, isKm(), quando());
+      if (ck !== 'ok') { const j = await _huJustificar(ck); if (!j) { toast(ck.erro, 'err'); atualizar(); return; } window._fuelExtra.horJust = j; window._fuelExtra.horAlerta = ck.erro; } }
+    const r = await oS.apply(this, arguments); _hu.cache[id] = null; eqAtual = ''; setTimeout(atualizar, 300); return r; };
+})();
+
+// ── PARTE DIÁRIA (horímetro inicial e final)
+(function () {
+  const isKm = () => { const e = (dadosCampo.equipamentos || []).find(x => x.id === pd?.equipId); return !!(e && typeof _medKmC === 'function' && _medKmC(e)); };
+  const oF = pdFoto; pdFoto = async function () { const r = await oF.apply(this, arguments);
+    try { if (pd && pd.foto) { const ult = await _huUltimo(pd.equipId); const inps = [...document.querySelectorAll('#screen-pd input[oninput*="horFim"]')], i = inps[0];
+        if (i) { let h = document.getElementById('pd-hor-ocr'); if (!h) { i.closest('.form-group')?.insertAdjacentHTML('beforeend', '<div id="pd-hor-ocr" style="font-size:12px;margin-top:6px"></div>'); h = document.getElementById('pd-hor-ocr'); }
+          const base = ult && _huNum(pd.horIni) != null && _huNum(pd.horIni) > ult.hor ? { ...ult, hor: _huNum(pd.horIni) } : ult;
+          const v = await ocrPreencher(pd.foto, i, base, isKm(), (pd.data || _hojeISO()) + ' ' + (pd.horaFim || '23:59'), h); if (v != null) pd.horFim = String(v); } } } catch (e) {}
+    return r; };
+  const oS = pdSalvar; pdSalvar = async function () {
+    try { if (pd && pd.equipId) { const ult = await _huUltimo(pd.equipId), km = isKm();
+        for (const [k, rot, q] of [['horIni', 'inicial', (pd.data || '') + ' ' + (pd.horaIni || '00:00')], ['horFim', 'final', (pd.data || '') + ' ' + (pd.horaFim || '23:59')]]) {
+          if (String(pd[k] ?? '').trim() === '' || (k === 'horIni' && pd._existe)) continue;
+          const ck = _huChecar(pd[k], ult, km, q); if (ck === 'ok' || pd.horJust) continue;
+          const j = await _huJustificar({ ...ck, erro: 'Parte diária — ' + rot + ': ' + ck.erro }); if (!j) { toast(ck.erro, 'err'); return; } pd.horJust = j; pd.horAlerta = ck.erro; } } } catch (e) {}
+    const oFs = fbSalvar, ex = pd && pd.horJust ? { horJust: pd.horJust, horAlerta: pd.horAlerta } : null;
+    if (ex) fbSalvar = async function (c, it) { if (c === 'partesDiarias' && it) Object.assign(it, ex); return oFs.apply(this, arguments); };
+    try { return await oS.apply(this, arguments); } finally { if (ex) fbSalvar = oFs; } };
+})();
 
 </script>
 </body>

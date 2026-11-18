@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.100 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.101 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -11895,6 +11895,7 @@ function _absMapa() {
       const r = m[d.id] = { cap, prev, lph: 0, alertas: [] };
       const lt = +d.litros || 0, h = _horNum(d.hor);
       if (cap && lt > cap) r.alertas.push({ t: 'cap', txt: 'Acima do tanque: ' + _fmtL(lt) + ' (máx. ' + _fmtL(cap) + ')' });
+      if (d.horJust) r.alertas.push({ t: 'hor', txt: 'Horímetro fora do esperado, liberado com justificativa: ' + d.horJust });   /* v4.101 */
       if (!isNaN(h) && ant) {
         const dh = h - ant.h;
         if (dh <= 0) r.alertas.push({ t: 'hor', txt: 'Horímetro não avançou (' + _fmtN(h) + ' · anterior ' + _fmtN(ant.h) + ')' });
