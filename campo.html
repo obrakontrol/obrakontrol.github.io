@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.31</div>
+  <div class="login-versao">ObraKontrol Campo · v3.32</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -7814,6 +7814,38 @@ function rqManualOk() { const m = rq.manual, q = parseFloat(String(m.qtd).replac
       <div style="display:flex;gap:8px"><button type="button" class="btn btn-outline" style="flex:1" onclick="rq.manual=null;rqRender()">Cancelar</button><button type="button" class="btn btn-green" style="flex:1" onclick="rqManualOk()">Incluir</button></div>
       <div style="font-size:11.5px;color:var(--text3);margin-top:6px">O almoxarifado vincula ao código do estoque na hora de entregar.</div></div>`; }
   };
+})();
+// ═══════════════════════════════════════════════════════════════
+// v3.32: PRODUÇÃO DE TERCEIRO EM ABERTO — igual à apropriação: abre de manhã (empreiteira, frente, início, equipe),
+// salva e termina no fim do dia (fim, quantidade, fotos). Fica guardado no celular até finalizar.
+// ═══════════════════════════════════════════════════════════════
+function _ptRasc() { try { const u = usuarioCampo?.id || ''; return JSON.parse(localStorage.getItem('campo_pt_rasc') || '[]').filter(r => !r.uid || r.uid === u); } catch (e) { return []; } }
+function _ptRascSet(L) { try { const u = usuarioCampo?.id || '', out = JSON.parse(localStorage.getItem('campo_pt_rasc') || '[]').filter(r => r.uid && r.uid !== u); localStorage.setItem('campo_pt_rasc', JSON.stringify(out.concat(L))); } catch (e) { toast('Não coube no celular (fotos demais?). Tire uma foto e tente de novo.', 'err'); } _ptCardSub(); }
+function _ptCardSub() { const c = document.getElementById('card-pt'), n = _ptRasc().length; if (!c) return; const s = c.querySelector('.hcard-s'); if (s) s.innerHTML = n ? `<b style="color:#FCD34D">${n} em aberto</b>` : 'Empreiteiras · qtd e efetivo'; }
+function ptGuardar() { if (!pt) return; const f = [];
+  if (!pt.data) f.push('a data'); if (!pt.horaIni) f.push('a hora de início'); if (!pt.empresa) f.push('a empreiteira'); if (!pt.frente) f.push('a frente');
+  if (f.length) { toast('Para guardar, falta: ' + f.join(', ') + '.', 'err'); return; }
+  if (pt.data > _hojeISO()) { toast('A data não pode ser futura.', 'err'); return; }
+  pt.rid = pt.rid || 'ptr' + Date.now().toString(36); const L = _ptRasc().filter(r => r.rid !== pt.rid), emp = _ptEmps().find(e => e.id === pt.empresa);
+  const { precos, _lista, modo, ...d } = pt; L.unshift({ ...d, uid: usuarioCampo?.id || '', empresaNome: _ptEmpNome(emp), guardadoEm: new Date().toISOString() }); _ptRascSet(L);
+  toast('Guardado ✓ — no fim do dia abra e finalize (fim, quantidade e fotos).', 'ok'); ptSair(); }
+async function ptContinuar(rid) { const r = _ptRasc().find(x => x.rid === rid); if (!r) return; if (!pt) await ptAbrir(); const p0 = pt.precos;
+  pt = { ...pt, ...r, modo: 'novo', precos: p0 }; if (!pt.gps) ptGeo(); ptRender(); window.scrollTo(0, 0); }
+function ptDescartar(rid) { if (!confirm('Descartar este lançamento em aberto?')) return; _ptRascSet(_ptRasc().filter(r => r.rid !== rid)); if (pt && pt.rid === rid) { pt.rid = null; } ptRender(); }
+(function () {
+  const oR = ptRender; ptRender = window.ptRender = function () { oR.apply(this, arguments); if (!pt || pt.modo !== 'novo') return;
+    const el = document.getElementById('pt-content'), bar = document.getElementById('pt-bar'), E = _ptE, L = _ptRasc().filter(r => r.rid !== pt.rid);
+    if (pt.rid) el.insertAdjacentHTML('afterbegin', `<div style="margin:0 0 10px;border-radius:14px;padding:10px 14px;background:#DBEAFE;color:#1E3A8A;font-size:13px;font-weight:700">✏️ Continuando o lançamento aberto às ${E(pt.horaIni || '')} — preencha o fim, a quantidade e as fotos e finalize.</div>`);
+    if (L.length) el.insertAdjacentHTML('afterbegin', `<div class="card"><div class="card-body"><div class="form-label" style="margin-bottom:4px">Em aberto (${L.length})</div>${L.map(r => `<div class="pt-it" style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="min-width:0"><b>${E(r.empresaNome || '')} · ${E(r.frente)}</b><div style="font-size:12px;color:var(--text2)">${E(String(r.data).split('-').reverse().join('/'))} desde ${E(r.horaIni)}${r.servico ? ' · ' + E(r.servico) : ''}${+r.pessoas ? ' · ' + r.pessoas + ' pessoa(s)' : ''}</div></div>
+      <div style="display:flex;gap:6px;flex-shrink:0"><button type="button" class="btn btn-outline" style="width:auto;padding:6px 10px;font-size:12px" onclick="ptDescartar('${r.rid}')">✕</button><button type="button" class="btn btn-green" style="width:auto;padding:6px 12px;font-size:13px" onclick="ptContinuar('${r.rid}')">Continuar</button></div></div>`).join('')}</div></div>`);
+    if (bar) bar.innerHTML = '<button class="btn btn-outline" onclick="ptGuardar()">Salvar e terminar depois</button><button class="btn btn-green" onclick="ptSalvar()">✓ Finalizar</button>';
+  };
+  const oS = ptSalvar; ptSalvar = window.ptSalvar = async function () { const rid = pt && pt.rid; let n0 = 0; try { n0 = JSON.parse(localStorage.getItem('campo_pt_meus') || '[]').length; } catch (e) {}
+    const r = await oS.apply(this, arguments); let n1 = n0; try { n1 = JSON.parse(localStorage.getItem('campo_pt_meus') || '[]').length; } catch (e) {}
+    if (rid && n1 !== n0) { _ptRascSet(_ptRasc().filter(x => x.rid !== rid)); if (pt) pt.rid = null; ptRender(); } return r; };
+  setTimeout(_ptCardSub, 2000); setInterval(_ptCardSub, 15000);
+  // lembra no fim do turno de apropriação
+  const oA = salvarApropriacao; salvarApropriacao = window.salvarApropriacao = async function () { const r = await oA.apply(this, arguments); const n = _ptRasc().length; if (n) setTimeout(() => toast('Você tem ' + n + ' produção(ões) de terceiro em aberto para finalizar.', 'ok'), 3500); return r; };
 })();
 </script>
 </body>
