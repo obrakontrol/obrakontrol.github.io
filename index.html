@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.96 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.97 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18988,6 +18988,9 @@ async function _kkGerar(nUsr) {
   try { _kkMatSemReq(); } catch (e) { console.warn('kk semreq', e); }   /* v4.95 */
   try { _kkProg('Criando login master…'); window._kkMasterOk = await _kkMaster(O, PROP, W); } catch (e) { console.warn('kk master', e); }
   window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
+  /* v4.97: registra o acesso (acessos/<e-mail> → cliente) dos logins do kickoff — sem isso o app não acha o cadastro */
+  if (db && _firebaseReady && window.OK_CLIENTE) for (const [c, u] of W) { if (c !== 'usuarios') continue;
+    for (const em of [...new Set([u.authEmail, u.email].filter(Boolean).map(x => String(x).toLowerCase()))]) { try { await db.collection('acessos').doc(em).set({ cliente: window.OK_CLIENTE, nome: u.nome || '', perfil: u.perfil || '', kick: true, atualizadoEm: new Date().toISOString() }, { merge: true }); } catch (e) { console.warn('kk acesso', em, e); } } }
   try { _roHash && delete _roHash[O]; _publicarResumoObras(); } catch (e) {}   // v4.46: "Frente hoje" do app já mostra meta e avanço
   try { window._absCache = { k: '', m: {} }; } catch (e) {}
   _kkProg('');
@@ -21311,6 +21314,11 @@ function _axProcApp() {
     if (r && r.origemEntrega === 'app') { const m = document.querySelector('.modal-overlay.open .modal-body') || document.querySelector('.modal-overlay.open'); if (m && !m.querySelector('.ax-app')) m.insertAdjacentHTML('afterbegin', `<div class="ax-app" style="margin-bottom:8px;font-size:12.5px;color:#15803D;font-weight:700">📱 Entregue pelo app do almoxarifado${r.entreguePor ? ' — ' + _e(r.entreguePor) : ''}${r.entregueEm ? ' em ' + _e(new Date(r.entregueEm).toLocaleString('pt-BR')) : ''}</div>`); } } catch (e) {} return r0; };
 })();
 
+// v4.97: reparo — logins do kickoff gerados antes desta versão ganham o registro de acesso ao abrir o painel
+setTimeout(async function _kkReparaAcessos() { try { if (!(db && _firebaseReady && window.OK_CLIENTE)) return setTimeout(_kkReparaAcessos, 4000);
+  const L = (typeof USUARIOS !== 'undefined' ? USUARIOS : []).filter(u => u.kick && u.authEmail); if (!L.length) return setTimeout(_kkReparaAcessos, 6000);
+  for (const u of L) { const em = String(u.authEmail).toLowerCase(), d = await db.collection('acessos').doc(em).get().catch(() => null);
+    if (d && !d.exists) await db.collection('acessos').doc(em).set({ cliente: window.OK_CLIENTE, nome: u.nome || '', perfil: u.perfil || '', kick: true, atualizadoEm: new Date().toISOString() }, { merge: true }).catch(() => {}); } } catch (e) {} }, 5000);
 // Apply configs on load
 setTimeout(applyConfigs, 200);
 setTimeout(function() {
