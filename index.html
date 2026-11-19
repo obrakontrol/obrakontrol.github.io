@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.104 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.105 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -4252,7 +4252,7 @@ function fazerLogin() {
       if (!usr) {
         // Só cria perfil Admin automático se ainda não existir nenhum administrador (primeira instalação)
         const temAdmin = (usrs||[]).some(u => u.perfil === 'Admin');
-        if (temAdmin) { auth.signOut(); erro('O acesso ' + emailAuth + ' entrou, mas não tem cadastro em Usuários do ObraKontrol. Confira o e-mail cadastrado ou fale com o administrador.'); return; }
+        if (temAdmin) { auth.signOut(); erro(!window.OK_CLIENTE && /@painel\.obracontrol\.app$/.test(emailAuth) ? 'Login e senha certos, mas o seu acesso ainda não foi liberado na base da empresa. Peça ao administrador para abrir a tela Usuários do painel (a liberação é automática) e tente de novo.' : 'O acesso ' + emailAuth + ' entrou, mas não tem cadastro em Usuários do ObraKontrol. Confira o e-mail cadastrado ou fale com o administrador.'); return; }
         usr = { id: cred.user.uid, nome: email.split('@')[0], email, perfil:'Admin',
           empresa:'', cargo:'', tel:'', status:'Ativo', obra:'', master:true,
           perms:{ cadastros:true, apontamentos:true, relatorios:true, dashboards:true, qrcodes:true, config:true }};
@@ -21641,6 +21641,44 @@ function _kkCedidos(O, W) {
   dados.aponMO = (dados.aponMO || []).filter(a => !(a.kick && (mats.has(String(a.mat)) || ids.has(a.funcId))));
   (dados.prodTerceiros || []).filter(p => p.kick && p.empresa === del.id).forEach((p, k) => { const L = C.filter((_, j) => (k + j) % 4 !== 3); p.moTenco = L.map(f => ({ funcId: f.id, mat: f.mat || '', nome: f.nome, funcao: f.funcao || f.codFuncao || '', cedido: true, horas: p.horas || 9 })); p.pessoasTenco = L.length; p.pessoas = (+p.pessoas || 0) + L.length; });
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// v4.105: ACESSO DO PAINEL SEMPRE AMARRADO AO CLIENTE
+// - O login interno (<cliente>-<login>@painel…) é que diz em qual base a pessoa entra (acessos/<authEmail>).
+//   Se essa gravação falhava, a pessoa entrava no Firebase mas caía na base errada ("não tem cadastro em Usuários").
+// - O e-mail corporativo só é amarrado ao cliente se ainda não estiver em outro cliente (não tira ninguém da base Tenco).
+// - Ao abrir Usuários (Admin), confere e conserta os acessos que estiverem faltando.
+// ═══════════════════════════════════════════════════════════════
+fbSave = window.fbSave = async function (colecao, id, dados) {
+  if (!db || !_firebaseReady) return;
+  try { await db.collection(colecao).doc(id).set(dados, { merge: true }); } catch (e) { console.warn('Erro ao salvar ' + colecao + ':', e.message); return; }
+  if (colecao !== 'usuarios' || !window.OK_CLIENTE || !dados || String(id).startsWith('dev-')) return;
+  const cli = window.OK_CLIENTE, base = { cliente: cli, nome: dados.nome || '', perfil: dados.perfil || '', atualizadoEm: new Date().toISOString() };
+  const ae = String(dados.authEmail || '').toLowerCase(), em = String(dados.email || '').toLowerCase();
+  if (ae) { try { await db.collection('acessos').doc(ae).set(base, { merge: true }); } catch (e) { console.warn('acesso', ae, e); toast('Atenção: não consegui liberar o acesso de ' + (dados.nome || ae) + '. Abra Usuários de novo para conferir.', 'error'); } }
+  if (em && em !== ae) { try { const d = await db.collection('acessos').doc(em).get(); if (!d.exists || !d.data().cliente || d.data().cliente === cli) await db.collection('acessos').doc(em).set(base, { merge: true }); } catch (e) { console.warn('acesso', em, e); } }
+};
+async function _accRepara(silencioso) {
+  if (!(db && _firebaseReady && window.OK_CLIENTE && usuarioLogado)) return 0;
+  if (usuarioLogado.perfil !== 'Admin' && !_okEhDev(usuarioLogado.email)) return 0;
+  const cli = window.OK_CLIENTE, pre = _preCampo(); let n = 0;
+  for (const u of (USUARIOS || [])) {
+    const ae = String(u.authEmail || '').toLowerCase(); if (!ae || u.status === 'Inativo') continue;
+    try { const d = await db.collection('acessos').doc(ae).get(), c = d.exists ? d.data().cliente : null;
+      if (!d.exists || (c !== cli && (pre ? ae.startsWith(pre) : true))) { await db.collection('acessos').doc(ae).set({ cliente: cli, nome: u.nome || '', perfil: u.perfil || '', atualizadoEm: new Date().toISOString() }, { merge: true }); n++; }
+    } catch (e) { console.warn('repara acesso', ae, e); }
+  }
+  if (n && !silencioso) toast(n === 1 ? '1 acesso que estava sem liberação foi liberado.' : n + ' acessos que estavam sem liberação foram liberados.', 'success');
+  return n;
+}
+window._accRepara = _accRepara;
+(function () {
+  const oR = window.renderUsuarios; let ult = 0;
+  window.renderUsuarios = renderUsuarios = function () { const r = oR.apply(this, arguments); if (Date.now() - ult > 60000) { ult = Date.now(); setTimeout(() => _accRepara(false), 300); } return r; };
+  // depois do login de um Admin, confere uma vez em silêncio
+  setTimeout(function _accRepIni() { if (!(usuarioLogado && window.OK_CLIENTE && (USUARIOS || []).length)) return setTimeout(_accRepIni, 5000); _accRepara(true); }, 6000);
+})();
 
 // Apply configs on load
 setTimeout(applyConfigs, 200);
