@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.103 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.104 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -18995,6 +18995,7 @@ async function _kkGerar(nUsr) {
   try { _kkAloj(O, sv, dia, PROP); } catch (e) { console.warn('kk aloj', e); }   /* v4.94 */
   try { _kkDesmob(O, sv, dia); } catch (e) { console.warn('kk desmob', e); }
   try { _kkMatSemReq(); } catch (e) { console.warn('kk semreq', e); }   /* v4.95 */
+  try { _kkCedidos(O, W); } catch (e) { console.warn('kk cedidos', e); }   /* v4.104 */
   try { _kkRqNum(O, W); } catch (e) { console.warn('kk rqnum', e); }   /* v4.100 */
   try { _kkProg('Criando login master…'); window._kkMasterOk = await _kkMaster(O, PROP, W); } catch (e) { console.warn('kk master', e); }
   window._kkFalhas = {}; window._kkErro = ''; await _kkGravar(W);
@@ -21515,6 +21516,131 @@ function pdBoletimExcel() {
   try { const hb = document.querySelector('#page-partes-diarias .page-header .btn-group') || document.querySelector('#page-partes-diarias .page-header');
     if (hb && !hb.querySelector('.bm-b')) hb.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary btn-sm bm-b" onclick="pdBoletim()" title="Resumo do mês por fornecedor: horímetro, horas, paradas e valor da locação">📄 Boletim do mês</button> <button class="btn btn-outline btn-sm bm-b" onclick="pdBoletimExcel()" title="Boletim do mês em Excel (resumo + dia a dia)">↓ Boletim Excel</button> '); } catch (e) {}
   return r; }; })();
+
+
+// ═══════════════════════════════════════════════════════════════
+// v4.104: FUNCIONÁRIO TENCO CEDIDO A TERCEIRO
+// Cadastro: "Cedido a terceiro" (empreiteira + período). Enquanto cedido a situação é "Cedido": sai da apropriação
+// e do efetivo do dia da Tenco (mesmo mecanismo de férias/afastado). Na produção de terceiro o encarregado lê o crachá.
+// Relatório "MO Tenco a descontar": horas lidas nas produções × custo real (salário ÷ 220 × (1 + encargos)).
+// ═══════════════════════════════════════════════════════════════
+function _fnCedido(f, d) { if (!f || !f.cedidoEmp) return ''; d = d || _hojeLocal(); return (!f.cedidoIni || f.cedidoIni <= d) && (!f.cedidoFim || f.cedidoFim >= d) ? f.cedidoEmp : ''; }
+(function () { const o = _fnAus; _fnAus = function (f, d) { const a = o.apply(this, arguments); if (a) return a; return _fnCedido(f, d) ? 'Cedido' : ''; }; })();
+function _cdEmps(obra) { return (dados.empresas || []).filter(e => !/pr[oó]pri/i.test(e.tipo || '') && (!obra || !e.obra || e.obra === obra)).sort((a, b) => (/empreit/i.test(b.tipo || '') - /empreit/i.test(a.tipo || '')) || String(a.fantasia || a.nome).localeCompare(String(b.fantasia || b.nome))); }
+function _cdEmpNome(id) { const e = (dados.empresas || []).find(x => x.id === id); return e ? (e.fantasia || e.nome) : ''; }
+(function () {
+  const $ = id => document.getElementById(id);
+  /* cadastro */
+  const ref = $('func-aus-per') || $('func-demissao')?.closest('.form-group');
+  if (ref && !$('func-ced')) ref.insertAdjacentHTML('afterend', `<div class="form-group form-full" id="func-ced-box" style="border:1px dashed var(--border);border-radius:10px;padding:10px 12px">
+      <label class="form-label" for="func-ced">Cedido a terceiro</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="form-control" id="func-ced" style="flex:2;min-width:200px" onchange="document.getElementById('func-ced-per').style.display=this.value?'flex':'none'"><option value="">Não — trabalha nas equipes da Tenco</option></select>
+        <span id="func-ced-per" style="display:none;gap:6px;align-items:center;flex:2;min-width:240px"><input type="date" class="form-control" id="func-ced-ini" title="Cedido a partir de"/><span>até</span><input type="date" class="form-control" id="func-ced-fim" title="Até (opcional)"/></span></div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px">Contratado pela Tenco, mas trabalha para a empreiteira e o custo é descontado na medição dela. Enquanto cedido, não aparece para apontamento nas equipes da Tenco: o encarregado da empreiteira lê o crachá na produção de terceiro.</div></div>`);
+  const enche = (obra, val) => { const s = $('func-ced'); if (!s) return; s.innerHTML = '<option value="">Não — trabalha nas equipes da Tenco</option>' + _cdEmps(obra).map(e => `<option value="${_e(e.id)}">${_e(e.fantasia || e.nome)}${e.tipo ? ' · ' + _e(e.tipo) : ''}</option>`).join(''); s.value = val || ''; };
+  const mostra = f => { if (!$('func-ced')) return; enche((f && f.obra) || $('func-obra')?.value || '', f && f.cedidoEmp); $('func-ced-ini').value = (f && f.cedidoIni) || ''; $('func-ced-fim').value = (f && f.cedidoFim) || ''; $('func-ced-per').style.display = f && f.cedidoEmp ? 'flex' : 'none'; };
+  const oE = window.editarFuncionario; window.editarFuncionario = editarFuncionario = function (id) { const r = oE.apply(this, arguments); mostra((dados.funcionarios || []).find(x => x.id === id)); return r; };
+  const oO = window.openModal; window.openModal = openModal = function (id) { const r = oO.apply(this, arguments); if (id === 'modal-novo-func' && !$('func-edit-id')?.value) mostra(null); return r; };
+  document.addEventListener('change', e => { if (e.target && e.target.id === 'func-obra') enche(e.target.value, $('func-ced')?.value); }, true);
+  const oS = window.salvarFuncionario; window.salvarFuncionario = salvarFuncionario = function () {
+    const emp = $('func-ced')?.value || '', ini = $('func-ced-ini')?.value || '', fim = $('func-ced-fim')?.value || '', mat = ($('func-mat')?.value || '').trim(), obra = $('func-obra')?.value || '', idEd = $('func-edit-id')?.value || '';
+    if (emp && ini && fim && fim < ini) { toast('A data final da cessão é antes da inicial.', 'error'); return; }
+    const r = oS.apply(this, arguments);
+    if ($('modal-novo-func')?.classList.contains('open')) return r;
+    const f = idEd ? (dados.funcionarios || []).find(x => x.id === idEd) : [...(dados.funcionarios || [])].reverse().find(x => String(x.mat) === mat && (x.obra || '') === obra);
+    if (!f) return r; const antes = [f.cedidoEmp || '', f.cedidoIni || '', f.cedidoFim || ''].join('|');
+    if (emp) { f.cedidoEmp = emp; f.cedidoEmpNome = _cdEmpNome(emp); f.cedidoIni = ini || f.cedidoIni || _hojeLocal(); f.cedidoFim = fim; } else { delete f.cedidoEmp; delete f.cedidoEmpNome; delete f.cedidoIni; delete f.cedidoFim; }
+    if ([f.cedidoEmp || '', f.cedidoIni || '', f.cedidoFim || ''].join('|') !== antes && db && _firebaseReady) fbSave('funcionarios', f.id, f).catch(() => {});
+    try { renderFuncionarios(0); } catch (e) {} return r; };
+  /* lista: filtro "Cedidos a terceiros" + etiqueta */
+  const sv = $('filtro-func-vinculo'); if (sv && !sv.querySelector('[value="CED"]')) sv.insertAdjacentHTML('beforeend', '<option value="CED">Cedidos a terceiros</option>');
+  const oL = window.renderFuncionarios; if (typeof oL === 'function') window.renderFuncionarios = renderFuncionarios = function () {
+    const s = $('filtro-func-vinculo'), ced = s && s.value === 'CED'; if (ced) s.value = '';
+    let r; try { r = oL.apply(this, arguments); } finally { if (ced) s.value = 'CED'; }
+    try { const porId = new Map((dados.funcionarios || []).map(f => [f.id, f]));
+      document.querySelectorAll('#tbody-func tr').forEach(tr => { const cb = tr.querySelector('[data-id]'), f = cb && porId.get(cb.dataset.id); if (!f) return; const c = _fnCedido(f);
+        if (ced && !c) { tr.style.display = 'none'; return; }
+        if (c && !tr.querySelector('.ced-tag')) { const td = tr.querySelectorAll('td')[3] || tr.querySelector('td'); td && td.insertAdjacentHTML('beforeend', ` <span class="tag tag-amber ced-tag" title="Cedido a terceiro desde ${_e(fmtData(f.cedidoIni || ''))}">cedido → ${_e(_cdEmpNome(c) || f.cedidoEmpNome || '')}</span>`); } }); } catch (e) {}
+    return r; };
+})();
+
+// ── Relatório: MO Tenco a descontar por empreiteira
+function _cdCalc(obra, mes, emp) {
+  const o = obra === 'todas' ? '' : obra, J = 8.8, porEmp = new Map();
+  (dados.prodTerceiros || []).filter(p => (!o || p.obra === o) && String(p.data).slice(0, 7) === mes && !/rejeit|reprov/i.test(p.status || '') && (!emp || p.empresa === emp) && (p.moTenco || []).length).forEach(p => {
+    const k = p.empresa || '—'; if (!porEmp.has(k)) porEmp.set(k, { emp: k, nome: p.empresaNome || _cdEmpNome(k) || k, func: new Map() }); const E = porEmp.get(k);
+    p.moTenco.forEach(m => { const h = +m.horas || +p.horas || 0, a = { mat: m.mat, func: m.nome, obra: p.obra, data: p.data, hn: Math.min(h, J), he: Math.max(0, h - J) }, c = typeof custoMO === 'function' ? custoMO(a) : { normal: 0, extra: 0, domFer: 0 };
+      const kk = m.mat || m.nome; if (!E.func.has(kk)) E.func.set(kk, { mat: m.mat, nome: m.nome, funcao: m.funcao || '', dias: new Set(), horas: 0, valor: 0, estimado: false, frentes: new Set(), naoCed: 0 });
+      const F = E.func.get(kk); F.dias.add(p.data); F.horas += h; F.valor += (c.normal || 0) + (c.extra || 0) + (c.domFer || 0); if (c.estimado) F.estimado = true; if (p.frente) F.frentes.add(p.frente); if (!m.cedido) F.naoCed++; }); });
+  /* cedidos sem nenhuma leitura no mês (para conferir) */
+  const [a2, m2] = mes.split('-').map(Number), ini = mes + '-01', fim = mes + '-' + String(new Date(a2, m2, 0).getDate()).padStart(2, '0');
+  const sem = (dados.funcionarios || []).filter(f => f.cedidoEmp && (!o || f.obra === o) && (!emp || f.cedidoEmp === emp) && (!f.cedidoIni || f.cedidoIni <= fim) && (!f.cedidoFim || f.cedidoFim >= ini) && f.status !== 'Desligado')
+    .filter(f => !(porEmp.get(f.cedidoEmp) && porEmp.get(f.cedidoEmp).func.has(f.mat || f.nome)));
+  sem.forEach(f => { const k = f.cedidoEmp; if (!porEmp.has(k)) porEmp.set(k, { emp: k, nome: _cdEmpNome(k) || f.cedidoEmpNome || k, func: new Map() }); });
+  return [...porEmp.values()].map(E => ({ ...E, linhas: [...E.func.values()].map(F => ({ ...F, dias: F.dias.size, frentes: [...F.frentes].join(', ') })).sort((a, b) => String(a.nome).localeCompare(String(b.nome))), sem: sem.filter(f => f.cedidoEmp === E.emp) }))
+    .map(E => ({ ...E, horas: E.linhas.reduce((t, x) => t + x.horas, 0), valor: E.linhas.reduce((t, x) => t + x.valor, 0) })).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+}
+function cdAbrir() {
+  if (!document.getElementById('modal-cd')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="modal-cd"><div class="modal" style="max-width:980px;width:96vw"><div class="modal-header"><span class="modal-title">👷 MO Tenco a descontar dos terceiros</span><button class="modal-close" onclick="closeModal('modal-cd')">×</button></div>
+    <div class="modal-body"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><select class="form-control" id="cd-mes" style="width:auto" onchange="cdRender()"></select><select class="form-control" id="cd-emp" style="width:auto;min-width:220px" onchange="cdRender()"></select>
+      <span style="flex:1"></span><button class="btn btn-outline btn-sm" onclick="cdExcel()">↓ Excel</button><button class="btn btn-primary btn-sm" onclick="cdImprimir()">🖨 PDF</button></div><div id="cd-corpo"></div></div></div></div>`);
+  const ms = [...new Set((dados.prodTerceiros || []).map(p => String(p.data).slice(0, 7)).concat([_hojeLocal().slice(0, 7)]))].sort().reverse();
+  const sm = document.getElementById('cd-mes'); sm.innerHTML = ms.map(m => `<option value="${m}">${_mesTxt(m)}</option>`).join(''); sm.value = ms[0];
+  const o = _okObraAtual(), se = document.getElementById('cd-emp'); se.innerHTML = '<option value="">Todas as empreiteiras</option>' + _cdEmps(o === 'todas' ? '' : o).map(e => `<option value="${_e(e.id)}">${_e(e.fantasia || e.nome)}</option>`).join('');
+  openModal('modal-cd'); cdRender();
+}
+function cdRender() {
+  const el = document.getElementById('cd-corpo'); if (!el) return; const mes = document.getElementById('cd-mes').value, emp = document.getElementById('cd-emp').value, ve = typeof _vePessoal !== 'function' || _vePessoal();
+  const B = _cdCalc(_okObraAtual(), mes, emp), E = _e, din = v => ve ? _moeda(v) : '🔒';
+  if (!B.length) { el.innerHTML = `<div class="dx-vazio" style="padding:24px;text-align:center;color:var(--text-3)">Nenhum funcionário cedido nem lido em produção de terceiro em ${_mesTxt(mes)}.<br><span style="font-size:12px">Marque o funcionário como <b>Cedido a terceiro</b> no cadastro e o encarregado lê o crachá na Produção de terceiro, no app.</span></div>`; return; }
+  el.innerHTML = (ve ? '' : '<div class="alert alert-info" style="margin-bottom:8px">Valores ocultos: seu perfil não vê custo de pessoal.</div>') + B.map(b => `<div class="card" style="margin-bottom:12px"><div class="card-header"><span class="card-title">${E(b.nome)}</span><span style="font-weight:800">${_n1(b.horas)} h · ${din(b.valor)}</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Funcionário</th><th>Função</th><th>Frentes</th><th style="text-align:right">Dias</th><th style="text-align:right">Horas</th><th style="text-align:right">Valor a descontar</th></tr></thead><tbody>
+    ${b.linhas.map(x => `<tr><td><b>${E(x.nome)}</b><div style="font-size:11px;color:var(--text-3)">Mat. ${E(x.mat || '—')}${x.naoCed ? ' · <span style="color:#B45309">lido sem estar cedido no cadastro</span>' : ''}</div></td><td>${E(x.funcao)}</td><td style="font-size:12px">${E(x.frentes)}</td><td style="text-align:right">${x.dias}</td><td style="text-align:right">${_n1(x.horas)}</td><td style="text-align:right;font-weight:700">${din(x.valor)}${x.estimado && ve ? '<div style="font-size:10.5px;color:#B45309;font-weight:400">sem salário: custo da função</div>' : ''}</td></tr>`).join('')}
+    ${b.sem.map(f => `<tr style="opacity:.75"><td><b>${E(f.nome)}</b><div style="font-size:11px;color:var(--text-3)">Mat. ${E(f.mat || '—')}</div></td><td>${E(f.funcao || f.codFuncao || '')}</td><td colspan="4" style="color:#B45309;font-size:12px">⚠ Cedido, mas não foi lido em nenhuma produção no mês — conferir com o encarregado</td></tr>`).join('')}
+    </tbody></table></div></div>`).join('') + `<div style="font-size:11.5px;color:var(--text-3)">Valor = horas lidas nas produções de terceiro × custo real do funcionário (salário ÷ 220 × (1 + encargos da obra); PJ com os encargos de PJ). Acima de 8,8 h no dia conta como hora extra; domingo e feriado com o adicional da função.</div>`;
+}
+function cdExcel() {
+  const mes = document.getElementById('cd-mes').value, emp = document.getElementById('cd-emp').value, ve = typeof _vePessoal !== 'function' || _vePessoal(), B = _cdCalc(_okObraAtual(), mes, emp);
+  const rows = [['Empreiteira', 'Matrícula', 'Funcionário', 'Função', 'Frentes', 'Dias', 'Horas'].concat(ve ? ['Valor a descontar (R$)'] : [])];
+  B.forEach(b => { b.linhas.forEach(x => rows.push([b.nome, x.mat, x.nome, x.funcao, x.frentes, x.dias, Math.round(x.horas * 10) / 10].concat(ve ? [Math.round(x.valor * 100) / 100] : []))); b.sem.forEach(f => rows.push([b.nome, f.mat, f.nome, f.funcao || '', 'não lido no mês', 0, 0].concat(ve ? [0] : []))); });
+  const D = [['Empreiteira', 'Data', 'Frente', 'Serviço', 'Matrícula', 'Funcionário', 'Horas']];
+  (dados.prodTerceiros || []).filter(p => (_okObraAtual() === 'todas' || p.obra === _okObraAtual()) && String(p.data).slice(0, 7) === mes && (!emp || p.empresa === emp) && !/rejeit|reprov/i.test(p.status || '')).forEach(p => (p.moTenco || []).forEach(m => D.push([p.empresaNome || _cdEmpNome(p.empresa), p.data, p.frente, p.servico, m.mat, m.nome, +m.horas || +p.horas || 0])));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Resumo'); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(D), 'Dia a dia'); XLSX.writeFile(wb, 'MO_Tenco_a_descontar_' + mes + '.xlsx');
+}
+function cdImprimir() {
+  const mes = document.getElementById('cd-mes').value, emp = document.getElementById('cd-emp').value, ve = typeof _vePessoal !== 'function' || _vePessoal(), B = _cdCalc(_okObraAtual(), mes, emp), E = _e;
+  if (!B.length) { toast('Nada para imprimir.', 'error'); return; } const w = window.open('', '_blank'); if (!w) return toast('Libere as janelas (pop-up).', 'error');
+  const ob = _okObraAtual() === 'todas' ? '' : _okObraAtual();
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>MO Tenco a descontar ${_mesTxt(mes)}</title><style>@page{size:A4;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;font-size:11px;color:#111}
+    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:6px}.hd img{height:38px}.hd b{font-size:15px}h3{background:#111;color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:4px 8px;margin:14px 0 0}
+    table{width:100%;border-collapse:collapse;border:1px solid #bbb;border-top:0}th{font-size:9px;text-transform:uppercase;color:#555;text-align:left;background:#f2f2f2;border-bottom:1px solid #999;padding:4px 6px}td{border-bottom:1px solid #ddd;padding:4px 6px}.n{text-align:right}tr.t td{font-weight:800;background:#f6f6f6}
+    .ass{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px}.ass div{border-top:1px solid #111;text-align:center;padding-top:4px}.rg{font-size:9px;color:#555;margin-top:8px}</style></head><body>
+    ${B.map(b => `<section style="page-break-after:always"><div class="hd">${_pddLogo(ob)}<div style="text-align:right"><b>MÃO DE OBRA TENCO A DESCONTAR</b><div>${E(_mesTxt(mes))} · ${E(getNomeObra(ob) || '')}</div></div></div>
+      <h3>${E(b.nome)}</h3><table><thead><tr><th>Matrícula</th><th>Funcionário</th><th>Função</th><th>Frentes</th><th class="n">Dias</th><th class="n">Horas</th>${ve ? '<th class="n">Valor</th>' : ''}</tr></thead><tbody>
+      ${b.linhas.map(x => `<tr><td>${E(x.mat || '')}</td><td><b>${E(x.nome)}</b></td><td>${E(x.funcao)}</td><td>${E(x.frentes)}</td><td class="n">${x.dias}</td><td class="n">${_n1(x.horas)}</td>${ve ? `<td class="n">${_moeda(x.valor)}</td>` : ''}</tr>`).join('')}
+      <tr class="t"><td colspan="5">Total</td><td class="n">${_n1(b.horas)}</td>${ve ? `<td class="n">${_moeda(b.valor)}</td>` : ''}</tr></tbody></table>
+      ${b.sem.length ? `<div class="rg" style="color:#B45309">Cedidos sem leitura no mês: ${b.sem.map(f => E(f.nome)).join(', ')}.</div>` : ''}
+      <div class="rg">Horas lidas pelo encarregado na Produção de terceiro (app). Valor = custo real do funcionário: salário ÷ 220 × (1 + encargos da obra).</div>
+      <div class="ass"><div>Custos — Tenco</div><div>${E(b.nome)}</div></div></section>`).join('')}<script>setTimeout(()=>print(),300)<\/script></body></html>`); w.document.close();
+}
+(function () { const add = () => { const b = document.querySelector('#page-terceiros .btn-group'); if (b && !b.querySelector('#btn-cd')) b.insertAdjacentHTML('afterbegin', '<button class="btn btn-outline btn-sm" id="btn-cd" onclick="cdAbrir()" title="Funcionários da Tenco cedidos às empreiteiras: horas e valor a descontar na medição">👷 MO Tenco a descontar</button> '); };
+  add(); const oR = window.renderTerceiros; if (typeof oR === 'function') window.renderTerceiros = renderTerceiros = function () { const r = oR.apply(this, arguments); add(); return r; }; })();
+// kickoff: 3 funcionários cedidos à Delta, lidos nas produções dela
+function _kkCedidos(O, W) {
+  const del = (dados.empresas || []).find(e => e.id === 'kk_emp5'); if (!del) return;
+  const FS = (dados.funcionarios || []).filter(f => /^kk_f\d+$/.test(f.id) && f.obra === O).sort((a, b) => +b.id.slice(4) - +a.id.slice(4));
+  const usados = new Set((typeof USUARIOS !== 'undefined' ? USUARIOS : []).map(u => u.mat)), ops = new Set([...(dados.aponEQ || []), ...(dados.partesDiarias || [])].map(a => a.operador).filter(Boolean));
+  const C = FS.filter(f => !usados.has(f.mat) && !f.lider && !ops.has(f.nome) && !/motorista|operador/i.test((f.funcao || '') + ' ' + (f.codFuncao || ''))).slice(0, 3); if (!C.length) return;
+  const ini = (dados.prodTerceiros || []).filter(p => p.kick).map(p => p.data).sort()[0] || _hojeLocal();
+  C.forEach(f => { f.cedidoEmp = del.id; f.cedidoEmpNome = del.fantasia || del.nome; f.cedidoIni = ini; });
+  const ids = new Set(C.map(f => f.id)), mats = new Set(C.map(f => String(f.mat)));
+  /* tira os cedidos das apropriações da Tenco (passam a trabalhar só para a Delta) */
+  const sai = a => a && a.kick && (mats.has(String(a.mat)) || ids.has(a.funcId));
+  W.filter(([c, a]) => c === 'aponMO' && sai(a) && +a.qtd > 0).forEach(([, a]) => { const outro = W.find(([c, b]) => c === 'aponMO' && b !== a && !sai(b) && b.apropriacao && b.apropriacao === a.apropriacao); if (outro) outro[1].qtd = (+outro[1].qtd || 0) + (+a.qtd); });
+  for (let i = W.length - 1; i >= 0; i--) { const [c, o] = W[i]; if (c === 'aponMO' && sai(o)) W.splice(i, 1); }
+  dados.aponMO = (dados.aponMO || []).filter(a => !(a.kick && (mats.has(String(a.mat)) || ids.has(a.funcId))));
+  (dados.prodTerceiros || []).filter(p => p.kick && p.empresa === del.id).forEach((p, k) => { const L = C.filter((_, j) => (k + j) % 4 !== 3); p.moTenco = L.map(f => ({ funcId: f.id, mat: f.mat || '', nome: f.nome, funcao: f.funcao || f.codFuncao || '', cedido: true, horas: p.horas || 9 })); p.pessoasTenco = L.length; p.pessoas = (+p.pessoas || 0) + L.length; });
+}
 
 // Apply configs on load
 setTimeout(applyConfigs, 200);

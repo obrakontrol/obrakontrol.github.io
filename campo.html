@@ -883,7 +883,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.41</div>
+  <div class="login-versao">ObraKontrol Campo · v3.42</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8557,6 +8557,58 @@ async function _axaQrAbrir(id, num) {
   if (!r && db && _fbReady && isOnline) { try { const s = await db.collection('requisicoes').doc(id).get(); if (s.exists) { const x = { id: s.id, ...s.data() }; if (x.status === 'solicitada') { axa.L = (axa.L || []).concat([x]); r = x; } else { toast((x.num || num) + ' já foi ' + (x.status === 'cancelada' ? 'recusada' : 'entregue') + '.', 'err'); return; } } } catch (e) {} }
   if (r) axaAtender(r.id); else toast('Requisição ' + (num || '') + ' não está aguardando entrega.', 'err');
 }
+
+
+// ══════════════════════════════════════════════════════════════
+// v3.42: FUNCIONÁRIO TENCO CEDIDO A TERCEIRO
+// • Cadastro (painel): cedidoEmp (empreiteira) + cedidoIni/cedidoFim. Enquanto cedido, a situação é "Cedido":
+//   some das equipes da Tenco (apropriação, efetivo do dia), como férias/afastado.
+// • Produção de terceiro: bloco "Funcionários Tenco nesta equipe" — lê o crachá ou escolhe na lista (já filtrada
+//   pelos cedidos àquela empreiteira). Cada um entra no total de pessoas. Vai no registro (moTenco) para o desconto.
+// ══════════════════════════════════════════════════════════════
+function _fnCedido(f, d) { if (!f || !f.cedidoEmp) return ''; d = d || _hojeISO(); return (!f.cedidoIni || f.cedidoIni <= d) && (!f.cedidoFim || f.cedidoFim >= d) ? f.cedidoEmp : ''; }
+(function () { const o = _fnAus; _fnAus = function (f, d) { const a = o.apply(this, arguments); if (a) return a; return _fnCedido(f, d) ? 'Cedido' : ''; }; })();
+function _ptCedidos(emp) { const o = usuarioCampo?.obra || '', d = (pt && pt.data) || _hojeISO();
+  return (dadosCampo.funcionarios || []).filter(f => _fnCedido(f, d) === emp && (!o || !f.obra || f.obra === o) && f.status !== 'Desligado' && !(f.demissao && f.demissao <= d)).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')); }
+function ptMoAdd(fid, avisar) {
+  const f = (dadosCampo.funcionarios || []).find(x => x.id === fid); if (!f) return; pt.moTenco = pt.moTenco || [];
+  if (pt.moTenco.some(m => m.funcId === f.id)) { toast(f.nome + ' já está na equipe.', 'err'); return; }
+  const ced = _fnCedido(f, pt.data || _hojeISO());
+  if (ced !== pt.empresa && !confirm(f.nome + (ced ? ' está cedido a outra empreiteira.' : ' não está cedido a esta empreiteira no cadastro.') + '\n\nIncluir mesmo assim nesta produção?')) return;
+  pt.moTenco.push({ funcId: f.id, mat: f.mat || '', nome: f.nome, funcao: f.funcao || f.codFuncao || '', cedido: ced === pt.empresa });
+  pt.pessoas = (+pt.pessoas || 0) + 1; ptRender(); if (avisar) toast('✓ ' + f.nome, 'ok');
+}
+function ptMoTodos() { _ptCedidos(pt.empresa).forEach(f => { if (!(pt.moTenco || []).some(m => m.funcId === f.id)) { pt.moTenco = pt.moTenco || []; pt.moTenco.push({ funcId: f.id, mat: f.mat || '', nome: f.nome, funcao: f.funcao || f.codFuncao || '', cedido: true }); pt.pessoas = (+pt.pessoas || 0) + 1; } }); ptRender(); }
+function ptMoTirar(i) { const m = (pt.moTenco || [])[i]; if (!m) return; pt.moTenco.splice(i, 1); pt.pessoas = Math.max(0, (+pt.pessoas || 0) - 1); ptRender(); }
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `.ptmo{margin-top:10px;padding:10px 12px;border:1px dashed rgba(227,6,19,.45);border-radius:12px;background:rgba(227,6,19,.04)}.ptmo-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;font-weight:800}
+    .ptmo-c{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid rgba(127,127,127,.15);font-size:13px}.ptmo-c:first-of-type{border-top:0}.ptmo-c small{display:block;color:var(--text2);font-size:11.5px}
+    .ptmo-c button{border:0;background:transparent;color:var(--red);font-size:18px;font-weight:800;padding:0 6px}.ptmo-s{font-size:11.5px;color:var(--text2);margin-top:6px}`;
+  document.head.appendChild(css);
+  const oR = ptRender; ptRender = function () { const r = oR.apply(this, arguments);
+    try { if (!pt || pt.modo === 'feito') return r; const pes = [...document.querySelectorAll('#screen-pt .pt-mq')].find(x => /^Pessoas/.test(x.textContent.trim())); if (!pes || document.getElementById('ptmo')) return r;
+      const E = _esc, L = pt.moTenco || [], ced = pt.empresa ? _ptCedidos(pt.empresa) : [], disp = (dadosCampo.funcionarios || []).filter(f => !L.some(m => m.funcId === f.id));
+      const outros = ced.filter(f => !L.some(m => m.funcId === f.id));
+      pes.insertAdjacentHTML('afterend', `<div class="ptmo" id="ptmo"><div class="ptmo-h"><span>👷 Funcionários Tenco nesta equipe${L.length ? ' (' + L.length + ')' : ''}</span><button type="button" class="btn btn-outline btn-sm" style="width:auto;padding:4px 10px" onclick="abrirQR('ptmo')">▦ Ler crachá</button></div>
+        ${L.map((m, i) => `<div class="ptmo-c"><span><b>${E(m.nome)}</b><small>Mat. ${E(m.mat || '—')}${m.funcao ? ' · ' + E(m.funcao) : ''}${m.cedido ? '' : ' · <b style="color:#B45309">não cedido no cadastro</b>'}</small></span><button type="button" onclick="ptMoTirar(${i})" aria-label="Tirar">×</button></div>`).join('')}
+        ${pt.empresa ? `<select class="form-control" style="margin-top:6px" onchange="if(this.value)ptMoAdd(this.value)"><option value="">+ ${outros.length ? 'Cedidos a esta empreiteira (' + outros.length + ')' : 'Nenhum outro cedido a ela'}…</option>${outros.map(f => `<option value="${E(f.id)}">${E(f.nome)} · Mat. ${E(f.mat || '—')}</option>`).join('')}</select>
+          ${outros.length > 1 ? `<button type="button" class="mob-link" style="margin-top:6px" onclick="ptMoTodos()">Incluir todos os ${outros.length} cedidos</button>` : ''}` : '<div class="ptmo-s">Escolha a empreiteira primeiro.</div>'}
+        <div class="ptmo-s">São da Tenco, mas trabalham para a empreiteira: entram no total de pessoas e o custo deles é descontado na medição.</div></div>`); } catch (e) {}
+    return r; };
+  const oQ = processarQR; processarQR = function (texto, contexto) {
+    if (contexto !== 'ptmo') return oQ.apply(this, arguments);
+    const t = String(texto || '').trim(); let f = null; const c = typeof _funcPorCracha === 'function' ? _funcPorCracha(t) : null; if (c && c.f) f = c.f;
+    if (!f) { let mat = t; try { const o = JSON.parse(t); mat = o.mat || o.matricula || t; } catch (e) { if (/^mat:/i.test(t)) mat = t.slice(4).trim(); } f = (dadosCampo.funcionarios || []).find(x => String(x.mat) === String(mat) || x.id === mat); }
+    if (!f) { toast('Funcionário não encontrado no efetivo.', 'err'); return { ok: true }; }
+    showScreen('pt'); ptMoAdd(f.id, true); return { ok: true };
+  };
+  /* gravação: leva a lista (com as horas da produção) no registro */
+  const oS = ptSalvar; ptSalvar = async function () {
+    const L = (pt && pt.moTenco || []).map(m => ({ ...m })); if (!L.length) return oS.apply(this, arguments);
+    const oF = fbSalvar; fbSalvar = async function (c, it) { if (c === 'prodTerceiros' && it && !it.moTenco) { it.moTenco = L.map(m => ({ ...m, horas: it.horas || 0 })); it.pessoasTenco = L.length; } return oF.apply(this, arguments); };
+    try { return await oS.apply(this, arguments); } finally { fbSalvar = oF; } };
+})();
 
 </script>
 </body>
