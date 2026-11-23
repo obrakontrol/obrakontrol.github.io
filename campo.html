@@ -804,7 +804,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
   <div class="par-chuva" id="par-chuva-w" style="display:none">
     <div class="form-group" style="margin-bottom:8px"><label class="form-label">🌧 Pluviômetro (mm)</label><input type="number" class="form-control" id="par-pluvio" inputmode="decimal" min="0" max="500" step="0.1" placeholder="Leitura do pluviômetro da frente" oninput="if(this.value)document.getElementById('par-sempluv').checked=false"/></div>
     <label class="par-sp"><input type="checkbox" id="par-sempluv" onchange="if(this.checked)document.getElementById('par-pluvio').value=''"/>Não tem pluviômetro nesta frente de serviço</label>
-    <div style="font-size:11.5px;color:var(--text3);margin-top:6px">Digite a leitura em milímetros. Se a frente não tiver pluviômetro, marque a opção acima.</div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:6px">Enquanto estiver chovendo pode deixar em branco: a leitura (em mm) é pedida quando a parada for encerrada. Se a frente não tiver pluviômetro, marque a opção acima.</div>
   </div>
   <div class="time-row">
     <div class="form-group"><label class="form-label">Parou às *</label><input type="time" class="form-control" id="par-ini"/></div>
@@ -888,7 +888,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="btn btn-primary" id="btn-entrar" onclick="fazerLoginCampo()">Entrar</button>
   </div>
   <div class="instalar-box" id="instalar-login"></div>
-  <div class="login-versao">ObraKontrol Campo · v3.43</div>
+  <div class="login-versao">ObraKontrol Campo · v3.44</div>
 </div>
 
 <!-- ══════════════ SCREEN: HOME ══════════════ -->
@@ -8651,13 +8651,13 @@ function _parPluvTxt(p) { return p.pluvioMm !== undefined && p.pluvioMm !== '' &
     if (chuva) {
       const raw = String($('par-pluvio').value || '').replace(',', '.').trim(); sem = $('par-sempluv').checked;
       if (raw !== '') { mm = +raw; if (isNaN(mm) || mm < 0 || mm > 500) { toast('Leitura do pluviômetro inválida (0 a 500 mm).', 'err'); $('par-pluvio').focus(); return; } mm = Math.round(mm * 10) / 10; sem = false; }
-      else if (!sem) { toast('Chuva: digite a leitura do pluviômetro ou marque "Não tem pluviômetro nesta frente".', 'err'); $('par-pluvio').focus(); return; }
+      else if (!sem && $('par-fim').value) { toast('Para encerrar a parada de chuva, digite a leitura do pluviômetro ou marque "Não tem pluviômetro nesta frente".', 'err'); $('par-pluvio').focus(); return; }
     }
     const idAntes = $('par-id').value, antes = new Set((ap.paradas || []).map(x => x.id));
     oSalvar.apply(this, arguments);
     const p = idAntes ? (ap.paradas || []).find(x => x.id === idAntes) : (ap.paradas || []).find(x => !antes.has(x.id));
     if (!p) return;   // não salvou (validação)
-    if (chuva) { p.pluvioMm = mm; p.semPluvio = sem; try { localStorage.setItem(_parFrenteKey(), sem ? '1' : '0'); } catch (e) {} }
+    if (chuva) { p.pluvioMm = mm; p.semPluvio = sem; if (mm !== '' || sem) { try { localStorage.setItem(_parFrenteKey(), sem ? '1' : '0'); } catch (e) {} } }
     else { delete p.pluvioMm; delete p.semPluvio; }
     apGuardar(); _parRender();
   };
@@ -8668,6 +8668,53 @@ function _parPluvTxt(p) { return p.pluvioMm !== undefined && p.pluvioMm !== '' &
       document.querySelectorAll('#ap-par-lista .par-it').forEach(el => { if (el.querySelector(`[onclick="parAbrir('${p.id}')"]`) && !el.querySelector('.par-pl')) el.querySelector('.t').insertAdjacentHTML('beforeend', '<span class="par-pl">' + _esc(t) + '</span>'); }); });
     return r;
   };
+})();
+
+// v3.44: a leitura do pluviômetro é exigida ao ENCERRAR a parada de chuva (Retomou agora, editar com retorno ou fechamento do turno)
+function _parChuvaP(p) { return _parEhChuva(p.outro ? '__outro' : p.motivoCod, p.motivoTxt); }
+function _parSemLeitura(p) { return _parChuvaP(p) && !p.semPluvio && (p.pluvioMm === undefined || p.pluvioMm === '' || p.pluvioMm === null); }
+(function () {
+  const $ = x => document.getElementById(x);
+  const oRet = parRetomou;
+  parRetomou = window.parRetomou = function (id) {
+    const p = (ap.paradas || []).find(x => x.id === id);
+    if (p && _parSemLeitura(p)) { const a = _parAgora(); if (_parMin(a) <= _parMin(p.ini)) { toast('O retorno precisa ser depois do início (' + p.ini + ').', 'err'); return; }
+      parAbrir(id); $('par-fim').value = a; $('par-chuva-w').style.display = '';
+      try { if (localStorage.getItem(_parFrenteKey()) === '1') $('par-sempluv').checked = true; } catch (e) {}
+      toast('Chuva: informe a leitura do pluviômetro para encerrar a parada.', 'err'); setTimeout(() => $('par-pluvio').focus(), 250); return; }
+    return oRet.apply(this, arguments);
+  };
+  const oFimAbrir = _parFimAbrir;
+  _parFimAbrir = window._parFimAbrir = function (abertas) {
+    const r = oFimAbrir.apply(this, arguments); let semP = false; try { semP = localStorage.getItem(_parFrenteKey()) === '1'; } catch (e) {}
+    abertas.forEach(p => { if (!_parSemLeitura(p)) return; const t = document.querySelector(`#parfim-lista [data-par="${p.id}"]`); const it = t && t.closest('.par-it'); if (!it) return;
+      it.insertAdjacentHTML('beforeend', `<div class="par-chuva" style="margin:10px 0 0"><div class="form-group" style="margin-bottom:8px"><label class="form-label">🌧 Pluviômetro (mm) *</label><input type="number" class="form-control" data-plv="${p.id}" inputmode="decimal" min="0" max="500" step="0.1" placeholder="Leitura do pluviômetro da frente" oninput="if(this.value)this.closest('.par-chuva').querySelector('input[type=checkbox]').checked=false"/></div>
+        <label class="par-sp"><input type="checkbox" data-spl="${p.id}" ${semP ? 'checked' : ''} onchange="if(this.checked)this.closest('.par-chuva').querySelector('input[type=number]').value=''"/>Não tem pluviômetro nesta frente de serviço</label></div>`); });
+    return r;
+  };
+  const oFimConf = parFimConfirmar;
+  parFimConfirmar = window.parFimConfirmar = function () {
+    const L = (ap.paradas || []).filter(p => !p.fim && _parSemLeitura(p)), val = [];
+    for (const p of L) { const inp = document.querySelector(`[data-plv="${p.id}"]`), ck = document.querySelector(`[data-spl="${p.id}"]`); if (!inp) continue;
+      const raw = String(inp.value || '').replace(',', '.').trim(), sem = !!(ck && ck.checked);
+      if (raw === '' && !sem) { toast('Chuva das ' + p.ini + ': digite a leitura do pluviômetro ou marque que a frente não tem pluviômetro.', 'err'); inp.focus(); return; }
+      const mm = raw === '' ? '' : Math.round(+raw * 10) / 10; if (raw !== '' && (isNaN(+raw) || +raw < 0 || +raw > 500)) { toast('Leitura do pluviômetro inválida (0 a 500 mm).', 'err'); inp.focus(); return; }
+      val.push([p, mm, raw === '' && sem]); }
+    val.forEach(([p, mm, sem]) => { p.pluvioMm = mm; p.semPluvio = sem; try { localStorage.setItem(_parFrenteKey(), sem ? '1' : '0'); } catch (e) {} });
+    return oFimConf.apply(this, arguments);
+  };
+  // segurança: parada de chuva já encerrada sem leitura não deixa finalizar a frente
+  const oSalvarAp = salvarApropriacao;
+  salvarApropriacao = window.salvarApropriacao = async function () {
+    const f = (ap.paradas || []).find(p => p.fim && _parSemLeitura(p));
+    if (f) { parAbrir(f.id); $('par-chuva-w').style.display = ''; toast('Antes de encerrar: informe o pluviômetro da chuva das ' + f.ini + '–' + f.fim + '.', 'err'); setTimeout(() => $('par-pluvio').focus(), 250); return; }
+    return oSalvarAp.apply(this, arguments);
+  };
+  // lista: parada de chuva aberta sem leitura avisa
+  const oR2 = _parRender;
+  _parRender = window._parRender = function () { const r = oR2.apply(this, arguments);
+    (ap.paradas || []).filter(p => !p.fim && _parSemLeitura(p)).forEach(p => document.querySelectorAll('#ap-par-lista .par-it').forEach(el => { if (el.querySelector(`[onclick="parAbrir('${p.id}')"]`) && !el.querySelector('.par-pl')) el.querySelector('.t').insertAdjacentHTML('beforeend', '<span class="par-pl" style="color:#B45309">🌧 pluviômetro no retorno</span>'); }));
+    return r; };
 })();
 </script>
 </body>
