@@ -673,7 +673,7 @@ function okAbertura(mostrar) { const el = document.getElementById('ok-abertura')
     <button class="lg-btn" onclick="fazerLogin()" type="button">Entrar no ObraKontrol</button>
     <a href="#" class="lg-esqueci" onclick="esqueciSenha();return false">Esqueci minha senha</a>
     <div class="lg-rod"><img class="lg-ok" src="marca/obrakontrol_logo_claro.png?v=3" alt="ObraKontrol"/>
-    <div class="lg-ver">ObraKontrol v4.105 · Gestão operacional de obras</div></div>
+    <div class="lg-ver">ObraKontrol v4.106 · Gestão operacional de obras</div></div>
   </div>
   <div class="lg-dir">
     <div class="lg-foto" aria-hidden="true"></div>
@@ -20778,7 +20778,7 @@ function itfF(k, v) { window._itf[k] = window._itf[k] === v && (k === 'tipo' || 
     document.getElementById('tbody-perdas').innerHTML = L.length ? _linhasLimitadas('tbody-perdas', _maisRecentes(L, 'data'), p => { const mo = _itfMO(p), c = _itfCusto(p);
       return `<tr><td class="td-mono" style="white-space:nowrap">${fmtData(p.data)}${p.horaIni ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(p.horaIni)}${p.horaFim ? '–' + _e(p.horaFim) : ''}</div>` : ''}</td>
         <td>${tag(mo ? 'Pessoa' : 'Equipamento', mo ? 'green' : 'blue')}</td><td><strong>${_e(p.recurso || '—')}</strong>${p.obs ? `<div style="font-size:11.5px;color:var(--text-3)">${_e(p.obs)}</div>` : ''}</td>
-        <td>${_e(_itfMotivo(p))}</td><td class="td-mono" style="text-align:right">${H(+p.horas || 0)}</td>
+        <td>${_e(_itfMotivo(p))}${p.pluvioMm !== undefined && p.pluvioMm !== null && p.pluvioMm !== '' ? `<div style="font-size:11.5px;font-weight:700;color:#2563EB">🌧 ${String(p.pluvioMm).replace('.', ',')} mm no pluviômetro</div>` : p.semPluviometro ? '<div style="font-size:11.5px;color:var(--text-3)">frente sem pluviômetro</div>' : ''}</td><td class="td-mono" style="text-align:right">${H(+p.horas || 0)}</td>
         <td class="td-mono" style="text-align:right">${mo && !vp ? '<span style="color:var(--text-3)" title="Custo de pessoal restrito">🔒</span>' : (c ? R$(c) : '—')}</td>
         <td>${_e(p.frente || '—')}</td><td>${_e(p.lancadoPor || '—')}</td><td>${acoesCell('', `deletar('perdas','${p.id}')`)}</td></tr>`; }, 9, 'renderPerdas')
       : '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:2rem">Nenhuma interferência com esses filtros</td></tr>';
